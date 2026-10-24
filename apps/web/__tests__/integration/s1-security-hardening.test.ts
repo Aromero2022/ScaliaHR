@@ -116,7 +116,7 @@ describeWithDb("S1: ARCO policies — role-based access", () => {
          AND polcmd = 'r'`,
       "service_role"
     );
-    const names = res.data?.map((r: { polname: string }) => r.polname) ?? [];
+    const names = res.data?.map((r) => r.polname as string) ?? [];
     expect(names).toContain("arco_select");
   });
 
@@ -128,7 +128,7 @@ describeWithDb("S1: ARCO policies — role-based access", () => {
          AND polcmd IN ('a', 'w')`,
       "service_role"
     );
-    const names = res.data?.map((r: { polname: string }) => r.polname) ?? [];
+    const names = res.data?.map((r) => r.polname as string) ?? [];
     expect(names).toContain("arco_insert");
     expect(names).toContain("arco_update");
   });
@@ -168,7 +168,7 @@ describeWithDb("S1: RBP v2 tables exist", () => {
        ORDER BY column_name`,
       "service_role"
     );
-    const cols = res.data?.map((r: { column_name: string }) => r.column_name) ?? [];
+    const cols = res.data?.map((r) => r.column_name as string) ?? [];
     expect(cols).toContain("permission_key");
     expect(cols).toContain("action");
     expect(cols).toContain("field_key");
