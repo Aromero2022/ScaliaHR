@@ -150,7 +150,7 @@ to role-based access, and consolidate RBP to v2 model.
    - `role_grants` (with `target_population` enum) replaces `role_assignments`
    - `group_members` replaces `permission_groups.criteria_json` for membership
    - `role_permissions.permission_key/action/field_key` replaces `permission_name`
-   - v1 artefacts marked DEPRECATED (not dropped yet)
+   - v1 artefacts dropped (`role_assignments` table, `criteria_json` column, `permission_name` column)
 
 6. **CI** — Prisma drift check added to db job. Integration tests moved to
    `__tests__/integration/`. New S1 integration tests (17 cases).
