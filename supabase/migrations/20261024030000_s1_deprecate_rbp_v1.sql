@@ -43,7 +43,7 @@ SELECT pg.tenant_id, pg.id, u.id
 FROM public.permission_groups pg
 JOIN public.users u
   ON u.tenant_id = pg.tenant_id
-  AND u.status IN ('ACTIVE', 'active')
+  AND u.status = 'ACTIVE'::"EmployeeStatus"
   AND u.deleted_at IS NULL
 WHERE pg.criteria_json IS NOT NULL
   AND (
