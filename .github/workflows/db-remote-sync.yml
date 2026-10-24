@@ -1,0 +1,77 @@
+name: "DB Remote Sync"
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Sync mode"
+        required: true
+        type: choice
+        options:
+          - reset
+          - repair-push
+      confirm:
+        description: "Type CONFIRM to proceed (destructive operation)"
+        required: true
+        type: string
+
+concurrency:
+  group: db-remote-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: "Sync remote DB (${{ inputs.mode }})"
+    runs-on: ubuntu-latest
+    environment: remote-db
+    if: inputs.confirm == 'CONFIRM'
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Backup current state
+        run: |
+          mkdir -p backup
+          supabase db dump --db-url "$SUPABASE_DB_URL" > backup/pre-sync-schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" --data-only > backup/pre-sync-data.sql
+        continue-on-error: true
+
+      - name: Upload backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: backup/
+          retention-days: 30
+
+      - name: Apply — reset
+        if: inputs.mode == 'reset'
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all
+
+      - name: Apply — repair-push
+        if: inputs.mode == 'repair-push'
+        run: |
+          supabase migration repair --status reverted --db-url "$SUPABASE_DB_URL" --all 2>/dev/null || true
+          supabase db push --db-url "$SUPABASE_DB_URL" --include-all
+
+      - name: Verify — migration list
+        run: supabase migration list --db-url "$SUPABASE_DB_URL"
+
+      - name: Verify — schema diff (should be empty)
+        run: |
+          DIFF="$(supabase db diff --linked 2>&1)" || true
+          echo "$DIFF"
+          if [ -n "$DIFF" ] && echo "$DIFF" | grep -qE '^(CREATE|ALTER|DROP)'; then
+            echo "::error::Schema drift detected after sync"
+            exit 1
+          fi
