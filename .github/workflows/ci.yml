@@ -81,6 +81,9 @@ jobs:
             git diff prisma/schema.prisma
             exit 1
           fi
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
 
       - name: Run integration tests
         run: |
