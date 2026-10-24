@@ -9,6 +9,8 @@ FORBIDDEN_PATTERNS=(
   "service_role"
   "bitnami"
   "MOODLE_WS_TOKEN"
+  "talentgo"
+  "TalentGo"
 )
 
 SEARCH_DIRS=(
@@ -27,6 +29,8 @@ ALLOWLIST=(
   "lib/lms/moodle-client.ts"
   "lib/lms/provision-tenant.ts"
   "lib/jobs/lms-sync.ts"
+  "scripts/check-forbidden.sh"
+  "supabase/migrations_legacy/"
 )
 
 EXIT_CODE=0
