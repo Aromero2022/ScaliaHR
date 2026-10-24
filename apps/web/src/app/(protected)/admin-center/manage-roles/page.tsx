@@ -3,17 +3,19 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import RoleManager from "@/components/role-manager";
 
+export interface RoleGrantRow {
+  id: string;
+  granted_group: { name: string } | null;
+  target_population: string;
+}
+
 export interface PermissionRoleRow {
   id: string;
   name: string;
   description: string | null;
   is_admin_role: boolean;
-  permissions: { permission_name: string }[];
-  assignments: {
-    id: string;
-    granted_group: { name: string } | null;
-    target_population: { name: string } | null;
-  }[];
+  permissions: { permission_key: string; action: string }[];
+  grants: RoleGrantRow[];
 }
 
 export default async function ManageRolesPage() {
@@ -27,14 +29,14 @@ export default async function ManageRolesPage() {
     .from("permission_roles")
     .select(
       `id, name, description, is_admin_role,
-       permissions:role_permissions(permission_name),
-       assignments:role_assignments(id, granted_group:permission_groups!role_assignments_granted_group_id_fkey(name), target_population:permission_groups!role_assignments_target_population_group_id_fkey(name))`
+       permissions:role_permissions(permission_key, action),
+       grants:role_grants(id, target_population, granted_group:permission_groups!role_grants_granted_group_id_fkey(name))`
     )
     .order("name");
 
   const { data: groups } = await supabase
     .from("permission_groups")
-    .select("id, name, description, criteria_json")
+    .select("id, name, description")
     .order("name");
 
   const roleRows: PermissionRoleRow[] = (roles ?? []).map((r) => ({
@@ -43,15 +45,13 @@ export default async function ManageRolesPage() {
     description: r.description,
     is_admin_role: r.is_admin_role,
     permissions: Array.isArray(r.permissions) ? r.permissions : [],
-    assignments: (Array.isArray(r.assignments) ? r.assignments : []).map(
-      (a: Record<string, unknown>) => ({
-        id: a.id as string,
-        granted_group: Array.isArray(a.granted_group)
-          ? (a.granted_group[0] as { name: string } | null)
-          : (a.granted_group as { name: string } | null),
-        target_population: Array.isArray(a.target_population)
-          ? (a.target_population[0] as { name: string } | null)
-          : (a.target_population as { name: string } | null),
+    grants: (Array.isArray(r.grants) ? r.grants : []).map(
+      (g: Record<string, unknown>) => ({
+        id: g.id as string,
+        granted_group: Array.isArray(g.granted_group)
+          ? (g.granted_group[0] as { name: string } | null)
+          : (g.granted_group as { name: string } | null),
+        target_population: (g.target_population as string) ?? "self",
       })
     ),
   }));
@@ -60,7 +60,6 @@ export default async function ManageRolesPage() {
     id: g.id as string,
     name: g.name as string,
     description: g.description as string | null,
-    criteria_json: g.criteria_json,
   }));
 
   return (
