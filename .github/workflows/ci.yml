@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, fix/estabilizacion-e1, fix/seguridad-s1]
+    branches: [main, fix/estabilizacion-e1]
   pull_request:
     branches: [main]
 
@@ -78,9 +78,6 @@ jobs:
           npx prisma db pull
           if ! git diff --quiet prisma/schema.prisma; then
             echo "::error::Prisma schema has drifted from the database. Run 'npm run db:sync' locally and commit."
-            echo "::group::Full generated schema"
-            cat prisma/schema.prisma
-            echo "::endgroup::"
             git diff prisma/schema.prisma
             exit 1
           fi
