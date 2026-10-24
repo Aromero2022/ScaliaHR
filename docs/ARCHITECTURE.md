@@ -175,3 +175,29 @@ to role-based access, and consolidate RBP to v2 model.
 14. `20261024010000_s1_security_hardening.sql` ← D6 Steps 1-3
 15. `20261024020000_s1_pii_compensation_policies.sql` ← D6 Step 4
 16. `20261024030000_s1_deprecate_rbp_v1.sql` ← D6 Step 5 deprecation
+
+---
+
+## D7 — Migration Policy & Remote Sync
+
+**Decision:** Changes to the remote Supabase database are applied **only** through
+the `db-remote-sync` GitHub Actions workflow, never manually or via the Supabase
+MCP `apply_migration` / `execute_sql` tools.
+
+**Workflow:** `.github/workflows/db-remote-sync.yml`
+- **Trigger:** `workflow_dispatch` only (manual from GitHub Actions UI).
+- **Environment:** `remote-db` (requires approval + secrets).
+- **Secrets:** `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_URL`, `SUPABASE_PROJECT_REF`.
+- **Modes:**
+  - `reset` — pushes all local migrations from scratch (`supabase db push --include-all`).
+  - `repair-push` — reverts remote-only migrations, then pushes.
+- **Safety:** requires typing `CONFIRM`, creates a schema + data backup uploaded as
+  an artifact (retained 30 days), and verifies with `supabase db diff --linked`
+  after applying.
+
+**Rules:**
+- `supabase/migrations/` on `main` with CI green is the only source that feeds the
+  remote database.
+- The Supabase MCP server is used in **read-only** mode for the remote project
+  (queries, migration list, table inspection). DDL is prohibited via MCP.
+- Every sync run is traceable in the GitHub Actions history with its backup artifact.
