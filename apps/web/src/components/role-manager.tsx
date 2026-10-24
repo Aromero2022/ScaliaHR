@@ -3,13 +3,14 @@
 import { useState } from "react";
 
 interface Permission {
-  permission_name: string;
+  permission_key: string;
+  action: string;
 }
 
-interface Assignment {
+interface Grant {
   id: string;
   granted_group: { name: string } | null;
-  target_population: { name: string } | null;
+  target_population: string;
 }
 
 interface RoleRow {
@@ -18,14 +19,13 @@ interface RoleRow {
   description: string | null;
   is_admin_role: boolean;
   permissions: Permission[];
-  assignments: Assignment[];
+  grants: Grant[];
 }
 
 interface GroupRow {
   id: string;
   name: string;
   description: string | null;
-  criteria_json: unknown;
 }
 
 interface Props {
@@ -114,7 +114,7 @@ export default function RoleManager({ roles, groups }: Props) {
 
                   <div className="flex items-center gap-4 text-sm text-slate-500">
                     <span>{role.permissions.length} permisos</span>
-                    <span>{role.assignments.length} asignaciones</span>
+                    <span>{role.grants.length} asignaciones</span>
                     <svg
                       className={`h-4 w-4 transition ${isExpanded ? "rotate-180" : ""}`}
                       fill="none"
@@ -142,10 +142,10 @@ export default function RoleManager({ roles, groups }: Props) {
                         <div className="flex flex-wrap gap-2">
                           {role.permissions.map((p) => (
                             <span
-                              key={p.permission_name}
+                              key={`${p.permission_key}:${p.action}`}
                               className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-mono text-slate-300"
                             >
-                              {p.permission_name}
+                              {p.permission_key}:{p.action}
                             </span>
                           ))}
                           {role.permissions.length === 0 && (
@@ -156,23 +156,23 @@ export default function RoleManager({ roles, groups }: Props) {
                         </div>
                       </div>
 
-                      {/* Assignments */}
+                      {/* Grants (v2) */}
                       <div>
                         <h3 className="mb-3 text-sm font-semibold text-slate-300">
-                          Asignaciones de Grupo
+                          Asignaciones (Role Grants)
                         </h3>
                         <div className="space-y-2">
-                          {role.assignments.map((a) => (
+                          {role.grants.map((g) => (
                             <div
-                              key={a.id}
+                              key={g.id}
                               className="rounded-lg bg-slate-800 px-3 py-2"
                             >
                               <div className="flex items-center gap-2 text-xs">
                                 <span className="text-emerald-400">
-                                  Otorgado a:
+                                  Grupo otorgado:
                                 </span>
                                 <span className="font-medium text-slate-200">
-                                  {a.granted_group?.name ?? "—"}
+                                  {g.granted_group?.name ?? "—"}
                                 </span>
                               </div>
                               <div className="mt-1 flex items-center gap-2 text-xs">
@@ -180,12 +180,12 @@ export default function RoleManager({ roles, groups }: Props) {
                                   Población objetivo:
                                 </span>
                                 <span className="font-medium text-slate-200">
-                                  {a.target_population?.name ?? "—"}
+                                  {g.target_population}
                                 </span>
                               </div>
                             </div>
                           ))}
-                          {role.assignments.length === 0 && (
+                          {role.grants.length === 0 && (
                             <span className="text-sm text-slate-500">
                               Sin asignaciones
                             </span>
@@ -241,9 +241,7 @@ export default function RoleManager({ roles, groups }: Props) {
                 </p>
               </div>
               <div className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-mono text-slate-400">
-                {g.criteria_json
-                  ? JSON.stringify(g.criteria_json)
-                  : "sin criterio"}
+                membresía vía group_members
               </div>
             </div>
           ))}

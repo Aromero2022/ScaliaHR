@@ -28,7 +28,11 @@ migration chains (Prisma + SQL) creates drift and security gaps.
 
 **Decision:** The active tenant is injected into the Supabase JWT via a
 `custom_access_token_hook`. RLS policies read it with
-`public.current_tenant_id()`.
+`public.requesting_tenant_id()` (JWT-only, no fallback).
+
+> **S1 change:** `current_tenant_id()` was dropped. All callers now use
+> `requesting_tenant_id()`, which reads **only** the JWT claim — no
+> `set_config` fallback.
 
 **Tables:**
 - `user_tenant_memberships` — maps users to tenants with `app_role` and
@@ -79,7 +83,7 @@ with `NOBYPASSRLS`. Every query runs inside a `$transaction` that first sets
 | 1-3 | BizX / Employee Central | tenants, users, departments, positions, job_* | /dashboard, /profile |
 | 4 | Org Chart (EC) | positions (hierarchy) | /org-chart |
 | 5 | SDM (Succession) | talent_pools, succession_plans | — |
-| 6 | RBP + Admin Center | permission_groups/roles, role_permissions/assignments | /admin-center |
+| 6 | RBP + Admin Center | permission_groups/roles, role_permissions, **role_grants, group_members** (v2) | /admin-center |
 | 7 | PMGM (Performance) | performance_goals, continuous_feedbacks | /performance |
 | 8 | TIH (Talent Intelligence) | skill_ontology, job_role_skills, employee_skills | /skills-hub |
 | 9 | LMS (Formación) | lms_tenant_map, lms_user_map | /lms |
@@ -118,6 +122,41 @@ redirects via `auth_userkey_request_login_url`.
 
 ---
 
+## D6 — S1 Security Hardening
+
+**Decision:** Harden all SECURITY DEFINER functions, unify tenant resolution,
+add RESTRICTIVE RLS policies on PII/compensation tables, rewrite ARCO policies
+to role-based access, and consolidate RBP to v2 model.
+
+**Changes (Loop S1):**
+
+1. **`requesting_tenant_id()`** — now the ONLY tenant function. Reads JWT claim
+   only, no `set_config` fallback. `current_tenant_id()` dropped.
+
+2. **SECURITY DEFINER functions** — all now have `SET search_path = ''` with
+   fully schema-qualified references: `is_tenant_admin`, `insert_effective_record`,
+   `effective_record_at`, `anonymize_user`, `export_user_data`.
+
+3. **ARCO policies** — rewritten with `requesting_tenant_id()` + role-based
+   access: subject sees own requests (SELECT), admin manages (INSERT/UPDATE).
+   `service_role` bypass added.
+
+4. **PII RESTRICTIVE policies** — `ec_personal_information` and `ec_compensation`
+   now have RESTRICTIVE SELECT policies: user sees own + direct manager +
+   tenant admin. INSERT/UPDATE restricted to admin only.
+   Helper functions: `current_app_user_id()`, `has_app_role(text)`.
+
+5. **RBP v2 model** — `can()` and Admin Center UI rewritten to use v2 tables:
+   - `role_grants` (with `target_population` enum) replaces `role_assignments`
+   - `group_members` replaces `permission_groups.criteria_json` for membership
+   - `role_permissions.permission_key/action/field_key` replaces `permission_name`
+   - v1 artefacts dropped (`role_assignments` table, `criteria_json` column, `permission_name` column)
+
+6. **CI** — Prisma drift check added to db job. Integration tests moved to
+   `__tests__/integration/`. New S1 integration tests (17 cases).
+
+---
+
 ## Migration Order
 
 1. `20261021182427_fix_rls_auto_enable_permissions.sql`
@@ -132,3 +171,7 @@ redirects via `auth_userkey_request_login_url`.
 10. `20261023030200_rls_policies_v2.sql` ← D3 policies
 11. `20261023030300_app_roles.sql` ← D3 prisma_app role
 12. `20261023060000_lms_tenant_map.sql` ← D5 LMS tables + RLS
+13. `20261023040000_rbp_model_v2.sql` ← RBP v2 tables (group_members, role_grants)
+14. `20261024010000_s1_security_hardening.sql` ← D6 Steps 1-3
+15. `20261024020000_s1_pii_compensation_policies.sql` ← D6 Step 4
+16. `20261024030000_s1_deprecate_rbp_v1.sql` ← D6 Step 5 deprecation

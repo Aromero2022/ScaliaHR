@@ -72,6 +72,19 @@ jobs:
       - name: Validate migrations (db reset)
         run: supabase db reset
 
+      - name: Prisma drift check
+        run: |
+          cd apps/web
+          npx prisma db pull
+          if ! git diff --quiet prisma/schema.prisma; then
+            echo "::error::Prisma schema has drifted from the database. Run 'npm run db:sync' locally and commit."
+            git diff prisma/schema.prisma
+            exit 1
+          fi
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
       - name: Run integration tests
         run: |
           export SUPABASE_URL="$(supabase status --output env | grep 'API_URL=' | head -1 | sed 's/.*=//')"
@@ -79,6 +92,6 @@ jobs:
           export SUPABASE_SERVICE_ROLE_KEY="$(supabase status --output env | grep 'SERVICE_ROLE_KEY=' | head -1 | sed 's/.*=//')"
           export SUPABASE_JWT_SECRET="$(supabase status --output env | grep 'JWT_SECRET=' | head -1 | sed 's/.*=//')"
           cd apps/web
-          npx vitest run __tests__/tih-rls-integration.test.ts __tests__/rls-isolation.test.ts
+          npx vitest run __tests__/integration/
         env:
           NODE_ENV: test

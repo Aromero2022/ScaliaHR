@@ -45,75 +45,54 @@ export function clearCanCache() {
   requestCache.clear();
 }
 
-type MatchingAssignment = {
+type GrantRow = {
   role_id: string;
-  target_criteria: Record<string, unknown> | null;
+  target_population: string;
 };
 
-async function findUserAssignments(
-  userId: string
-): Promise<MatchingAssignment[]> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { tenant_id: true },
-  });
-  if (!user) return [];
-
-  const allAssignments = await prisma.roleAssignment.findMany({
-    where: { tenant_id: user.tenant_id },
-    select: {
-      role_id: true,
-      granted_group: { select: { criteria_json: true } },
-      target_population: { select: { criteria_json: true } },
-    },
-  });
-
-  return allAssignments
-    .filter((a) => {
-      const criteria = a.granted_group?.criteria_json as
-        | Record<string, unknown>
-        | null;
-      if (!criteria) return false;
-      const type = criteria.type as string | undefined;
-      if (type === "all") return true;
-      if (type === "self") return true;
-      if (type === "direct_reports") return true;
-      if (type === "user_ids") {
-        const ids = criteria.user_ids as string[] | undefined;
-        return ids?.includes(userId) ?? false;
-      }
-      return false;
-    })
-    .map((a) => ({
-      role_id: a.role_id,
-      target_criteria: a.target_population?.criteria_json as
-        | Record<string, unknown>
-        | null,
-    }));
+async function findUserGrants(userId: string): Promise<GrantRow[]> {
+  return prisma.$queryRaw<GrantRow[]>(Prisma.sql`
+    SELECT rg.role_id, rg.target_population::text
+    FROM public.role_grants rg
+    JOIN public.group_members gm ON gm.group_id = rg.granted_group_id
+    WHERE gm.user_id = ${userId}::uuid
+      AND rg.tenant_id = (
+        SELECT u.tenant_id FROM public.users u WHERE u.id = ${userId}::uuid LIMIT 1
+      )
+  `);
 }
 
 async function evaluate(
   userId: string,
   permissionKey: string,
-  _action: RbpAction,
+  action: RbpAction,
   targetUserId?: string,
-  _fieldKey?: string
+  fieldKey?: string
 ): Promise<CanResult> {
-  const assignments = await findUserAssignments(userId);
+  const grants = await findUserGrants(userId);
 
-  if (assignments.length === 0) {
+  if (grants.length === 0) {
     return { allowed: false, reason: "no_group_membership" };
   }
 
-  const roleIds = assignments.map((a) => a.role_id);
+  const roleIds = grants.map((g) => g.role_id);
 
-  const permissions = await prisma.rolePermission.findMany({
-    where: {
-      role_id: { in: roleIds },
-      permission_name: permissionKey,
-    },
-    select: { role_id: true },
-  });
+  const permissions = await prisma.$queryRaw<{ role_id: string }[]>(
+    fieldKey
+      ? Prisma.sql`
+          SELECT role_id FROM public.role_permissions
+          WHERE role_id = ANY(${roleIds}::uuid[])
+            AND permission_key = ${permissionKey}
+            AND action = ${action}::"rbp_action"
+            AND field_key = ${fieldKey}
+        `
+      : Prisma.sql`
+          SELECT role_id FROM public.role_permissions
+          WHERE role_id = ANY(${roleIds}::uuid[])
+            AND permission_key = ${permissionKey}
+            AND action = ${action}::"rbp_action"
+        `
+  );
 
   if (permissions.length === 0) {
     return { allowed: false, reason: "no_permission" };
@@ -122,19 +101,16 @@ async function evaluate(
   const permittedRoleIds = new Set(permissions.map((p) => p.role_id));
 
   if (!targetUserId || targetUserId === userId) {
-    const hasAny = assignments.some((a) => permittedRoleIds.has(a.role_id));
+    const hasAny = grants.some((g) => permittedRoleIds.has(g.role_id));
     return hasAny
       ? { allowed: true }
       : { allowed: false, reason: "no_matching_grant" };
   }
 
-  for (const assignment of assignments) {
-    if (!permittedRoleIds.has(assignment.role_id)) continue;
+  for (const grant of grants) {
+    if (!permittedRoleIds.has(grant.role_id)) continue;
 
-    const populationType =
-      (assignment.target_criteria?.type as string | undefined) ?? "all";
-
-    switch (populationType) {
+    switch (grant.target_population) {
       case "all":
         return { allowed: true };
 
@@ -143,23 +119,12 @@ async function evaluate(
         break;
 
       case "same_department": {
-        const [actor, target] = await Promise.all([
-          prisma.user.findUnique({
-            where: { id: userId },
-            select: { department_id: true },
-          }),
-          prisma.user.findUnique({
-            where: { id: targetUserId },
-            select: { department_id: true },
-          }),
-        ]);
-        if (
-          actor?.department_id &&
-          target?.department_id &&
-          actor.department_id === target.department_id
-        ) {
-          return { allowed: true };
-        }
+        const rows = await prisma.$queryRaw<{ match: boolean }[]>(Prisma.sql`
+          SELECT (a.department_id IS NOT NULL AND a.department_id = t.department_id) AS match
+          FROM public.users a, public.users t
+          WHERE a.id = ${userId}::uuid AND t.id = ${targetUserId}::uuid
+        `);
+        if (rows.length > 0 && rows[0].match) return { allowed: true };
         break;
       }
 
