@@ -89,6 +89,6 @@ jobs:
           export SUPABASE_SERVICE_ROLE_KEY="$(supabase status --output env | grep 'SERVICE_ROLE_KEY=' | head -1 | sed 's/.*=//')"
           export SUPABASE_JWT_SECRET="$(supabase status --output env | grep 'JWT_SECRET=' | head -1 | sed 's/.*=//')"
           cd apps/web
-          npx vitest run __tests__/integration/tih-rls-integration.test.ts __tests__/integration/rls-isolation.test.ts
+          npx vitest run __tests__/integration/
         env:
           NODE_ENV: test
