@@ -60,6 +60,7 @@ model Tenant {
   system_configurations SystemConfiguration[]
   audit_logs            AuditLog[]
 
+  @@schema("public")
   @@map("tenants")
 }
 
@@ -109,6 +110,7 @@ model User {
   @@index([tenant_id])
   @@index([deleted_at])
   @@index([position_id])
+  @@schema("public")
   @@map("users")
 }
 
@@ -117,6 +119,8 @@ enum EmployeeStatus {
   INACTIVE
   ON_LEAVE
   TERMINATED
+
+  @@schema("public")
 }
 
 model Department {
@@ -138,6 +142,7 @@ model Department {
 
   @@unique([tenant_id, code])
   @@index([tenant_id])
+  @@schema("public")
   @@map("departments")
 }
 
@@ -157,6 +162,7 @@ model JobFamily {
 
   @@unique([tenant_id, family_code])
   @@index([tenant_id])
+  @@schema("public")
   @@map("job_families")
 }
 
@@ -178,6 +184,7 @@ model JobRole {
   @@unique([tenant_id, role_code])
   @@index([tenant_id])
   @@index([job_family_id])
+  @@schema("public")
   @@map("job_roles")
 }
 
@@ -200,6 +207,7 @@ model JobClassification {
   @@unique([tenant_id, job_code])
   @@index([tenant_id])
   @@index([job_role_id])
+  @@schema("public")
   @@map("job_classifications")
 }
 
@@ -231,6 +239,7 @@ model Position {
   @@index([tenant_id])
   @@index([parent_position_id])
   @@index([department_id])
+  @@schema("public")
   @@map("positions")
 }
 
@@ -258,6 +267,7 @@ model JobInformation {
 
   @@index([tenant_id])
   @@index([position_id])
+  @@schema("public")
   @@map("job_informations")
 }
 
@@ -277,6 +287,7 @@ model ObjectDefinition {
 
   @@unique([tenant_id, code])
   @@index([tenant_id])
+  @@schema("public")
   @@map("object_definitions")
 }
 
@@ -299,6 +310,7 @@ model BusinessRule {
   @@unique([tenant_id, rule_id])
   @@index([tenant_id])
   @@index([base_object])
+  @@schema("public")
   @@map("business_rules")
 }
 
@@ -328,6 +340,7 @@ model PerformanceGoal {
 
   @@index([tenant_id])
   @@index([user_id])
+  @@schema("public")
   @@map("performance_goals")
 }
 
@@ -337,6 +350,8 @@ enum GoalStatus {
   AT_RISK
   COMPLETED
   CANCELLED
+
+  @@schema("public")
 }
 
 model ContinuousFeedback {
@@ -358,6 +373,7 @@ model ContinuousFeedback {
   @@index([tenant_id])
   @@index([author_id])
   @@index([subject_id])
+  @@schema("public")
   @@map("continuous_feedbacks")
 }
 
@@ -365,6 +381,8 @@ enum FeedbackVisibility {
   PRIVATE
   MANAGER_ONLY
   PUBLIC
+
+  @@schema("public")
 }
 
 enum FeedbackCategory {
@@ -372,6 +390,8 @@ enum FeedbackCategory {
   RECOGNITION
   COACHING
   DEVELOPMENT
+
+  @@schema("public")
 }
 
 // ─── TALENT: SUCCESSION & DEVELOPMENT MANAGEMENT (SDM) ─────────────
@@ -390,6 +410,7 @@ model TalentPool {
   entries TalentPoolEntry[]
 
   @@index([tenant_id])
+  @@schema("public")
   @@map("talent_pools")
 }
 
@@ -399,6 +420,8 @@ enum TalentPoolType {
   CRITICAL_ROLE
   EMERGING_TALENT
   CUSTOM
+
+  @@schema("public")
 }
 
 model TalentPoolEntry {
@@ -415,6 +438,7 @@ model TalentPoolEntry {
   user        User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([talent_pool_id, user_id])
+  @@schema("public")
   @@map("talent_pool_entries")
 }
 
@@ -423,6 +447,8 @@ enum ReadinessLevel {
   READY_1_YEAR
   READY_2_YEARS
   NOT_READY
+
+  @@schema("public")
 }
 
 model SuccessionPlan {
@@ -440,6 +466,7 @@ model SuccessionPlan {
   nominees SuccessionNominee[]
 
   @@index([tenant_id])
+  @@schema("public")
   @@map("succession_plans")
 }
 
@@ -448,12 +475,16 @@ enum PlanCriticality {
   MEDIUM
   HIGH
   CRITICAL
+
+  @@schema("public")
 }
 
 enum PlanStatus {
   DRAFT
   ACTIVE
   ARCHIVED
+
+  @@schema("public")
 }
 
 model SuccessionNominee {
@@ -471,6 +502,7 @@ model SuccessionNominee {
   user            User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([succession_plan_id, user_id])
+  @@schema("public")
   @@map("succession_nominees")
 }
 
@@ -495,6 +527,7 @@ model SkillOntology {
   @@unique([tenant_id, code])
   @@index([tenant_id])
   @@index([category])
+  @@schema("public")
   @@map("skill_ontology")
 }
 
@@ -505,6 +538,8 @@ enum SkillCategory {
   INTERPERSONAL
   LANGUAGE
   CERTIFICATION
+
+  @@schema("public")
 }
 
 model JobRoleSkill {
@@ -526,6 +561,7 @@ model JobRoleSkill {
   @@index([tenant_id])
   @@index([job_role_id])
   @@index([skill_id])
+  @@schema("public")
   @@map("job_role_skills")
 }
 
@@ -534,6 +570,8 @@ enum SkillImportance {
   REQUIRED
   PREFERRED
   NICE_TO_HAVE
+
+  @@schema("public")
 }
 
 model EmployeeSkill {
@@ -556,6 +594,7 @@ model EmployeeSkill {
   @@index([tenant_id])
   @@index([user_id])
   @@index([skill_id])
+  @@schema("public")
   @@map("employee_skills")
 }
 
@@ -577,6 +616,7 @@ model PermissionGroup {
 
   @@unique([tenant_id, name])
   @@index([tenant_id])
+  @@schema("public")
   @@map("permission_groups")
 }
 
@@ -596,6 +636,7 @@ model PermissionRole {
 
   @@unique([tenant_id, name])
   @@index([tenant_id])
+  @@schema("public")
   @@map("permission_roles")
 }
 
@@ -613,6 +654,7 @@ model RolePermission {
   @@unique([role_id, permission_name])
   @@index([tenant_id])
   @@index([role_id])
+  @@schema("public")
   @@map("role_permissions")
 }
 
@@ -633,6 +675,7 @@ model RoleAssignment {
 
   @@index([tenant_id])
   @@index([role_id])
+  @@schema("public")
   @@map("role_assignments")
 }
 
@@ -651,6 +694,7 @@ model SystemConfiguration {
 
   @@unique([tenant_id, key])
   @@index([tenant_id])
+  @@schema("public")
   @@map("system_configurations")
 }
 
@@ -670,5 +714,6 @@ model AuditLog {
   @@index([user_id])
   @@index([action])
   @@index([created_at])
+  @@schema("public")
   @@map("audit_logs")
 }
