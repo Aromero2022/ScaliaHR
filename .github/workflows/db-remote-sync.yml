@@ -113,10 +113,11 @@ jobs:
 
       - name: "Rehearsal: revoke migration history"
         run: |
-          VERSIONS=$(supabase migration list --db-url "$LOCAL_DB_URL" 2>/dev/null \
-            | grep -oP '^\s*\K\d{14}' || true)
+          VERSIONS=$(psql "$LOCAL_DB_URL" -t -A -c \
+            "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version;")
           if [ -n "$VERSIONS" ]; then
-            echo "Revoking $(echo "$VERSIONS" | wc -l) migration(s)..."
+            COUNT=$(echo "$VERSIONS" | wc -l)
+            echo "Revoking $COUNT migration(s) from local rehearsal DB..."
             for v in $VERSIONS; do
               supabase migration repair --status reverted --db-url "$LOCAL_DB_URL" "$v"
             done
@@ -138,8 +139,8 @@ jobs:
         run: |
           echo "=== Migration count ==="
           EXPECTED=$(ls supabase/migrations/*.sql | wc -l)
-          APPLIED=$(supabase migration list --db-url "$LOCAL_DB_URL" 2>/dev/null \
-            | grep -cP '^\s*\d{14}' || echo "0")
+          APPLIED=$(psql "$LOCAL_DB_URL" -t -A -c \
+            "SELECT count(*) FROM supabase_migrations.schema_migrations;")
           echo "Applied: $APPLIED / Expected: $EXPECTED"
           if [ "$APPLIED" -ne "$EXPECTED" ]; then
             echo "::error::Rehearsal FAILED — expected $EXPECTED migrations, got $APPLIED"
@@ -294,10 +295,11 @@ jobs:
 
       - name: Revoke remote migration history
         run: |
-          REMOTE_VERSIONS=$(supabase migration list --db-url "$SUPABASE_DB_URL" 2>/dev/null \
-            | grep -oP '^\s*\K\d{14}' || true)
+          REMOTE_VERSIONS=$(psql "$SUPABASE_DB_URL" -t -A -c \
+            "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version;")
           if [ -n "$REMOTE_VERSIONS" ]; then
-            echo "Revoking $(echo "$REMOTE_VERSIONS" | wc -l) remote migration(s)..."
+            COUNT=$(echo "$REMOTE_VERSIONS" | wc -l)
+            echo "Revoking $COUNT remote migration(s)..."
             for v in $REMOTE_VERSIONS; do
               supabase migration repair --status reverted --db-url "$SUPABASE_DB_URL" "$v"
             done
@@ -322,9 +324,8 @@ jobs:
       - name: "Verify: migration count"
         run: |
           EXPECTED=$(ls supabase/migrations/*.sql | wc -l)
-          supabase migration list --db-url "$SUPABASE_DB_URL"
-          APPLIED=$(supabase migration list --db-url "$SUPABASE_DB_URL" 2>/dev/null \
-            | grep -cP '^\s*\d{14}' || echo "0")
+          APPLIED=$(psql "$SUPABASE_DB_URL" -t -A -c \
+            "SELECT count(*) FROM supabase_migrations.schema_migrations;")
           echo "Applied: $APPLIED / Expected: $EXPECTED"
           if [ "$APPLIED" -ne "$EXPECTED" ]; then
             echo "::error::Expected $EXPECTED migrations, got $APPLIED"
