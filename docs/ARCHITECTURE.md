@@ -254,3 +254,30 @@ lives in the dashboard, not in the database, so the reset does not change it.
    issued.
 
 If the run fails, keep the hook disabled, fix the cause, and run the sync again.
+
+---
+
+## D10 — ARCO: Suppression (`anonymize_user`)
+
+**Decision:** `anonymize_user(p_user_id, p_arco_request_id)` is the **final,
+irreversible suppression step** of an ARCO cancellation, not its first step.
+
+**Behaviour:**
+- Requires a tenant admin (RBP v2) and a `cancelacion` request for that user in
+  status `pending` or `in_progress`; refuses users already anonymized.
+- `users`: name and email replaced by a random `ANON-xxxxxxxx` token (not derived
+  from the user), `is_anonymized = true`, `status = TERMINATED`, `deleted_at` set.
+- `ec_personal_information`: every personal column is cleared (name replaced by
+  the token; date of birth, gender, marital status, nationality, identifiers,
+  contact, address, country, emergency contact and event reason set to NULL).
+- Personal values already present in the tenant's `audit_logs` (`diff`,
+  `details_json`) are replaced with `[suprimido]`; the rows are kept.
+- `audit_logs` records only the event: actor (`user_id`), time (`created_at`),
+  subject (`entity_id`) and `arco_request_id`. No re-identification map exists.
+- Kept: `users.id`, `auth_uid`, `employee_id`, `ec_job_information` (reporting
+  line), all other ids and audit rows.
+
+**Pendiente — Fase 10:** bloqueo previo a la supresión según la LFPDPPP 2025 y
+plazos de conservación de LFT art. 804, LSS art. 15 y CFF. Validar plazos con
+asesoría jurídica antes de operar con clientes reales. Mientras tanto, la
+cancelación ARCO no debe ejecutarse en tenants productivos.
