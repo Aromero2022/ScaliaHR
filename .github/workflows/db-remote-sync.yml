@@ -18,6 +18,11 @@ on:
         description: "Optional: email of auth.users owner to link to demo tenant after sync"
         required: false
         type: string
+      load_seed:
+        description: "Load supabase/seed.sql (demo tenant acme-corp) after the sync"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: db-remote-sync
@@ -137,6 +142,17 @@ jobs:
 
           echo "Rehearsal verify passed."
 
+      - name: "Rehearsal: load seed"
+        if: inputs.load_seed
+        run: |
+          # Twice, to prove the seed is idempotent before it reaches the remote.
+          psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql
+          psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql
+
+      - name: "Rehearsal: demo tenant present for owner_email"
+        if: inputs.owner_email != '' && (inputs.mode == 'reset' || inputs.load_seed)
+        run: bash scripts/require-demo-tenant.sh "$LOCAL_DB_URL"
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -228,50 +244,50 @@ jobs:
           fi
           echo "All critical objects verified."
 
+      - name: "Remote: load seed"
+        if: inputs.load_seed
+        run: psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql
+
       # ──────────────────────────────────────────────────────────
       # PHASE 5 — Link owner (optional)
       # ──────────────────────────────────────────────────────────
 
       - name: "Link owner to demo tenant"
         if: inputs.owner_email != ''
+        env:
+          OWNER_EMAIL: ${{ inputs.owner_email }}
         run: |
-          echo "Looking up auth.users for: ${{ inputs.owner_email }}"
-          OWNER_ID=$(psql "$SUPABASE_DB_URL" -t -A -c \
-            "SELECT id FROM auth.users WHERE email = '${{ inputs.owner_email }}' LIMIT 1;")
+          bash scripts/require-demo-tenant.sh "$SUPABASE_DB_URL"
+
+          echo "Looking up auth.users for: $OWNER_EMAIL"
+          OWNER_ID=$(psql "$SUPABASE_DB_URL" -t -A -v ON_ERROR_STOP=1 -v email="$OWNER_EMAIL" <<'SQL'
+          SELECT id FROM auth.users WHERE email = :'email' LIMIT 1;
+          SQL
+          )
           if [ -z "$OWNER_ID" ]; then
-            echo "::warning::No auth.users record found for ${{ inputs.owner_email }}. Skipping owner link."
+            echo "::warning::No auth.users record found for $OWNER_EMAIL. Skipping owner link."
             exit 0
           fi
           echo "Found auth user: $OWNER_ID"
 
-          psql "$SUPABASE_DB_URL" <<SQL
-          -- Ensure a public.users row exists for the owner
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
+            -v owner_id="$OWNER_ID" -v tenant="$DEMO_TENANT_ID" -v email="$OWNER_EMAIL" <<'SQL'
           INSERT INTO public.users (id, auth_uid, tenant_id, email, first_name, last_name, status)
-          VALUES (
-            gen_random_uuid(),
-            '${OWNER_ID}',
-            '${DEMO_TENANT_ID}',
-            '${{ inputs.owner_email }}',
-            'Owner',
-            'Account',
-            'ACTIVE'
-          )
+          VALUES (gen_random_uuid(), :'owner_id', :'tenant', :'email', 'Owner', 'Account', 'ACTIVE')
           ON CONFLICT (auth_uid) DO UPDATE SET
-            tenant_id = '${DEMO_TENANT_ID}',
+            tenant_id = EXCLUDED.tenant_id,
             status    = 'ACTIVE';
 
-          -- Membership as owner
           INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role, is_active)
-          VALUES ('${OWNER_ID}', '${DEMO_TENANT_ID}', 'owner', true)
+          VALUES (:'owner_id', :'tenant', 'owner', true)
           ON CONFLICT (user_id, tenant_id) DO UPDATE SET
             app_role  = 'owner',
             is_active = true;
 
-          -- Active tenant setting
           INSERT INTO public.user_settings (user_id, active_tenant_id)
-          VALUES ('${OWNER_ID}', '${DEMO_TENANT_ID}')
+          VALUES (:'owner_id', :'tenant')
           ON CONFLICT (user_id) DO UPDATE SET
-            active_tenant_id = '${DEMO_TENANT_ID}';
+            active_tenant_id = EXCLUDED.active_tenant_id;
           SQL
 
-          echo "Owner linked: ${{ inputs.owner_email }} → tenant $DEMO_TENANT_ID as 'owner'"
+          echo "Owner linked: $OWNER_EMAIL → tenant $DEMO_TENANT_ID as 'owner'"
