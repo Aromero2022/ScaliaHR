@@ -12,42 +12,42 @@ SET search_path = ''
 AS $$
 DECLARE
   claims      jsonb;
-  user_id     uuid;
-  tenant_id   uuid;
-  app_role    text;
+  v_user_id   uuid;
+  v_tenant_id uuid;
+  v_app_role  text;
 BEGIN
   claims  := event->'claims';
-  user_id := (event->>'user_id')::uuid;
+  v_user_id := (event->>'user_id')::uuid;
 
   -- Active tenant from user_settings, only while the membership is active
-  SELECT us.active_tenant_id INTO tenant_id
+  SELECT us.active_tenant_id INTO v_tenant_id
   FROM public.user_settings us
   JOIN public.user_tenant_memberships utm
     ON utm.user_id = us.user_id
    AND utm.tenant_id = us.active_tenant_id
    AND utm.is_active = true
-  WHERE us.user_id = custom_access_token_hook.user_id;
+  WHERE us.user_id = v_user_id;
 
   -- Otherwise the first active membership
-  IF tenant_id IS NULL THEN
-    SELECT utm.tenant_id INTO tenant_id
+  IF v_tenant_id IS NULL THEN
+    SELECT utm.tenant_id INTO v_tenant_id
     FROM public.user_tenant_memberships utm
-    WHERE utm.user_id = custom_access_token_hook.user_id
+    WHERE utm.user_id = v_user_id
       AND utm.is_active = true
     ORDER BY utm.created_at
     LIMIT 1;
   END IF;
 
-  IF tenant_id IS NOT NULL THEN
-    SELECT utm.app_role INTO app_role
+  IF v_tenant_id IS NOT NULL THEN
+    SELECT utm.app_role INTO v_app_role
     FROM public.user_tenant_memberships utm
-    WHERE utm.user_id = custom_access_token_hook.user_id
-      AND utm.tenant_id = custom_access_token_hook.tenant_id
+    WHERE utm.user_id = v_user_id
+      AND utm.tenant_id = v_tenant_id
       AND utm.is_active = true;
   END IF;
 
-  claims := jsonb_set(claims, '{tenant_id}', to_jsonb(COALESCE(tenant_id::text, '')));
-  claims := jsonb_set(claims, '{app_role}',  to_jsonb(COALESCE(app_role, 'member')));
+  claims := jsonb_set(claims, '{tenant_id}', to_jsonb(COALESCE(v_tenant_id::text, '')));
+  claims := jsonb_set(claims, '{app_role}',  to_jsonb(COALESCE(v_app_role, 'member')));
 
   event := jsonb_set(event, '{claims}', claims);
   RETURN event;
