@@ -177,11 +177,14 @@ describe("RBP v2 model", () => {
     }
   });
 
-  it("membership in another tenant's admin group gives no admin rights", async () => {
-    await db.query(
-      "INSERT INTO public.group_members (tenant_id, group_id, user_id) VALUES ($1, $2, $3)",
-      [otherTenant.id, otherTenant.adminGroupId, tenant.employee.userId],
-    );
+  it("a user cannot be added to another tenant's admin group", async () => {
+    await expect(
+      db.query("INSERT INTO public.group_members (tenant_id, group_id, user_id) VALUES ($1, $2, $3)", [
+        otherTenant.id,
+        otherTenant.adminGroupId,
+        tenant.employee.userId,
+      ]),
+    ).rejects.toMatchObject({ code: "23503" });
     const { data, error } = await tenant.employee.client.rpc("is_tenant_admin");
     expect(error).toBeNull();
     expect(data).toBe(false);

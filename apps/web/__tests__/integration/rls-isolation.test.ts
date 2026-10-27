@@ -248,6 +248,52 @@ describe("custom_access_token_hook", () => {
   });
 });
 
+describe("tenant-consistent foreign keys", () => {
+  it("no table with tenant_id has a single-column FK to another business table", async () => {
+    const { rows } = await db.query<{ constraint: string }>(`
+      SELECT format('%s.%s (%s)', con.conrelid::regclass, con.conname, pg_get_constraintdef(con.oid)) AS constraint
+      FROM pg_constraint con
+      WHERE con.contype = 'f'
+        AND con.connamespace = 'public'::regnamespace
+        AND array_length(con.conkey, 1) = 1
+        AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = con.conrelid
+                    AND a.attname = 'tenant_id' AND NOT a.attisdropped)
+        AND EXISTS (SELECT 1 FROM pg_attribute a
+                    JOIN pg_class c ON c.oid = a.attrelid
+                    WHERE a.attrelid = con.confrelid AND c.relnamespace = 'public'::regnamespace
+                      AND a.attname = 'tenant_id' AND NOT a.attisdropped)
+      ORDER BY 1`);
+    expect(rows.map((r) => r.constraint)).toEqual([]);
+  });
+
+  it("rejects references to rows of another tenant", async () => {
+    const a = tenantA.world;
+    const b = tenantB.world;
+    const attempts: [string, string, unknown[]][] = [
+      [
+        "ec_job_information.manager_id",
+        `INSERT INTO public.ec_job_information (tenant_id, user_id, start_date, job_title, manager_id)
+         VALUES ($1, $2, DATE '1999-01-01', 'Cross', $3)`,
+        [a.id, a.employee.userId, b.manager.userId],
+      ],
+      [
+        "group_members.group_id",
+        "INSERT INTO public.group_members (tenant_id, group_id, user_id) VALUES ($1, $2, $3)",
+        [a.id, b.adminGroupId, a.employee.userId],
+      ],
+      [
+        "role_grants.role_id",
+        `INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
+         VALUES ($1, $2, $3, 'all')`,
+        [a.id, b.adminRoleId, a.employeeGroupId],
+      ],
+    ];
+    for (const [label, sql, params] of attempts) {
+      await expect(db.query(sql, params), label).rejects.toMatchObject({ code: "23503" });
+    }
+  });
+});
+
 describe("no hard delete for authenticated", () => {
   it("every permissive DELETE policy is neutralised by a restrictive block", async () => {
     const { rows } = await db.query<{ tablename: string; policyname: string }>(`

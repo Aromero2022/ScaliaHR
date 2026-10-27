@@ -69,44 +69,44 @@ model Tenant {
 }
 
 model User {
-  id                                                         String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id                                                  String                    @db.Uuid
-  auth_uid                                                   String?                   @unique @db.Uuid
-  email                                                      String
-  first_name                                                 String
-  last_name                                                  String
-  employee_id                                                String?
-  hire_date                                                  DateTime?                 @db.Timestamptz(6)
-  status                                                     EmployeeStatus            @default(ACTIVE)
-  deleted_at                                                 DateTime?                 @db.Timestamptz(6)
-  is_anonymized                                              Boolean                   @default(false)
-  performance_score                                          Float?
-  potential_score                                            Float?
-  department_id                                              String?                   @db.Uuid
-  job_info_id                                                String?                   @db.Uuid
-  created_at                                                 DateTime                  @default(now()) @db.Timestamptz(6)
-  updated_at                                                 DateTime                  @default(now()) @updatedAt @db.Timestamptz(6)
-  position_id                                                String?                   @db.Uuid
-  arco_requests_arco_requests_requester_idTousers            arco_requests[]           @relation("arco_requests_requester_idTousers")
-  arco_requests_arco_requests_subject_idTousers              arco_requests[]           @relation("arco_requests_subject_idTousers")
-  audit_logs                                                 AuditLog[]
-  authored_feedbacks                                         ContinuousFeedback[]      @relation("FeedbackAuthor")
-  received_feedbacks                                         ContinuousFeedback[]      @relation("FeedbackSubject")
-  ec_compensation                                            ec_compensation[]
-  ec_job_information_ec_job_information_manager_idTousers    ec_job_information[]      @relation("ec_job_information_manager_idTousers")
-  ec_job_information_ec_job_information_user_idTousers       ec_job_information[]      @relation("ec_job_information_user_idTousers")
-  ec_personal_information                                    ec_personal_information[]
-  employee_skills_employee_skills_manager_assessed_byTousers EmployeeSkill[]           @relation("employee_skills_manager_assessed_byTousers")
-  employee_skills_employee_skills_tenant_id_user_idTousers   EmployeeSkill[]           @relation("employee_skills_tenant_id_user_idTousers")
-  group_members                                              group_members[]
-  lms_user_map                                               lms_user_map[]
-  owned_goals                                                PerformanceGoal[]
-  succession_nominees                                        SuccessionNominee[]
-  talent_pool_entries                                        TalentPoolEntry[]
-  department                                                 Department?               @relation(fields: [department_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  job_info                                                   JobInformation?           @relation(fields: [job_info_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  position                                                   Position?                 @relation(fields: [position_id], references: [id], onUpdate: NoAction)
-  tenant                                                     Tenant                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                                                                    String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                                             String                    @db.Uuid
+  auth_uid                                                              String?                   @unique @db.Uuid
+  email                                                                 String
+  first_name                                                            String
+  last_name                                                             String
+  employee_id                                                           String?
+  hire_date                                                             DateTime?                 @db.Timestamptz(6)
+  status                                                                EmployeeStatus            @default(ACTIVE)
+  deleted_at                                                            DateTime?                 @db.Timestamptz(6)
+  is_anonymized                                                         Boolean                   @default(false)
+  performance_score                                                     Float?
+  potential_score                                                       Float?
+  department_id                                                         String?                   @db.Uuid
+  job_info_id                                                           String?                   @db.Uuid
+  created_at                                                            DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at                                                            DateTime                  @default(now()) @updatedAt @db.Timestamptz(6)
+  position_id                                                           String?                   @db.Uuid
+  arco_requests_arco_requests_tenant_id_requester_idTousers             arco_requests[]           @relation("arco_requests_tenant_id_requester_idTousers")
+  arco_requests_arco_requests_tenant_id_subject_idTousers               arco_requests[]           @relation("arco_requests_tenant_id_subject_idTousers")
+  audit_logs                                                            AuditLog[]
+  continuous_feedbacks_continuous_feedbacks_tenant_id_author_idTousers  ContinuousFeedback[]      @relation("continuous_feedbacks_tenant_id_author_idTousers")
+  continuous_feedbacks_continuous_feedbacks_tenant_id_subject_idTousers ContinuousFeedback[]      @relation("continuous_feedbacks_tenant_id_subject_idTousers")
+  ec_compensation                                                       ec_compensation[]
+  ec_job_information_ec_job_information_tenant_id_manager_idTousers     ec_job_information[]      @relation("ec_job_information_tenant_id_manager_idTousers")
+  ec_job_information_ec_job_information_tenant_id_user_idTousers        ec_job_information[]      @relation("ec_job_information_tenant_id_user_idTousers")
+  ec_personal_information                                               ec_personal_information[]
+  employee_skills_employee_skills_tenant_id_manager_assessed_byTousers  EmployeeSkill[]           @relation("employee_skills_tenant_id_manager_assessed_byTousers")
+  employee_skills_employee_skills_tenant_id_user_idTousers              EmployeeSkill[]           @relation("employee_skills_tenant_id_user_idTousers")
+  group_members                                                         group_members[]
+  lms_user_map                                                          lms_user_map?
+  performance_goals                                                     PerformanceGoal[]
+  succession_nominees                                                   SuccessionNominee[]
+  talent_pool_entries                                                   TalentPoolEntry[]
+  departments                                                           Department?               @relation(fields: [tenant_id, department_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "users_department_id_fkey")
+  job_informations                                                      JobInformation?           @relation(fields: [tenant_id, job_info_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "users_job_info_id_fkey")
+  positions                                                             Position?                 @relation(fields: [tenant_id, position_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "users_position_id_fkey")
+  tenant                                                                Tenant                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([tenant_id, email])
   @@unique([tenant_id, id], map: "users_tenant_id_uniq")
@@ -129,17 +129,18 @@ model Department {
   legal_entity_id    String?              @db.Uuid
   business_unit_id   String?              @db.Uuid
   location_id        String?              @db.Uuid
-  business_units     business_units?      @relation(fields: [business_unit_id], references: [id], onUpdate: NoAction)
-  legal_entities     legal_entities?      @relation(fields: [legal_entity_id], references: [id], onUpdate: NoAction)
-  locations          locations?           @relation(fields: [location_id], references: [id], onUpdate: NoAction)
-  parent             Department?          @relation("DeptHierarchy", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  children           Department[]         @relation("DeptHierarchy")
+  business_units     business_units?      @relation(fields: [tenant_id, business_unit_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "departments_business_unit_id_fkey")
+  legal_entities     legal_entities?      @relation(fields: [tenant_id, legal_entity_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "departments_legal_entity_id_fkey")
+  locations          locations?           @relation(fields: [tenant_id, location_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "departments_location_id_fkey")
+  departments        Department?          @relation("departmentsTodepartments", fields: [tenant_id, parent_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "departments_parent_id_fkey")
+  other_departments  Department[]         @relation("departmentsTodepartments")
   tenant             Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   ec_job_information ec_job_information[]
   positions          Position[]
   users              User[]
 
   @@unique([tenant_id, code])
+  @@unique([tenant_id, id])
   @@index([business_unit_id], map: "idx_departments_business_unit")
   @@index([legal_entity_id], map: "idx_departments_legal_entity")
   @@index([location_id], map: "idx_departments_location")
@@ -159,6 +160,7 @@ model JobFamily {
   job_roles   JobRole[]
 
   @@unique([tenant_id, family_code])
+  @@unique([tenant_id, id])
   @@index([tenant_id], map: "idx_job_families_tenant")
   @@map("job_families")
   @@schema("public")
@@ -174,7 +176,7 @@ model JobRole {
   updated_at          DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
   job_classifications JobClassification[]
   job_role_skills     JobRoleSkill[]
-  job_family          JobFamily           @relation(fields: [job_family_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  job_families        JobFamily           @relation(fields: [tenant_id, job_family_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "job_roles_job_family_id_fkey")
   tenant              Tenant              @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([tenant_id, role_code])
@@ -195,12 +197,13 @@ model JobClassification {
   created_at         DateTime             @default(now()) @db.Timestamptz(6)
   updated_at         DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
   ec_job_information ec_job_information[]
-  job_role           JobRole              @relation(fields: [job_role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  job_roles          JobRole              @relation(fields: [tenant_id, job_role_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "job_classifications_job_role_id_fkey")
   tenant             Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   job_informations   JobInformation[]
   positions          Position[]
 
   @@unique([tenant_id, job_code])
+  @@unique([tenant_id, id])
   @@index([job_role_id], map: "idx_job_classifications_role")
   @@index([tenant_id], map: "idx_job_classifications_tenant")
   @@map("job_classifications")
@@ -221,14 +224,15 @@ model Position {
   updated_at            DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
   ec_job_information    ec_job_information[]
   job_informations      JobInformation[]
-  department            Department?          @relation(fields: [department_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  job_classification    JobClassification?   @relation(fields: [job_classification_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  parent_position       Position?            @relation("PositionHierarchy", fields: [parent_position_id], references: [id], onUpdate: NoAction)
-  child_positions       Position[]           @relation("PositionHierarchy")
+  departments           Department?          @relation(fields: [tenant_id, department_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "positions_department_id_fkey")
+  job_classifications   JobClassification?   @relation(fields: [tenant_id, job_classification_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "positions_job_classification_id_fkey")
+  positions             Position?            @relation("positionsTopositions", fields: [tenant_id, parent_position_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "positions_parent_position_id_fkey")
+  other_positions       Position[]           @relation("positionsTopositions")
   tenant                Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  occupants             User[]
+  users                 User[]
 
   @@unique([tenant_id, position_code])
+  @@unique([tenant_id, id])
   @@index([department_id], map: "idx_positions_department")
   @@index([parent_position_id], map: "idx_positions_parent")
   @@index([tenant_id], map: "idx_positions_tenant")
@@ -249,11 +253,12 @@ model JobInformation {
   updated_at            DateTime           @default(now()) @updatedAt @db.Timestamptz(6)
   position_id           String?            @db.Uuid
   job_classification_id String?            @db.Uuid
-  job_classification    JobClassification? @relation(fields: [job_classification_id], references: [id], onUpdate: NoAction)
-  position              Position?          @relation(fields: [position_id], references: [id], onUpdate: NoAction)
+  job_classifications   JobClassification? @relation(fields: [tenant_id, job_classification_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "job_informations_job_classification_id_fkey")
+  positions             Position?          @relation(fields: [tenant_id, position_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "job_informations_position_id_fkey")
   tenant                Tenant             @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users                 User[]
 
+  @@unique([tenant_id, id])
   @@index([position_id], map: "idx_job_informations_position")
   @@index([tenant_id], map: "idx_job_informations_tenant")
   @@map("job_informations")
@@ -313,7 +318,7 @@ model PerformanceGoal {
   created_at          DateTime   @default(now()) @db.Timestamptz(6)
   updated_at          DateTime   @default(now()) @updatedAt @db.Timestamptz(6)
   tenant              Tenant     @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  user                User       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users               User       @relation(fields: [tenant_id, user_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "performance_goals_user_id_fkey")
 
   @@index([tenant_id], map: "idx_performance_goals_tenant")
   @@index([user_id], map: "idx_performance_goals_user")
@@ -322,18 +327,18 @@ model PerformanceGoal {
 }
 
 model ContinuousFeedback {
-  id         String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id  String             @db.Uuid
-  author_id  String             @db.Uuid
-  subject_id String             @db.Uuid
-  content    String
-  visibility FeedbackVisibility @default(PRIVATE)
-  category   FeedbackCategory   @default(GENERAL)
-  created_at DateTime           @default(now()) @db.Timestamptz(6)
-  updated_at DateTime           @default(now()) @updatedAt @db.Timestamptz(6)
-  author     User               @relation("FeedbackAuthor", fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  subject    User               @relation("FeedbackSubject", fields: [subject_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  tenant     Tenant             @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                                                     String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                              String             @db.Uuid
+  author_id                                              String             @db.Uuid
+  subject_id                                             String             @db.Uuid
+  content                                                String
+  visibility                                             FeedbackVisibility @default(PRIVATE)
+  category                                               FeedbackCategory   @default(GENERAL)
+  created_at                                             DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at                                             DateTime           @default(now()) @updatedAt @db.Timestamptz(6)
+  users_continuous_feedbacks_tenant_id_author_idTousers  User               @relation("continuous_feedbacks_tenant_id_author_idTousers", fields: [tenant_id, author_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "continuous_feedbacks_author_id_fkey")
+  users_continuous_feedbacks_tenant_id_subject_idTousers User               @relation("continuous_feedbacks_tenant_id_subject_idTousers", fields: [tenant_id, subject_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "continuous_feedbacks_subject_id_fkey")
+  tenant                                                 Tenant             @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([author_id], map: "idx_continuous_feedbacks_author")
   @@index([subject_id], map: "idx_continuous_feedbacks_subject")
@@ -451,20 +456,20 @@ model JobRoleSkill {
 }
 
 model EmployeeSkill {
-  tenant_id                                        String        @db.Uuid
-  user_id                                          String        @db.Uuid
-  skill_id                                         String        @db.Uuid
-  self_assessed_level                              Int           @default(1) @db.SmallInt
-  manager_assessed_level                           Int?          @db.SmallInt
-  created_at                                       DateTime      @default(now()) @db.Timestamptz(6)
-  updated_at                                       DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
-  self_assessed_at                                 DateTime?     @db.Timestamptz(6)
-  manager_assessed_at                              DateTime?     @db.Timestamptz(6)
-  manager_assessed_by                              String?       @db.Uuid
-  users_employee_skills_manager_assessed_byTousers User?         @relation("employee_skills_manager_assessed_byTousers", fields: [manager_assessed_by], references: [id], onUpdate: NoAction, map: "es_manager_fk")
-  skill_ontology                                   SkillOntology @relation(fields: [tenant_id, skill_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "es_skill_fk")
-  tenant                                           Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "es_tenant_fk")
-  users_employee_skills_tenant_id_user_idTousers   User          @relation("employee_skills_tenant_id_user_idTousers", fields: [tenant_id, user_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "es_user_fk")
+  tenant_id                                                  String        @db.Uuid
+  user_id                                                    String        @db.Uuid
+  skill_id                                                   String        @db.Uuid
+  self_assessed_level                                        Int           @default(1) @db.SmallInt
+  manager_assessed_level                                     Int?          @db.SmallInt
+  created_at                                                 DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                                                 DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
+  self_assessed_at                                           DateTime?     @db.Timestamptz(6)
+  manager_assessed_at                                        DateTime?     @db.Timestamptz(6)
+  manager_assessed_by                                        String?       @db.Uuid
+  users_employee_skills_tenant_id_manager_assessed_byTousers User?         @relation("employee_skills_tenant_id_manager_assessed_byTousers", fields: [tenant_id, manager_assessed_by], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "es_manager_fk")
+  skill_ontology                                             SkillOntology @relation(fields: [tenant_id, skill_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "es_skill_fk")
+  tenant                                                     Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "es_tenant_fk")
+  users_employee_skills_tenant_id_user_idTousers             User          @relation("employee_skills_tenant_id_user_idTousers", fields: [tenant_id, user_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "es_user_fk")
 
   @@id([tenant_id, user_id, skill_id])
   @@index([skill_id], map: "idx_employee_skills_skill")
@@ -486,6 +491,7 @@ model PermissionGroup {
   role_grants   role_grants[]
 
   @@unique([tenant_id, name])
+  @@unique([tenant_id, id])
   @@index([tenant_id], map: "idx_permission_groups_tenant")
   @@map("permission_groups")
   @@schema("public")
@@ -504,6 +510,7 @@ model PermissionRole {
   role_permissions RolePermission[]
 
   @@unique([tenant_id, name])
+  @@unique([tenant_id, id])
   @@index([tenant_id], map: "idx_permission_roles_tenant")
   @@map("permission_roles")
   @@schema("public")
@@ -511,15 +518,15 @@ model PermissionRole {
 
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model RolePermission {
-  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id      String         @db.Uuid
-  role_id        String         @db.Uuid
-  created_at     DateTime       @default(now()) @db.Timestamptz(6)
-  permission_key String
-  field_key      String?
-  action         rbp_action     @default(view)
-  role           PermissionRole @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  tenant         Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id        String         @db.Uuid
+  role_id          String         @db.Uuid
+  created_at       DateTime       @default(now()) @db.Timestamptz(6)
+  permission_key   String
+  field_key        String?
+  action           rbp_action     @default(view)
+  permission_roles PermissionRole @relation(fields: [tenant_id, role_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "role_permissions_role_id_fkey")
+  tenant           Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([permission_key, action], map: "idx_role_permissions_pkey_action")
   @@index([role_id], map: "idx_role_permissions_role")
@@ -556,7 +563,7 @@ model AuditLog {
   ip           String?  @db.Inet
   user_agent   String?
   tenant       Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        User     @relation(fields: [tenant_id, user_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "audit_logs_user_id_fkey")
 
   @@index([action], map: "idx_audit_logs_action")
   @@index([created_at], map: "idx_audit_logs_created")
@@ -1124,22 +1131,22 @@ model webauthn_credentials {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model arco_requests {
-  id                                      String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id                               String              @db.Uuid
-  requester_id                            String              @db.Uuid
-  subject_id                              String              @db.Uuid
-  request_type                            arco_request_type
-  status                                  arco_request_status @default(pending)
-  description                             String
-  resolution_notes                        String?
-  export_hash                             String?
-  due_date                                DateTime            @db.Date
-  completed_at                            DateTime?           @db.Timestamptz(6)
-  created_at                              DateTime            @default(now()) @db.Timestamptz(6)
-  updated_at                              DateTime            @default(now()) @db.Timestamptz(6)
-  users_arco_requests_requester_idTousers User                @relation("arco_requests_requester_idTousers", fields: [requester_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users_arco_requests_subject_idTousers   User                @relation("arco_requests_subject_idTousers", fields: [subject_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  tenants                                 Tenant              @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                                                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                         String              @db.Uuid
+  requester_id                                      String              @db.Uuid
+  subject_id                                        String              @db.Uuid
+  request_type                                      arco_request_type
+  status                                            arco_request_status @default(pending)
+  description                                       String
+  resolution_notes                                  String?
+  export_hash                                       String?
+  due_date                                          DateTime            @db.Date
+  completed_at                                      DateTime?           @db.Timestamptz(6)
+  created_at                                        DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                                        DateTime            @default(now()) @db.Timestamptz(6)
+  users_arco_requests_tenant_id_requester_idTousers User                @relation("arco_requests_tenant_id_requester_idTousers", fields: [tenant_id, requester_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "arco_requests_requester_id_fkey")
+  users_arco_requests_tenant_id_subject_idTousers   User                @relation("arco_requests_tenant_id_subject_idTousers", fields: [tenant_id, subject_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "arco_requests_subject_id_fkey")
+  tenants                                           Tenant              @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([status], map: "idx_arco_requests_status")
   @@index([subject_id], map: "idx_arco_requests_subject")
@@ -1156,11 +1163,12 @@ model business_units {
   legal_entity_id String         @db.Uuid
   created_at      DateTime       @default(now()) @db.Timestamptz(6)
   updated_at      DateTime       @default(now()) @db.Timestamptz(6)
-  legal_entities  legal_entities @relation(fields: [legal_entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  legal_entities  legal_entities @relation(fields: [tenant_id, legal_entity_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "business_units_legal_entity_id_fkey")
   tenants         Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   departments     Department[]
 
   @@unique([tenant_id, code])
+  @@unique([tenant_id, id])
   @@index([legal_entity_id], map: "idx_business_units_legal_entity")
   @@index([tenant_id], map: "idx_business_units_tenant")
   @@schema("public")
@@ -1184,7 +1192,7 @@ model ec_compensation {
   created_at   DateTime      @default(now()) @db.Timestamptz(6)
   updated_at   DateTime      @default(now()) @db.Timestamptz(6)
   tenants      Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users        User          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        User          @relation(fields: [tenant_id, user_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "ec_compensation_user_id_fkey")
 
   @@index([tenant_id], map: "idx_ec_comp_tenant")
   @@index([user_id], map: "idx_ec_comp_user")
@@ -1194,28 +1202,28 @@ model ec_compensation {
 /// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model ec_job_information {
-  id                                         String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id                                  String             @db.Uuid
-  user_id                                    String             @db.Uuid
-  start_date                                 DateTime           @db.Date
-  end_date                                   DateTime?          @db.Date
-  sequence                                   Int                @default(1)
-  position_id                                String?            @db.Uuid
-  department_id                              String?            @db.Uuid
-  location_id                                String?            @db.Uuid
-  job_classification_id                      String?            @db.Uuid
-  job_title                                  String
-  manager_id                                 String?            @db.Uuid
-  event_reason                               String?
-  created_at                                 DateTime           @default(now()) @db.Timestamptz(6)
-  updated_at                                 DateTime           @default(now()) @db.Timestamptz(6)
-  departments                                Department?        @relation(fields: [department_id], references: [id], onUpdate: NoAction)
-  job_classifications                        JobClassification? @relation(fields: [job_classification_id], references: [id], onUpdate: NoAction)
-  locations                                  locations?         @relation(fields: [location_id], references: [id], onUpdate: NoAction)
-  users_ec_job_information_manager_idTousers User?              @relation("ec_job_information_manager_idTousers", fields: [manager_id], references: [id], onUpdate: NoAction)
-  positions                                  Position?          @relation(fields: [position_id], references: [id], onUpdate: NoAction)
-  tenants                                    Tenant             @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users_ec_job_information_user_idTousers    User               @relation("ec_job_information_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                                                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                            String             @db.Uuid
+  user_id                                              String             @db.Uuid
+  start_date                                           DateTime           @db.Date
+  end_date                                             DateTime?          @db.Date
+  sequence                                             Int                @default(1)
+  position_id                                          String?            @db.Uuid
+  department_id                                        String?            @db.Uuid
+  location_id                                          String?            @db.Uuid
+  job_classification_id                                String?            @db.Uuid
+  job_title                                            String
+  manager_id                                           String?            @db.Uuid
+  event_reason                                         String?
+  created_at                                           DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at                                           DateTime           @default(now()) @db.Timestamptz(6)
+  departments                                          Department?        @relation(fields: [tenant_id, department_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "ec_job_information_department_id_fkey")
+  job_classifications                                  JobClassification? @relation(fields: [tenant_id, job_classification_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "ec_job_information_job_classification_id_fkey")
+  locations                                            locations?         @relation(fields: [tenant_id, location_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "ec_job_information_location_id_fkey")
+  users_ec_job_information_tenant_id_manager_idTousers User?              @relation("ec_job_information_tenant_id_manager_idTousers", fields: [tenant_id, manager_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "ec_job_information_manager_id_fkey")
+  positions                                            Position?          @relation(fields: [tenant_id, position_id], references: [tenant_id, id], onDelete: SetNull, onUpdate: NoAction, map: "ec_job_information_position_id_fkey")
+  tenants                                              Tenant             @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_ec_job_information_tenant_id_user_idTousers    User               @relation("ec_job_information_tenant_id_user_idTousers", fields: [tenant_id, user_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "ec_job_information_user_id_fkey")
 
   @@index([manager_id], map: "idx_ec_job_info_manager")
   @@index([position_id], map: "idx_ec_job_info_position")
@@ -1256,7 +1264,7 @@ model ec_personal_information {
   created_at              DateTime  @default(now()) @db.Timestamptz(6)
   updated_at              DateTime  @default(now()) @db.Timestamptz(6)
   tenants                 Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users                   User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   User      @relation(fields: [tenant_id, user_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "ec_personal_information_user_id_fkey")
 
   @@index([tenant_id], map: "idx_ec_personal_tenant")
   @@index([user_id], map: "idx_ec_personal_user")
@@ -1270,9 +1278,9 @@ model group_members {
   group_id          String          @db.Uuid
   user_id           String          @db.Uuid
   created_at        DateTime        @default(now()) @db.Timestamptz(6)
-  permission_groups PermissionGroup @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  permission_groups PermissionGroup @relation(fields: [tenant_id, group_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "group_members_group_id_fkey")
   tenants           Tenant          @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users             User            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users             User            @relation(fields: [tenant_id, user_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "group_members_user_id_fkey")
 
   @@unique([group_id, user_id])
   @@index([group_id], map: "idx_group_members_group")
@@ -1296,6 +1304,7 @@ model legal_entities {
   tenants        Tenant           @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([tenant_id, code])
+  @@unique([tenant_id, id])
   @@index([tenant_id], map: "idx_legal_entities_tenant")
   @@schema("public")
 }
@@ -1322,7 +1331,7 @@ model lms_user_map {
   moodle_user_id Int
   created_at     DateTime @default(now()) @db.Timestamptz(6)
   tenants        Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users          User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users          User     @relation(fields: [tenant_id, user_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "lms_user_map_user_id_fkey")
 
   @@unique([tenant_id, user_id])
   @@index([tenant_id], map: "idx_lms_user_map_tenant")
@@ -1349,6 +1358,7 @@ model locations {
   tenants            Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([tenant_id, code])
+  @@unique([tenant_id, id])
   @@index([tenant_id], map: "idx_locations_tenant")
   @@schema("public")
 }
@@ -1377,8 +1387,8 @@ model role_grants {
   target_population target_population_type @default(self)
   created_at        DateTime               @default(now()) @db.Timestamptz(6)
   updated_at        DateTime               @default(now()) @db.Timestamptz(6)
-  permission_groups PermissionGroup        @relation(fields: [granted_group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  permission_roles  PermissionRole         @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  permission_groups PermissionGroup        @relation(fields: [tenant_id, granted_group_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "role_grants_granted_group_id_fkey")
+  permission_roles  PermissionRole         @relation(fields: [tenant_id, role_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "role_grants_role_id_fkey")
   tenants           Tenant                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([role_id, granted_group_id, target_population])
