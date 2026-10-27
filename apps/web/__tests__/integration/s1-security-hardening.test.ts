@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import * as jose from "jose";
+import { integrationEnv } from "./helpers/env";
 
 /**
  * S1 Security Hardening Integration Tests
@@ -17,13 +18,12 @@ import * as jose from "jose";
  * In CI, this runs after `supabase db reset` in the db job.
  */
 
-const SUPABASE_URL = process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
-const ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-const JWT_SECRET = process.env.SUPABASE_JWT_SECRET ?? "";
-
-const CAN_RUN = !!(ANON_KEY && SERVICE_KEY && JWT_SECRET);
-const describeIntegration = CAN_RUN ? describe : describe.skip;
+const {
+  supabaseUrl: SUPABASE_URL,
+  anonKey: ANON_KEY,
+  serviceKey: SERVICE_KEY,
+  jwtSecret: JWT_SECRET,
+} = integrationEnv();
 
 function serviceClient() {
   return createSupabaseClient(SUPABASE_URL, SERVICE_KEY, {
@@ -68,7 +68,7 @@ let userBAuthUid: string;
 let managerId: string;
 let managerAuthUid: string;
 
-describeIntegration("S1 Security Hardening", () => {
+describe("S1 Security Hardening", () => {
   beforeAll(async () => {
     const svc = serviceClient();
 
@@ -296,7 +296,7 @@ describeIntegration("S1 Security Hardening", () => {
 
   describe("PII access by manager", () => {
     it("manager can see direct report compensation", async () => {
-      if (!managerAuthUid) return;
+      expect(managerAuthUid, "seed data has no active manager in acme-corp").toBeTruthy();
       const jwt = await mintJwt({
         sub: managerAuthUid,
         role: "authenticated",

@@ -67,7 +67,7 @@ jobs:
           version: latest
 
       - name: Start Supabase
-        run: supabase start -x gotrue,realtime,storage,imgproxy,edge-runtime,logflare,vector,pgbouncer
+        run: supabase start -x realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,studio
 
       - name: Validate migrations (db reset)
         run: supabase db reset
@@ -87,12 +87,7 @@ jobs:
 
       - name: Run integration tests
         run: |
-          export SUPABASE_URL="$(supabase status --output env | grep 'API_URL=' | head -1 | sed 's/.*=//')"
-          export SUPABASE_ANON_KEY="$(supabase status --output env | grep 'ANON_KEY=' | head -1 | sed 's/.*=//')"
-          export SUPABASE_SERVICE_ROLE_KEY="$(supabase status --output env | grep 'SERVICE_ROLE_KEY=' | head -1 | sed 's/.*=//')"
-          export SUPABASE_JWT_SECRET="$(supabase status --output env | grep 'JWT_SECRET=' | head -1 | sed 's/.*=//')"
-          cd apps/web
-          npx vitest run __tests__/integration/
+          bash scripts/run-integration-tests.sh
         env:
           NODE_ENV: test
 
@@ -115,7 +110,7 @@ jobs:
           version: latest
 
       - name: Start Supabase
-        run: supabase start -x gotrue,realtime,storage,imgproxy,edge-runtime,logflare,vector,pgbouncer
+        run: supabase start -x realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,studio
 
       - name: Insert fake divergent history
         run: |
@@ -130,11 +125,6 @@ jobs:
 
       - name: Run integration tests
         run: |
-          export SUPABASE_URL="$(supabase status --output env | grep 'API_URL=' | head -1 | sed 's/.*=//')"
-          export SUPABASE_ANON_KEY="$(supabase status --output env | grep 'ANON_KEY=' | head -1 | sed 's/.*=//')"
-          export SUPABASE_SERVICE_ROLE_KEY="$(supabase status --output env | grep 'SERVICE_ROLE_KEY=' | head -1 | sed 's/.*=//')"
-          export SUPABASE_JWT_SECRET="$(supabase status --output env | grep 'JWT_SECRET=' | head -1 | sed 's/.*=//')"
-          cd apps/web
-          npx vitest run __tests__/integration/
+          bash scripts/run-integration-tests.sh
         env:
           NODE_ENV: test

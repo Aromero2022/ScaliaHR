@@ -1,6 +1,10 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import * as jose from "jose";
+import pg from "pg";
+import { randomUUID } from "node:crypto";
+import { integrationEnv } from "./helpers/env";
+import { buildRow, insertRow, loadTableMeta } from "./helpers/fixtures";
 
 /**
  * TIH RLS + RPC Integration Tests
@@ -21,14 +25,17 @@ import * as jose from "jose";
  *   SUPABASE_JWT_SECRET=<from supabase status>
  */
 
-const SUPABASE_URL = process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
-const ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-const JWT_SECRET = process.env.SUPABASE_JWT_SECRET ?? "";
+const {
+  supabaseUrl: SUPABASE_URL,
+  anonKey: ANON_KEY,
+  serviceKey: SERVICE_KEY,
+  jwtSecret: JWT_SECRET,
+  dbUrl: DB_URL,
+} = integrationEnv();
 
-const CAN_RUN = !!(ANON_KEY && SERVICE_KEY && JWT_SECRET);
-
-const describeIntegration = CAN_RUN ? describe : describe.skip;
+const db = new pg.Client({ connectionString: DB_URL });
+await db.connect();
+afterAll(() => db.end());
 
 function serviceClient() {
   return createSupabaseClient(SUPABASE_URL, SERVICE_KEY, {
@@ -71,8 +78,10 @@ let userBId: string;
 let userAAuthUid: string;
 let userBAuthUid: string;
 let skillId: string;
+let otherTenantId: string;
+let otherSkillId: string;
 
-describeIntegration("TIH RLS Integration", () => {
+describe("TIH RLS Integration", () => {
   beforeAll(async () => {
     const svc = serviceClient();
 
@@ -120,6 +129,39 @@ describeIntegration("TIH RLS Integration", () => {
         .single();
       skillId = newSkill!.id;
     }
+
+    otherTenantId = randomUUID();
+    const tenantsMeta = await loadTableMeta(db, "tenants");
+    await insertRow(
+      db,
+      tenantsMeta,
+      buildRow(tenantsMeta, {
+        tenantId: otherTenantId,
+        authUserId: "",
+        fixtures: new Map(),
+        overrides: { id: otherTenantId },
+      }),
+      { bypassForeignKeys: false },
+    );
+    const { data: otherSkill, error: otherSkillError } = await svc
+      .from("skill_ontology")
+      .insert({
+        tenant_id: otherTenantId,
+        code: "TEST_OTHER_TENANT",
+        name: "Other Tenant Skill",
+        category: "technical",
+      })
+      .select("id")
+      .single();
+    expect(otherSkillError).toBeNull();
+    otherSkillId = otherSkill!.id;
+  });
+
+  afterAll(async () => {
+    if (otherTenantId) {
+      await db.query("DELETE FROM public.skill_ontology WHERE tenant_id = $1", [otherTenantId]);
+      await db.query("DELETE FROM public.tenants WHERE id = $1", [otherTenantId]);
+    }
   });
 
   it("authenticated user sees only own tenant skill_ontology rows", async () => {
@@ -140,16 +182,6 @@ describeIntegration("TIH RLS Integration", () => {
   });
 
   it("authenticated user cannot see another tenant's skills", async () => {
-    const svc = serviceClient();
-    const { data: otherTenant } = await svc
-      .from("tenants")
-      .select("id")
-      .neq("id", tenantId)
-      .limit(1)
-      .maybeSingle();
-
-    if (!otherTenant) return;
-
     const jwt = await mintJwt({
       sub: userAAuthUid,
       role: "authenticated",
@@ -159,7 +191,7 @@ describeIntegration("TIH RLS Integration", () => {
     const { data } = await client
       .from("skill_ontology")
       .select("id, tenant_id")
-      .eq("tenant_id", otherTenant.id);
+      .eq("tenant_id", otherTenantId);
     expect(data).toEqual([]);
   });
 
@@ -201,25 +233,6 @@ describeIntegration("TIH RLS Integration", () => {
   });
 
   it("employee_skills cross-tenant FK prevents inserting skill from another tenant", async () => {
-    const svc = serviceClient();
-    const { data: otherTenant } = await svc
-      .from("tenants")
-      .select("id")
-      .neq("id", tenantId)
-      .limit(1)
-      .maybeSingle();
-
-    if (!otherTenant) return;
-
-    const { data: otherSkill } = await svc
-      .from("skill_ontology")
-      .select("id")
-      .eq("tenant_id", otherTenant.id)
-      .limit(1)
-      .maybeSingle();
-
-    if (!otherSkill) return;
-
     const jwt = await mintJwt({
       sub: userAAuthUid,
       role: "authenticated",
@@ -227,7 +240,7 @@ describeIntegration("TIH RLS Integration", () => {
     });
     const client = authedClient(jwt);
     const { error } = await client.rpc("upsert_self_assessment", {
-      p_skill_id: otherSkill.id,
+      p_skill_id: otherSkillId,
       p_level: 3,
     });
     expect(error).toBeTruthy();
@@ -269,54 +282,71 @@ describeIntegration("TIH RLS Integration", () => {
       .not("manager_id", "is", null)
       .limit(1)
       .maybeSingle();
-
-    if (!managerJob) return;
+    expect(managerJob, "seed data has no ec_job_information row with a manager").toBeTruthy();
 
     const { data: manager } = await svc
       .from("users")
       .select("auth_uid, tenant_id")
-      .eq("id", managerJob.manager_id)
+      .eq("id", managerJob!.manager_id)
       .single();
-
-    if (!manager) return;
+    expect(manager, "manager user not found").toBeTruthy();
 
     const jwt = await mintJwt({
-      sub: manager.auth_uid,
+      sub: manager!.auth_uid,
       role: "authenticated",
-      tenant_id: manager.tenant_id,
+      tenant_id: manager!.tenant_id,
     });
     const client = authedClient(jwt);
     const { data: reports, error } = await client.rpc("get_direct_reports");
     expect(error).toBeNull();
     expect(reports).toBeTruthy();
     const reportIds = (reports ?? []).map((r: { user_id: string }) => r.user_id);
-    expect(reportIds).toContain(managerJob.user_id);
+    expect(reportIds).toContain(managerJob!.user_id);
   });
 });
 
-describe("TIH static migration verification", () => {
-  it("FORCE RLS is documented for all TIH tables", () => {
-    const tihTablesWithForceRls = [
-      "skill_ontology",
-      "job_role_skills",
-      "employee_skills",
-    ];
-    expect(tihTablesWithForceRls.length).toBe(3);
+describe("TIH catalog verification", () => {
+  const TIH_TABLES = ["skill_ontology", "job_role_skills", "employee_skills"];
+  const TIH_DEFINER_FUNCTIONS = [
+    "upsert_self_assessment",
+    "set_manager_assessment",
+    "get_direct_reports",
+  ];
+
+  it("FORCE RLS is enabled on all TIH tables", async () => {
+    const { rows } = await db.query<{ relname: string; enabled: boolean; forced: boolean }>(
+      `SELECT c.relname, c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relname = ANY($1::text[]) ORDER BY c.relname`,
+      [TIH_TABLES],
+    );
+    expect(rows).toEqual(
+      [...TIH_TABLES].sort().map((relname) => ({ relname, enabled: true, forced: true })),
+    );
   });
 
-  it("upsert_self_assessment is SECURITY DEFINER with empty search_path", () => {
-    expect(true).toBe(true);
+  it.each(TIH_DEFINER_FUNCTIONS)("%s is SECURITY DEFINER with empty search_path", async (fn) => {
+    const { rows } = await db.query<{ definer: boolean; config: string[] | null }>(
+      `SELECT p.prosecdef AS definer, p.proconfig AS config
+       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND p.proname = $1`,
+      [fn],
+    );
+    expect(rows.length, `${fn} not found`).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.definer).toBe(true);
+      expect(row.config ?? []).toContain('search_path=""');
+    }
   });
 
-  it("set_manager_assessment is SECURITY DEFINER with empty search_path", () => {
-    expect(true).toBe(true);
-  });
-
-  it("get_direct_reports is SECURITY DEFINER with empty search_path", () => {
-    expect(true).toBe(true);
-  });
-
-  it("no DELETE policy exists for authenticated on TIH tables", () => {
-    expect(true).toBe(true);
+  it("no DELETE policy exists for authenticated on TIH tables", async () => {
+    const { rows } = await db.query<{ tablename: string; policyname: string }>(
+      `SELECT tablename, policyname FROM pg_policies
+       WHERE schemaname = 'public' AND tablename = ANY($1::text[])
+         AND cmd IN ('DELETE', 'ALL') AND permissive = 'PERMISSIVE'
+         AND roles && ARRAY['authenticated', 'public']::name[]`,
+      [TIH_TABLES],
+    );
+    expect(rows).toEqual([]);
   });
 });

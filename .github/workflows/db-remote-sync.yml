@@ -71,7 +71,7 @@ jobs:
 
       - name: "Rehearsal: start local Supabase"
         run: |
-          supabase start -x gotrue,realtime,storage,imgproxy,edge-runtime,logflare,vector,pgbouncer
+          supabase start -x realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,studio
           echo "LOCAL_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres" >> "$GITHUB_ENV"
 
       - name: "Rehearsal: restore remote backup to local"
@@ -135,7 +135,7 @@ jobs:
           echo "=== Schema diff (should be empty) ==="
           DIFF="$(supabase db diff --db-url "$LOCAL_DB_URL" 2>&1)" || true
           echo "$DIFF"
-          if [ -n "$DIFF" ] && echo "$DIFF" | grep -qE '^(CREATE|ALTER|DROP)'; then
+          if [ -n "$DIFF" ] && echo "$DIFF" | grep -qiE '^(create|alter|drop)'; then
             echo "::error::Rehearsal FAILED — schema drift detected"
             exit 1
           fi
@@ -152,12 +152,7 @@ jobs:
 
       - name: "Rehearsal: run integration tests"
         run: |
-          export SUPABASE_URL="$(supabase status --output env | grep 'API_URL=' | head -1 | sed 's/.*=//')"
-          export SUPABASE_ANON_KEY="$(supabase status --output env | grep 'ANON_KEY=' | head -1 | sed 's/.*=//')"
-          export SUPABASE_SERVICE_ROLE_KEY="$(supabase status --output env | grep 'SERVICE_ROLE_KEY=' | head -1 | sed 's/.*=//')"
-          export SUPABASE_JWT_SECRET="$(supabase status --output env | grep 'JWT_SECRET=' | head -1 | sed 's/.*=//')"
-          cd apps/web
-          npx vitest run __tests__/integration/
+          bash scripts/run-integration-tests.sh
         env:
           NODE_ENV: test
 
@@ -213,7 +208,7 @@ jobs:
         run: |
           DIFF="$(supabase db diff --linked 2>&1)" || true
           echo "$DIFF"
-          if [ -n "$DIFF" ] && echo "$DIFF" | grep -qE '^(CREATE|ALTER|DROP)'; then
+          if [ -n "$DIFF" ] && echo "$DIFF" | grep -qiE '^(create|alter|drop)'; then
             echo "::error::Schema drift detected after sync"
             exit 1
           fi
