@@ -74,7 +74,9 @@ async function toCtx(t: TestTenant): Promise<TenantCtx> {
 }
 
 async function createFixtures(ctx: TenantCtx) {
-  const ordered = orderByDependencies(await Promise.all(TABLES.map(meta)));
+  const tableMetas: TableMeta[] = [];
+  for (const table of TABLES) tableMetas.push(await meta(table));
+  const ordered = orderByDependencies(tableMetas);
   for (const tableMeta of ordered) {
     if (REAL_ROW_TABLES.has(tableMeta.name)) continue;
     ctx.fixtures.set(
@@ -246,6 +248,26 @@ describe("custom_access_token_hook", () => {
   });
 });
 
+describe("no hard delete for authenticated", () => {
+  it("every permissive DELETE policy is neutralised by a restrictive block", async () => {
+    const { rows } = await db.query<{ tablename: string; policyname: string }>(`
+      SELECT p.tablename::text, p.policyname::text
+      FROM pg_policies p
+      WHERE p.schemaname = 'public' AND p.permissive = 'PERMISSIVE'
+        AND p.cmd IN ('DELETE', 'ALL')
+        AND p.roles && ARRAY['authenticated', 'public']::name[]
+        AND NOT EXISTS (
+          SELECT 1 FROM pg_policies r
+          WHERE r.schemaname = 'public' AND r.tablename = p.tablename
+            AND r.permissive = 'RESTRICTIVE' AND r.cmd IN ('DELETE', 'ALL')
+            AND r.roles && ARRAY['authenticated', 'public']::name[]
+            AND r.qual = 'false'
+        )
+      ORDER BY 1, 2`);
+    expect(rows).toEqual([]);
+  });
+});
+
 describe("row level security is enabled and forced", () => {
   it("on every table in public", async () => {
     const { rows } = await db.query<{ table_name: string }>(`
@@ -310,6 +332,9 @@ describe.each(TABLES)("tenant isolation on public.%s", (table) => {
 // Last, because a failing policy here would delete the fixtures other tests rely on.
 describe.each(TABLES)("no hard delete on public.%s", (table) => {
   it("authenticated cannot delete rows of its own tenant", async () => {
+    // A cascade from an earlier table must not silently strip A's admin rights.
+    const admin = await asA.rpc("is_tenant_admin");
+    expect(admin.data, "attacker A is no longer a tenant admin").toBe(true);
     const { error } = await asA.from(table).delete().eq("tenant_id", tenantA.tenantId);
     expectDeniedOrNoop(error, `A delete on ${table}`);
     expect(await fixtureIntact(table, tenantA), `A deleted its own ${table} row`).toBe(true);
