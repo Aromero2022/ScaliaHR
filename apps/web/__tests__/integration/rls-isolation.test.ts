@@ -272,8 +272,8 @@ describe("tenant-consistent foreign keys", () => {
     const attempts: [string, string, unknown[]][] = [
       [
         "ec_job_information.manager_id",
-        `INSERT INTO public.ec_job_information (tenant_id, user_id, start_date, job_title, manager_id)
-         VALUES ($1, $2, DATE '1999-01-01', 'Cross', $3)`,
+        `INSERT INTO public.ec_job_information (tenant_id, user_id, start_date, end_date, job_title, manager_id)
+         VALUES ($1, $2, DATE '1999-01-01', DATE '1999-12-31', 'Cross', $3)`,
         [a.id, a.employee.userId, b.manager.userId],
       ],
       [
