@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createClient, type PostgrestError, type SupabaseClient } from "@supabase/supabase-js";
+import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import pg from "pg";
-import { randomUUID } from "node:crypto";
 import { integrationEnv } from "./helpers/env";
 import {
   buildRow,
@@ -13,6 +12,7 @@ import {
   type StoredFixture,
   type TableMeta,
 } from "./helpers/fixtures";
+import { claimsOf, TestWorld, type TestTenant } from "./helpers/world";
 
 /**
  * Generic tenant-isolation suite.
@@ -20,124 +20,57 @@ import {
  * Every public table with a tenant_id column is discovered from the catalog,
  * so new tables are covered without touching this file. Users are real auth
  * users that sign in with a password; their tenant claim comes from
- * custom_access_token_hook.
+ * custom_access_token_hook. The attacker (A) is a tenant admin under RBP v2.
  */
 
 const env = integrationEnv();
 const db = new pg.Client({ connectionString: env.dbUrl });
 await db.connect();
 const TABLES = await tenantScopedTables(db);
+const world = new TestWorld(env, db);
+const { svc, anon } = world;
 
-const PASSWORD = `Rls-${randomUUID()}`;
 const REAL_ROW_TABLES = new Set(["users", "user_tenant_memberships"]);
 
 interface TenantCtx {
   tenantId: string;
   authUserId: string;
-  email: string;
   fixtures: Map<string, StoredFixture>;
+  world: TestTenant;
 }
-
-const svc = createClient(env.supabaseUrl, env.serviceKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
-const anon = createClient(env.supabaseUrl, env.anonKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
 
 const metas = new Map<string, TableMeta>();
 let tenantA: TenantCtx;
 let tenantB: TenantCtx;
 let noTenantUserId: string;
-let noTenantEmail: string;
 let tokenA: string;
 let tokenB: string;
 let tokenNoTenant: string;
 let asA: SupabaseClient;
 let asNoTenant: SupabaseClient;
 
-function clientFor(token: string): SupabaseClient {
-  return createClient(env.supabaseUrl, env.anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-function claimsOf(token: string): Record<string, unknown> {
-  return JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
-}
-
-async function createAuthUser(): Promise<{ id: string; email: string }> {
-  const email = `rls-${randomUUID()}@example.test`;
-  const { data, error } = await svc.auth.admin.createUser({
-    email,
-    password: PASSWORD,
-    email_confirm: true,
-  });
-  if (error || !data.user) throw new Error(`createUser failed: ${error?.message}`);
-  return { id: data.user.id, email };
-}
-
-async function signIn(email: string): Promise<string> {
-  const { data, error } = await anon.auth.signInWithPassword({ email, password: PASSWORD });
-  if (error || !data.session) throw new Error(`signInWithPassword failed for ${email}: ${error?.message}`);
-  return data.session.access_token;
-}
-
 async function meta(table: string): Promise<TableMeta> {
   if (!metas.has(table)) metas.set(table, await loadTableMeta(db, table));
   return metas.get(table)!;
 }
 
-async function setUpTenant(withActiveTenantSetting: boolean): Promise<TenantCtx> {
-  const tenantId = randomUUID();
-  await insertRow(
-    db,
-    await meta("tenants"),
-    buildRow(await meta("tenants"), {
-      tenantId,
-      authUserId: "",
-      fixtures: new Map(),
-      overrides: { id: tenantId },
-    }),
-    { bypassForeignKeys: false },
+async function storedRow(table: string, where: string, params: unknown[]): Promise<StoredFixture> {
+  const { rows } = await db.query<StoredFixture>(
+    `SELECT t.ctid::text AS ctid, to_jsonb(t) AS row FROM public."${table}" t WHERE ${where}`,
+    params,
   );
+  if (rows.length !== 1) throw new Error(`expected one ${table} row for ${where}, got ${rows.length}`);
+  return rows[0];
+}
 
-  const user = await createAuthUser();
-  const ctx: TenantCtx = { tenantId, authUserId: user.id, email: user.email, fixtures: new Map() };
-
-  const usersMeta = await meta("users");
-  ctx.fixtures.set(
-    "users",
-    await insertRow(
-      db,
-      usersMeta,
-      buildRow(usersMeta, { ...ctx, overrides: { auth_uid: user.id, email: user.email } }),
-      { bypassForeignKeys: false },
-    ),
-  );
-
-  const membershipMeta = await meta("user_tenant_memberships");
-  ctx.fixtures.set(
+async function toCtx(t: TestTenant): Promise<TenantCtx> {
+  const fixtures = new Map<string, StoredFixture>();
+  fixtures.set("users", await storedRow("users", "id = $1", [t.admin.userId]));
+  fixtures.set(
     "user_tenant_memberships",
-    await insertRow(
-      db,
-      membershipMeta,
-      buildRow(membershipMeta, {
-        ...ctx,
-        overrides: { user_id: user.id, app_role: "admin", is_active: true },
-      }),
-      { bypassForeignKeys: false },
-    ),
+    await storedRow("user_tenant_memberships", "user_id = $1 AND tenant_id = $2", [t.admin.authId, t.id]),
   );
-
-  if (withActiveTenantSetting) {
-    await db.query(
-      "INSERT INTO public.user_settings (user_id, active_tenant_id) VALUES ($1, $2)",
-      [user.id, tenantId],
-    );
-  }
-  return ctx;
+  return { tenantId: t.id, authUserId: t.admin.authId, fixtures, world: t };
 }
 
 async function createFixtures(ctx: TenantCtx) {
@@ -168,6 +101,14 @@ async function fixtureIntact(table: string, ctx: TenantCtx): Promise<boolean> {
   return rows[0].n === 1;
 }
 
+async function activeTenantOf(authId: string): Promise<string | null> {
+  const { rows } = await db.query<{ active_tenant_id: string | null }>(
+    "SELECT active_tenant_id FROM public.user_settings WHERE user_id = $1",
+    [authId],
+  );
+  return rows[0]?.active_tenant_id ?? null;
+}
+
 function expectDeniedOrEmpty(
   result: { data: unknown[] | null; error: PostgrestError | null },
   context: string,
@@ -186,40 +127,26 @@ function expectDeniedOrNoop(error: PostgrestError | null, context: string) {
 beforeAll(async () => {
   expect(TABLES.length, "no public tables with tenant_id were found").toBeGreaterThan(0);
 
-  tenantA = await setUpTenant(true);
-  tenantB = await setUpTenant(false);
-  const noTenantUser = await createAuthUser();
-  noTenantUserId = noTenantUser.id;
-  noTenantEmail = noTenantUser.email;
+  const a = await world.createTenant();
+  const b = await world.createTenant({ activeTenantSetting: false });
+  tenantA = await toCtx(a);
+  tenantB = await toCtx(b);
+  const noTenant = await world.userWithoutTenant();
+  noTenantUserId = noTenant.authId;
+  tokenNoTenant = noTenant.token;
+  asNoTenant = noTenant.client;
 
   await createFixtures(tenantA);
   await createFixtures(tenantB);
 
-  tokenA = await signIn(tenantA.email);
-  tokenB = await signIn(tenantB.email);
-  tokenNoTenant = await signIn(noTenantEmail);
-
-  asA = clientFor(tokenA);
-  asNoTenant = clientFor(tokenNoTenant);
+  tokenA = a.admin.token;
+  tokenB = b.admin.token;
+  asA = a.admin.client;
 });
 
 afterAll(async () => {
   try {
-    const tenantIds = [tenantA?.tenantId, tenantB?.tenantId].filter(Boolean);
-    if (tenantIds.length > 0) {
-      await db.query("BEGIN");
-      await db.query("SET LOCAL session_replication_role = replica");
-      for (const table of TABLES) {
-        await db.query(`DELETE FROM public."${table}" WHERE tenant_id = ANY($1::uuid[])`, [tenantIds]);
-      }
-      await db.query("COMMIT");
-    }
-    for (const id of [tenantA?.authUserId, tenantB?.authUserId, noTenantUserId].filter(Boolean)) {
-      await svc.auth.admin.deleteUser(id as string);
-    }
-    if (tenantIds.length > 0) {
-      await db.query("DELETE FROM public.tenants WHERE id = ANY($1::uuid[])", [tenantIds]);
-    }
+    await world.cleanup();
   } finally {
     await db.end();
   }
@@ -236,6 +163,39 @@ describe("custom_access_token_hook", () => {
 
   it("gives a user without memberships no tenant", () => {
     expect([undefined, null, ""]).toContain(claimsOf(tokenNoTenant).tenant_id);
+  });
+
+  it("a user cannot point active_tenant_id at a tenant without membership", async () => {
+    const employee = tenantA.world.employee;
+    const { error } = await employee.client
+      .from("user_settings")
+      .update({ active_tenant_id: tenantB.tenantId })
+      .eq("user_id", employee.authId);
+    expectDeniedOrNoop(error, "update of user_settings.active_tenant_id");
+    expect(await activeTenantOf(employee.authId)).toBe(tenantA.tenantId);
+
+    const inserted = await asNoTenant
+      .from("user_settings")
+      .insert({ user_id: noTenantUserId, active_tenant_id: tenantB.tenantId });
+    expectDeniedOrNoop(inserted.error, "insert of user_settings.active_tenant_id");
+    expect(await activeTenantOf(noTenantUserId)).toBeNull();
+  });
+
+  it("ignores an active_tenant_id the user has no active membership in", async () => {
+    const manager = tenantA.world.manager;
+    await db.query("UPDATE public.user_settings SET active_tenant_id = $1 WHERE user_id = $2", [
+      tenantB.tenantId,
+      manager.authId,
+    ]);
+    try {
+      const token = await world.signIn(manager.email);
+      expect(claimsOf(token).tenant_id).toBe(tenantA.tenantId);
+    } finally {
+      await db.query("UPDATE public.user_settings SET active_tenant_id = $1 WHERE user_id = $2", [
+        tenantA.tenantId,
+        manager.authId,
+      ]);
+    }
   });
 
   it("requesting_tenant_id() resolves the tenant of the signed-in user", async () => {
