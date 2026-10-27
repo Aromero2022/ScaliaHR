@@ -111,12 +111,27 @@ jobs:
           "
           echo "Inserted fake divergent migration history."
 
-      - name: "Rehearsal: revoke migration history"
+      - name: "Rehearsal: clear migration history (reset)"
+        if: inputs.mode == 'reset'
         run: |
-          VERSIONS=$(supabase migration list --db-url "$LOCAL_DB_URL" 2>/dev/null \
-            | grep -oP '^\s*\K\d{14}' || true)
+          psql "$LOCAL_DB_URL" -c "TRUNCATE supabase_migrations.schema_migrations;"
+          echo "Migration history truncated."
+          REMAINING=$(psql "$LOCAL_DB_URL" -t -A -c \
+            "SELECT count(*) FROM supabase_migrations.schema_migrations;")
+          if [ "$REMAINING" -ne 0 ]; then
+            echo "::error::Migration history not empty after truncate ($REMAINING rows remain)"
+            exit 1
+          fi
+          echo "Verified: schema_migrations is empty."
+
+      - name: "Rehearsal: revoke migration history (repair-push)"
+        if: inputs.mode == 'repair-push'
+        run: |
+          VERSIONS=$(psql "$LOCAL_DB_URL" -t -A -c \
+            "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version;")
           if [ -n "$VERSIONS" ]; then
-            echo "Revoking $(echo "$VERSIONS" | wc -l) migration(s)..."
+            COUNT=$(echo "$VERSIONS" | wc -l)
+            echo "Revoking $COUNT migration(s) from local rehearsal DB..."
             for v in $VERSIONS; do
               supabase migration repair --status reverted --db-url "$LOCAL_DB_URL" "$v"
             done
@@ -138,8 +153,8 @@ jobs:
         run: |
           echo "=== Migration count ==="
           EXPECTED=$(ls supabase/migrations/*.sql | wc -l)
-          APPLIED=$(supabase migration list --db-url "$LOCAL_DB_URL" 2>/dev/null \
-            | grep -cP '^\s*\d{14}' || echo "0")
+          APPLIED=$(psql "$LOCAL_DB_URL" -t -A -c \
+            "SELECT count(*) FROM supabase_migrations.schema_migrations;")
           echo "Applied: $APPLIED / Expected: $EXPECTED"
           if [ "$APPLIED" -ne "$EXPECTED" ]; then
             echo "::error::Rehearsal FAILED — expected $EXPECTED migrations, got $APPLIED"
@@ -292,12 +307,27 @@ jobs:
       # PHASE 3 — Apply to remote (same sequence as rehearsal)
       # ──────────────────────────────────────────────────────────
 
-      - name: Revoke remote migration history
+      - name: "Clear remote migration history (reset)"
+        if: inputs.mode == 'reset'
         run: |
-          REMOTE_VERSIONS=$(supabase migration list --db-url "$SUPABASE_DB_URL" 2>/dev/null \
-            | grep -oP '^\s*\K\d{14}' || true)
+          psql "$SUPABASE_DB_URL" -c "TRUNCATE supabase_migrations.schema_migrations;"
+          echo "Remote migration history truncated."
+          REMAINING=$(psql "$SUPABASE_DB_URL" -t -A -c \
+            "SELECT count(*) FROM supabase_migrations.schema_migrations;")
+          if [ "$REMAINING" -ne 0 ]; then
+            echo "::error::Remote migration history not empty after truncate ($REMAINING rows remain)"
+            exit 1
+          fi
+          echo "Verified: remote schema_migrations is empty."
+
+      - name: "Revoke remote migration history (repair-push)"
+        if: inputs.mode == 'repair-push'
+        run: |
+          REMOTE_VERSIONS=$(psql "$SUPABASE_DB_URL" -t -A -c \
+            "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version;")
           if [ -n "$REMOTE_VERSIONS" ]; then
-            echo "Revoking $(echo "$REMOTE_VERSIONS" | wc -l) remote migration(s)..."
+            COUNT=$(echo "$REMOTE_VERSIONS" | wc -l)
+            echo "Revoking $COUNT remote migration(s)..."
             for v in $REMOTE_VERSIONS; do
               supabase migration repair --status reverted --db-url "$SUPABASE_DB_URL" "$v"
             done
@@ -322,9 +352,8 @@ jobs:
       - name: "Verify: migration count"
         run: |
           EXPECTED=$(ls supabase/migrations/*.sql | wc -l)
-          supabase migration list --db-url "$SUPABASE_DB_URL"
-          APPLIED=$(supabase migration list --db-url "$SUPABASE_DB_URL" 2>/dev/null \
-            | grep -cP '^\s*\d{14}' || echo "0")
+          APPLIED=$(psql "$SUPABASE_DB_URL" -t -A -c \
+            "SELECT count(*) FROM supabase_migrations.schema_migrations;")
           echo "Applied: $APPLIED / Expected: $EXPECTED"
           if [ "$APPLIED" -ne "$EXPECTED" ]; then
             echo "::error::Expected $EXPECTED migrations, got $APPLIED"
