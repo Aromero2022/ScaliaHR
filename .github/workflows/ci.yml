@@ -95,3 +95,46 @@ jobs:
           npx vitest run __tests__/integration/
         env:
           NODE_ENV: test
+
+  db-reset-test:
+    name: DB reset sync test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase
+        run: supabase start -x gotrue,realtime,storage,imgproxy,edge-runtime,logflare,vector,pgbouncer
+
+      - name: Insert fake divergent history
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -c "
+            INSERT INTO supabase_migrations.schema_migrations (version)
+            VALUES ('20261021000001'),('20261021000002'),('20261021000003');
+          "
+          echo "Inserted fake divergent migration history."
+
+      - name: Run reset sync script
+        run: bash scripts/db-reset-sync.sh "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+
+      - name: Run integration tests
+        run: |
+          export SUPABASE_URL="$(supabase status --output env | grep 'API_URL=' | head -1 | sed 's/.*=//')"
+          export SUPABASE_ANON_KEY="$(supabase status --output env | grep 'ANON_KEY=' | head -1 | sed 's/.*=//')"
+          export SUPABASE_SERVICE_ROLE_KEY="$(supabase status --output env | grep 'SERVICE_ROLE_KEY=' | head -1 | sed 's/.*=//')"
+          export SUPABASE_JWT_SECRET="$(supabase status --output env | grep 'JWT_SECRET=' | head -1 | sed 's/.*=//')"
+          cd apps/web
+          npx vitest run __tests__/integration/
+        env:
+          NODE_ENV: test

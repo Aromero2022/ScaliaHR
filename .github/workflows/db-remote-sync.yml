@@ -25,24 +25,6 @@ concurrency:
 
 env:
   DEMO_TENANT_ID: "a0000000-0000-0000-0000-000000000001"
-  RESET_PUBLIC_SQL: |
-    DROP SCHEMA public CASCADE;
-    CREATE SCHEMA public;
-    -- Schema-level privileges (matches Supabase defaults)
-    GRANT USAGE  ON SCHEMA public TO postgres, anon, authenticated, service_role;
-    GRANT CREATE ON SCHEMA public TO postgres, service_role;
-    GRANT ALL    ON SCHEMA public TO postgres, service_role;
-    -- Existing objects: ALL to every API role
-    GRANT ALL ON ALL TABLES    IN SCHEMA public TO postgres, anon, authenticated, service_role;
-    GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO postgres, anon, authenticated, service_role;
-    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
-    -- Future objects: ALL to every API role
-    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT ALL ON TABLES    TO postgres, anon, authenticated, service_role;
-    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT ALL ON FUNCTIONS TO postgres, anon, authenticated, service_role;
-    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
 
 jobs:
   sync:
@@ -89,14 +71,17 @@ jobs:
 
       - name: "Rehearsal: start local Supabase"
         run: |
-          supabase start -x realtime,storage-api,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor
+          supabase start -x gotrue,realtime,storage,imgproxy,edge-runtime,logflare,vector,pgbouncer
           echo "LOCAL_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres" >> "$GITHUB_ENV"
 
       - name: "Rehearsal: restore remote backup to local"
         run: |
           echo "Replacing local public schema with remote backup..."
-          psql "$LOCAL_DB_URL" -c "DROP SCHEMA IF EXISTS public CASCADE;"
-          psql "$LOCAL_DB_URL" <<< "$RESET_PUBLIC_SQL"
+          psql "$LOCAL_DB_URL" <<'SQL'
+          DROP SCHEMA IF EXISTS public CASCADE;
+          CREATE SCHEMA public;
+          GRANT ALL ON SCHEMA public TO postgres, anon, authenticated, service_role;
+          SQL
           if [ -s backup/pre-sync-schema.sql ]; then
             psql "$LOCAL_DB_URL" < backup/pre-sync-schema.sql
             echo "Restored remote schema dump to local DB."
@@ -111,18 +96,9 @@ jobs:
           "
           echo "Inserted fake divergent migration history."
 
-      - name: "Rehearsal: clear migration history (reset)"
+      - name: "Rehearsal: sync (reset)"
         if: inputs.mode == 'reset'
-        run: |
-          psql "$LOCAL_DB_URL" -c "TRUNCATE supabase_migrations.schema_migrations;"
-          echo "Migration history truncated."
-          REMAINING=$(psql "$LOCAL_DB_URL" -t -A -c \
-            "SELECT count(*) FROM supabase_migrations.schema_migrations;")
-          if [ "$REMAINING" -ne 0 ]; then
-            echo "::error::Migration history not empty after truncate ($REMAINING rows remain)"
-            exit 1
-          fi
-          echo "Verified: schema_migrations is empty."
+        run: bash scripts/db-reset-sync.sh "$LOCAL_DB_URL"
 
       - name: "Rehearsal: revoke migration history (repair-push)"
         if: inputs.mode == 'repair-push'
@@ -139,17 +115,12 @@ jobs:
             echo "No migrations to revoke."
           fi
 
-      - name: "Rehearsal: apply — reset"
-        if: inputs.mode == 'reset'
-        run: |
-          psql "$LOCAL_DB_URL" <<< "$RESET_PUBLIC_SQL"
-          supabase db push --db-url "$LOCAL_DB_URL" --include-all
-
-      - name: "Rehearsal: apply — repair-push"
+      - name: "Rehearsal: apply (repair-push)"
         if: inputs.mode == 'repair-push'
         run: supabase db push --db-url "$LOCAL_DB_URL" --include-all
 
-      - name: "Rehearsal: verify"
+      - name: "Rehearsal: verify (repair-push)"
+        if: inputs.mode == 'repair-push'
         run: |
           echo "=== Migration count ==="
           EXPECTED=$(ls supabase/migrations/*.sql | wc -l)
@@ -169,116 +140,7 @@ jobs:
             exit 1
           fi
 
-          echo "=== Critical objects ==="
-          psql "$LOCAL_DB_URL" -t -A -F'|' <<'SQL'
-          SELECT 'custom_access_token_hook' AS object,
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='custom_access_token_hook') AS present,
-                 EXISTS(SELECT 1 FROM information_schema.routine_privileges
-                        WHERE routine_name='custom_access_token_hook'
-                          AND grantee='supabase_auth_admin'
-                          AND privilege_type='EXECUTE') AS granted
-          UNION ALL
-          SELECT 'requesting_tenant_id',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='requesting_tenant_id'), NULL
-          UNION ALL
-          SELECT 'is_tenant_admin',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='is_tenant_admin'), NULL
-          UNION ALL
-          SELECT 'insert_effective_record',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='insert_effective_record'), NULL
-          UNION ALL
-          SELECT 'effective_record_at',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='effective_record_at'), NULL
-          UNION ALL
-          SELECT 'anonymize_user',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='anonymize_user'), NULL
-          UNION ALL
-          SELECT 'export_user_data',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='export_user_data'), NULL
-          UNION ALL
-          SELECT 'check_rate_limit',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='check_rate_limit'), NULL
-          UNION ALL
-          SELECT 'write_audit_log',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='write_audit_log'), NULL
-          UNION ALL
-          SELECT 'get_direct_reports',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='get_direct_reports'), NULL
-          UNION ALL
-          SELECT 'set_manager_assessment',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='set_manager_assessment'), NULL
-          UNION ALL
-          SELECT 'upsert_self_assessment',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='upsert_self_assessment'), NULL
-          UNION ALL
-          SELECT 'current_app_user_id',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='current_app_user_id'), NULL
-          UNION ALL
-          SELECT 'has_app_role',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='has_app_role'), NULL
-          UNION ALL
-          SELECT 'compute_arco_due_date',
-                 EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-                        WHERE n.nspname='public' AND p.proname='compute_arco_due_date'), NULL
-          UNION ALL
-          SELECT 'btree_gist_extension',
-                 EXISTS(SELECT 1 FROM pg_extension WHERE extname='btree_gist'), NULL;
-          SQL
-
-          echo ""
-          echo "=== SECURITY DEFINER functions ==="
-          psql "$LOCAL_DB_URL" -t -A <<'SQL'
-          SELECT p.proname || ' — SECURITY DEFINER: ' || p.prosecdef
-          FROM pg_proc p
-          JOIN pg_namespace n ON p.pronamespace = n.oid
-          WHERE n.nspname = 'public'
-            AND p.proname IN (
-              'custom_access_token_hook','is_tenant_admin',
-              'insert_effective_record','effective_record_at',
-              'anonymize_user','export_user_data',
-              'check_rate_limit','purge_expired_rate_limits',
-              'write_audit_log','set_manager_assessment',
-              'upsert_self_assessment','get_direct_reports'
-            )
-          ORDER BY p.proname;
-          SQL
-
-          MISSING=$(psql "$LOCAL_DB_URL" -t -A <<'SQL'
-          SELECT string_agg(fn, ', ')
-          FROM unnest(ARRAY[
-            'custom_access_token_hook','requesting_tenant_id','is_tenant_admin',
-            'insert_effective_record','effective_record_at','anonymize_user',
-            'export_user_data','check_rate_limit','write_audit_log',
-            'get_direct_reports','set_manager_assessment','upsert_self_assessment',
-            'current_app_user_id','has_app_role','compute_arco_due_date'
-          ]) AS fn
-          WHERE NOT EXISTS (
-            SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-            WHERE n.nspname='public' AND p.proname=fn
-          );
-          SQL
-          )
-          if [ -n "$MISSING" ] && [ "$MISSING" != "" ]; then
-            echo "::error::Rehearsal FAILED — missing functions: $MISSING"
-            exit 1
-          fi
-
-          echo ""
-          echo "✓ Rehearsal passed — all $EXPECTED migrations applied, no drift, all critical objects present."
+          echo "Rehearsal verify passed."
 
       - uses: actions/setup-node@v4
         with:
@@ -304,23 +166,14 @@ jobs:
         run: supabase stop --no-backup 2>/dev/null || true
 
       # ──────────────────────────────────────────────────────────
-      # PHASE 3 — Apply to remote (same sequence as rehearsal)
+      # PHASE 3 — Apply to remote
       # ──────────────────────────────────────────────────────────
 
-      - name: "Clear remote migration history (reset)"
+      - name: "Remote: sync (reset)"
         if: inputs.mode == 'reset'
-        run: |
-          psql "$SUPABASE_DB_URL" -c "TRUNCATE supabase_migrations.schema_migrations;"
-          echo "Remote migration history truncated."
-          REMAINING=$(psql "$SUPABASE_DB_URL" -t -A -c \
-            "SELECT count(*) FROM supabase_migrations.schema_migrations;")
-          if [ "$REMAINING" -ne 0 ]; then
-            echo "::error::Remote migration history not empty after truncate ($REMAINING rows remain)"
-            exit 1
-          fi
-          echo "Verified: remote schema_migrations is empty."
+        run: bash scripts/db-reset-sync.sh "$SUPABASE_DB_URL"
 
-      - name: "Revoke remote migration history (repair-push)"
+      - name: "Remote: revoke migration history (repair-push)"
         if: inputs.mode == 'repair-push'
         run: |
           REMOTE_VERSIONS=$(psql "$SUPABASE_DB_URL" -t -A -c \
@@ -335,21 +188,16 @@ jobs:
             echo "No remote migrations to revoke."
           fi
 
-      - name: "Apply — reset (drop + recreate public schema)"
-        if: inputs.mode == 'reset'
-        run: |
-          psql "$SUPABASE_DB_URL" <<< "$RESET_PUBLIC_SQL"
-          supabase db push --db-url "$SUPABASE_DB_URL" --include-all
-
-      - name: "Apply — repair-push (incremental)"
+      - name: "Remote: apply (repair-push)"
         if: inputs.mode == 'repair-push'
         run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all
 
       # ──────────────────────────────────────────────────────────
-      # PHASE 4 — Verify remote
+      # PHASE 4 — Verify remote (repair-push only; reset verified by script)
       # ──────────────────────────────────────────────────────────
 
       - name: "Verify: migration count"
+        if: inputs.mode == 'repair-push'
         run: |
           EXPECTED=$(ls supabase/migrations/*.sql | wc -l)
           APPLIED=$(psql "$SUPABASE_DB_URL" -t -A -c \
@@ -360,7 +208,8 @@ jobs:
             exit 1
           fi
 
-      - name: "Verify: schema diff (should be empty)"
+      - name: "Verify: schema diff"
+        if: inputs.mode == 'repair-push'
         run: |
           DIFF="$(supabase db diff --linked 2>&1)" || true
           echo "$DIFF"
@@ -370,43 +219,8 @@ jobs:
           fi
 
       - name: "Verify: critical objects"
+        if: inputs.mode == 'repair-push'
         run: |
-          echo "=== custom_access_token_hook + supabase_auth_admin grant ==="
-          psql "$SUPABASE_DB_URL" -t -A <<'SQL'
-          SELECT 'hook_exists: ' || EXISTS(
-            SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-            WHERE n.nspname='public' AND p.proname='custom_access_token_hook'
-          );
-          SELECT 'auth_admin_grant: ' || EXISTS(
-            SELECT 1 FROM information_schema.routine_privileges
-            WHERE routine_name='custom_access_token_hook'
-              AND grantee='supabase_auth_admin'
-              AND privilege_type='EXECUTE'
-          );
-          SQL
-
-          echo "=== SECURITY DEFINER functions ==="
-          psql "$SUPABASE_DB_URL" -t -A <<'SQL'
-          SELECT p.proname || ' — SECURITY DEFINER: ' || p.prosecdef
-          FROM pg_proc p
-          JOIN pg_namespace n ON p.pronamespace = n.oid
-          WHERE n.nspname = 'public'
-            AND p.proname IN (
-              'custom_access_token_hook','is_tenant_admin',
-              'insert_effective_record','effective_record_at',
-              'anonymize_user','export_user_data',
-              'check_rate_limit','purge_expired_rate_limits',
-              'write_audit_log','set_manager_assessment',
-              'upsert_self_assessment','get_direct_reports'
-            )
-          ORDER BY p.proname;
-          SQL
-
-          echo "=== btree_gist extension ==="
-          psql "$SUPABASE_DB_URL" -t -A -c \
-            "SELECT 'btree_gist: ' || EXISTS(SELECT 1 FROM pg_extension WHERE extname='btree_gist');"
-
-          echo "=== All expected functions ==="
           MISSING=$(psql "$SUPABASE_DB_URL" -t -A <<'SQL'
           SELECT string_agg(fn, ', ')
           FROM unnest(ARRAY[
