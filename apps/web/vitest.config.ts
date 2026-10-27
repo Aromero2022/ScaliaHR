@@ -12,5 +12,6 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["__tests__/**/*.test.ts"],
+    exclude: ["**/node_modules/**", "__tests__/integration/**"],
   },
 });

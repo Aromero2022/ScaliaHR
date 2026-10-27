@@ -1,198 +1,87 @@
-import { describe, it, expect, beforeAll } from "vitest";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import * as jose from "jose";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import pg from "pg";
+import { randomUUID } from "node:crypto";
+import { integrationEnv } from "./helpers/env";
+import { TestWorld, type TestTenant } from "./helpers/world";
 
 /**
  * TIH RLS + RPC Integration Tests
  *
- * These tests validate real RLS policies and SECURITY DEFINER functions
- * for TIH tables (skill_ontology, employee_skills, job_role_skills)
- * against a running local Supabase instance.
- *
- * Requirements:
- *   1. supabase start
- *   2. Migrations applied (supabase db reset)
- *   3. TIH seed data from 20261023090000_rbp_tih_seeds.sql
- *
- * Environment:
- *   SUPABASE_URL=http://127.0.0.1:54321
- *   SUPABASE_ANON_KEY=<from supabase status>
- *   SUPABASE_SERVICE_ROLE_KEY=<from supabase status>
- *   SUPABASE_JWT_SECRET=<from supabase status>
+ * Real RLS policies and SECURITY DEFINER functions for TIH tables
+ * (skill_ontology, employee_skills, job_role_skills), with tenants, users
+ * and skills created by this suite.
  */
 
-const SUPABASE_URL = process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
-const ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-const JWT_SECRET = process.env.SUPABASE_JWT_SECRET ?? "";
+const env = integrationEnv();
+const db = new pg.Client({ connectionString: env.dbUrl });
+await db.connect();
+const world = new TestWorld(env, db);
 
-const CAN_RUN = !!(ANON_KEY && SERVICE_KEY && JWT_SECRET);
-
-const describeIntegration = CAN_RUN ? describe : describe.skip;
-
-function serviceClient() {
-  return createSupabaseClient(SUPABASE_URL, SERVICE_KEY, {
-    auth: { persistSession: false },
-  });
-}
-
-async function mintJwt(payload: {
-  sub: string;
-  role: string;
-  tenant_id?: string;
-  app_metadata?: Record<string, unknown>;
-}) {
-  const secret = new TextEncoder().encode(JWT_SECRET);
-  return new jose.SignJWT({
-    ...payload,
-    aud: "authenticated",
-    iss: "supabase",
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 3600,
-    app_metadata: {
-      tenant_id: payload.tenant_id,
-      ...payload.app_metadata,
-    },
-  })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .sign(secret);
-}
-
-function authedClient(jwt: string) {
-  return createSupabaseClient(SUPABASE_URL, ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${jwt}` } },
-    auth: { persistSession: false },
-  });
-}
-
-let tenantId: string;
-let userAId: string;
-let userBId: string;
-let userAAuthUid: string;
-let userBAuthUid: string;
+let tenant: TestTenant;
+let otherTenant: TestTenant;
 let skillId: string;
+let otherSkillId: string;
 
-describeIntegration("TIH RLS Integration", () => {
-  beforeAll(async () => {
-    const svc = serviceClient();
+async function createSkill(tenantId: string, code: string): Promise<string> {
+  const id = randomUUID();
+  await db.query(
+    `INSERT INTO public.skill_ontology (id, tenant_id, code, name, category)
+     VALUES ($1, $2, $3, $4, 'technical')`,
+    [id, tenantId, code, `Skill ${code}`],
+  );
+  return id;
+}
 
-    const { data: tenant } = await svc
-      .from("tenants")
-      .select("id")
-      .eq("slug", "acme-corp")
-      .single();
-    expect(tenant).toBeTruthy();
-    tenantId = tenant!.id;
+beforeAll(async () => {
+  tenant = await world.createTenant();
+  otherTenant = await world.createTenant();
+  skillId = await createSkill(tenant.id, "IT_OWN");
+  otherSkillId = await createSkill(otherTenant.id, "IT_OTHER");
+});
 
-    const { data: users } = await svc
-      .from("users")
-      .select("id, auth_uid, first_name")
-      .eq("tenant_id", tenantId)
-      .limit(2);
-    expect(users).toBeTruthy();
-    expect(users!.length).toBeGreaterThanOrEqual(2);
+afterAll(async () => {
+  try {
+    await world.cleanup();
+  } finally {
+    await db.end();
+  }
+});
 
-    userAId = users![0].id;
-    userBId = users![1].id;
-    userAAuthUid = users![0].auth_uid;
-    userBAuthUid = users![1].auth_uid;
-
-    const { data: skill } = await svc
-      .from("skill_ontology")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("is_active", true)
-      .limit(1)
-      .single();
-
-    if (skill) {
-      skillId = skill.id;
-    } else {
-      const { data: newSkill } = await svc
-        .from("skill_ontology")
-        .insert({
-          tenant_id: tenantId,
-          code: "TEST_INTEG",
-          name: "Integration Test Skill",
-          category: "technical",
-        })
-        .select("id")
-        .single();
-      skillId = newSkill!.id;
-    }
-  });
-
+describe("TIH RLS Integration", () => {
   it("authenticated user sees only own tenant skill_ontology rows", async () => {
-    const jwt = await mintJwt({
-      sub: userAAuthUid,
-      role: "authenticated",
-      tenant_id: tenantId,
-    });
-    const client = authedClient(jwt);
-    const { data, error } = await client
-      .from("skill_ontology")
-      .select("id, tenant_id");
+    const { data, error } = await tenant.employee.client.from("skill_ontology").select("id, tenant_id");
     expect(error).toBeNull();
-    expect(data).toBeTruthy();
-    for (const row of data!) {
-      expect(row.tenant_id).toBe(tenantId);
-    }
+    expect((data ?? []).map((r) => r.id)).toContain(skillId);
+    for (const row of data ?? []) expect(row.tenant_id).toBe(tenant.id);
   });
 
   it("authenticated user cannot see another tenant's skills", async () => {
-    const svc = serviceClient();
-    const { data: otherTenant } = await svc
-      .from("tenants")
-      .select("id")
-      .neq("id", tenantId)
-      .limit(1)
-      .maybeSingle();
-
-    if (!otherTenant) return;
-
-    const jwt = await mintJwt({
-      sub: userAAuthUid,
-      role: "authenticated",
-      tenant_id: tenantId,
-    });
-    const client = authedClient(jwt);
-    const { data } = await client
+    const { data, error } = await tenant.employee.client
       .from("skill_ontology")
-      .select("id, tenant_id")
+      .select("id")
       .eq("tenant_id", otherTenant.id);
+    expect(error).toBeNull();
     expect(data).toEqual([]);
   });
 
   it("upsert_self_assessment RPC succeeds for own skills", async () => {
-    const jwt = await mintJwt({
-      sub: userAAuthUid,
-      role: "authenticated",
-      tenant_id: tenantId,
-    });
-    const client = authedClient(jwt);
-    const { error } = await client.rpc("upsert_self_assessment", {
+    const { error } = await tenant.employee.client.rpc("upsert_self_assessment", {
       p_skill_id: skillId,
       p_level: 3,
     });
     expect(error).toBeNull();
 
-    const { data: verify } = await client
+    const { data: verify } = await tenant.employee.client
       .from("employee_skills")
       .select("self_assessed_level")
-      .eq("user_id", userAId)
+      .eq("user_id", tenant.employee.userId)
       .eq("skill_id", skillId)
       .single();
     expect(verify?.self_assessed_level).toBe(3);
   });
 
   it("upsert_self_assessment rejects level outside 1-5", async () => {
-    const jwt = await mintJwt({
-      sub: userAAuthUid,
-      role: "authenticated",
-      tenant_id: tenantId,
-    });
-    const client = authedClient(jwt);
-    const { error } = await client.rpc("upsert_self_assessment", {
+    const { error } = await tenant.employee.client.rpc("upsert_self_assessment", {
       p_skill_id: skillId,
       p_level: 0,
     });
@@ -200,123 +89,107 @@ describeIntegration("TIH RLS Integration", () => {
     expect(error!.message).toContain("Level must be between 1 and 5");
   });
 
-  it("employee_skills cross-tenant FK prevents inserting skill from another tenant", async () => {
-    const svc = serviceClient();
-    const { data: otherTenant } = await svc
-      .from("tenants")
-      .select("id")
-      .neq("id", tenantId)
-      .limit(1)
-      .maybeSingle();
-
-    if (!otherTenant) return;
-
-    const { data: otherSkill } = await svc
-      .from("skill_ontology")
-      .select("id")
-      .eq("tenant_id", otherTenant.id)
-      .limit(1)
-      .maybeSingle();
-
-    if (!otherSkill) return;
-
-    const jwt = await mintJwt({
-      sub: userAAuthUid,
-      role: "authenticated",
-      tenant_id: tenantId,
-    });
-    const client = authedClient(jwt);
-    const { error } = await client.rpc("upsert_self_assessment", {
-      p_skill_id: otherSkill.id,
+  it("employee_skills cross-tenant FK prevents assessing a skill from another tenant", async () => {
+    const { error } = await tenant.employee.client.rpc("upsert_self_assessment", {
+      p_skill_id: otherSkillId,
       p_level: 3,
     });
     expect(error).toBeTruthy();
+    const { rows } = await db.query(
+      "SELECT 1 FROM public.employee_skills WHERE skill_id = $1",
+      [otherSkillId],
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("the direct manager can set a manager assessment, a peer cannot", async () => {
+    const byManager = await tenant.manager.client.rpc("set_manager_assessment", {
+      p_user_id: tenant.employee.userId,
+      p_skill_id: skillId,
+      p_level: 4,
+    });
+    expect(byManager.error).toBeNull();
+
+    const byPeer = await tenant.employee.client.rpc("set_manager_assessment", {
+      p_user_id: tenant.manager.userId,
+      p_skill_id: skillId,
+      p_level: 2,
+    });
+    expect(byPeer.error?.message).toContain("Not authorized");
   });
 
   it("authenticated user cannot DELETE employee_skills rows", async () => {
-    const jwt = await mintJwt({
-      sub: userAAuthUid,
-      role: "authenticated",
-      tenant_id: tenantId,
-    });
-    const client = authedClient(jwt);
-    const { error } = await client
+    const { error } = await tenant.employee.client
       .from("employee_skills")
       .delete()
-      .eq("user_id", userAId)
+      .eq("user_id", tenant.employee.userId)
       .eq("skill_id", skillId);
-    expect(error).toBeTruthy();
+    if (error) expect(error.code).toBe("42501");
+    const { rows } = await db.query(
+      "SELECT 1 FROM public.employee_skills WHERE user_id = $1 AND skill_id = $2",
+      [tenant.employee.userId, skillId],
+    );
+    expect(rows.length).toBe(1);
   });
 
   it("anon role cannot read skill_ontology", async () => {
-    const anonClient = createSupabaseClient(SUPABASE_URL, ANON_KEY, {
-      auth: { persistSession: false },
-    });
-    const { data, error } = await anonClient
-      .from("skill_ontology")
-      .select("id")
-      .limit(1);
-    const blocked = error !== null || (data ?? []).length === 0;
-    expect(blocked).toBe(true);
+    const { data, error } = await world.anon.from("skill_ontology").select("id").limit(1);
+    expect(error !== null || (data ?? []).length === 0).toBe(true);
   });
 
-  it("get_direct_reports RPC returns expected results for a manager", async () => {
-    const svc = serviceClient();
-
-    const { data: managerJob } = await svc
-      .from("ec_job_information")
-      .select("user_id, manager_id")
-      .not("manager_id", "is", null)
-      .limit(1)
-      .maybeSingle();
-
-    if (!managerJob) return;
-
-    const { data: manager } = await svc
-      .from("users")
-      .select("auth_uid, tenant_id")
-      .eq("id", managerJob.manager_id)
-      .single();
-
-    if (!manager) return;
-
-    const jwt = await mintJwt({
-      sub: manager.auth_uid,
-      role: "authenticated",
-      tenant_id: manager.tenant_id,
-    });
-    const client = authedClient(jwt);
-    const { data: reports, error } = await client.rpc("get_direct_reports");
+  it("get_direct_reports returns the manager's direct reports only", async () => {
+    const { data, error } = await tenant.manager.client.rpc("get_direct_reports");
     expect(error).toBeNull();
-    expect(reports).toBeTruthy();
-    const reportIds = (reports ?? []).map((r: { user_id: string }) => r.user_id);
-    expect(reportIds).toContain(managerJob.user_id);
+    expect((data ?? []).map((r: { user_id: string }) => r.user_id)).toEqual([tenant.employee.userId]);
+
+    const none = await tenant.employee.client.rpc("get_direct_reports");
+    expect(none.error).toBeNull();
+    expect(none.data).toEqual([]);
   });
 });
 
-describe("TIH static migration verification", () => {
-  it("FORCE RLS is documented for all TIH tables", () => {
-    const tihTablesWithForceRls = [
-      "skill_ontology",
-      "job_role_skills",
-      "employee_skills",
-    ];
-    expect(tihTablesWithForceRls.length).toBe(3);
+describe("TIH catalog verification", () => {
+  const TIH_TABLES = ["skill_ontology", "job_role_skills", "employee_skills"];
+  const TIH_DEFINER_FUNCTIONS = [
+    "upsert_self_assessment",
+    "set_manager_assessment",
+    "get_direct_reports",
+  ];
+
+  it("FORCE RLS is enabled on all TIH tables", async () => {
+    const { rows } = await db.query<{ relname: string; enabled: boolean; forced: boolean }>(
+      `SELECT c.relname::text AS relname, c.relrowsecurity AS enabled, c.relforcerowsecurity AS forced
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relname = ANY($1::text[]) ORDER BY c.relname`,
+      [TIH_TABLES],
+    );
+    expect(rows).toEqual(
+      [...TIH_TABLES].sort().map((relname) => ({ relname, enabled: true, forced: true })),
+    );
   });
 
-  it("upsert_self_assessment is SECURITY DEFINER with empty search_path", () => {
-    expect(true).toBe(true);
+  it.each(TIH_DEFINER_FUNCTIONS)("%s is SECURITY DEFINER with empty search_path", async (fn) => {
+    const { rows } = await db.query<{ definer: boolean; config: string[] | null }>(
+      `SELECT p.prosecdef AS definer, p.proconfig AS config
+       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND p.proname = $1`,
+      [fn],
+    );
+    expect(rows.length, `${fn} not found`).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.definer).toBe(true);
+      expect(row.config ?? []).toContain('search_path=""');
+    }
   });
 
-  it("set_manager_assessment is SECURITY DEFINER with empty search_path", () => {
-    expect(true).toBe(true);
-  });
-
-  it("get_direct_reports is SECURITY DEFINER with empty search_path", () => {
-    expect(true).toBe(true);
-  });
-
-  it("no DELETE policy exists for authenticated on TIH tables", () => {
-    expect(true).toBe(true);
+  it("no DELETE policy exists for authenticated on TIH tables", async () => {
+    const { rows } = await db.query<{ tablename: string; policyname: string }>(
+      `SELECT tablename::text, policyname::text FROM pg_policies
+       WHERE schemaname = 'public' AND tablename = ANY($1::text[])
+         AND cmd IN ('DELETE', 'ALL') AND permissive = 'PERMISSIVE'
+         AND roles && ARRAY['authenticated', 'public']::name[]`,
+      [TIH_TABLES],
+    );
+    expect(rows).toEqual([]);
   });
 });

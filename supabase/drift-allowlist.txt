@@ -1,0 +1,11 @@
+# Schema differences tolerated by scripts/check-schema-drift.sh.
+#
+# Each non-comment line is one SQL statement, compared verbatim (after trimming
+# surrounding whitespace) with the statements `supabase db diff` prints on
+# stdout. Any statement not listed here fails the drift check.
+# See docs/ARCHITECTURE.md (D8) before adding an entry.
+
+# pg_net: the Supabase CLI shadow database used by `supabase db diff` always
+# has pg_net, while the hosted project does not and must not get it (decision
+# of 2026-10-27). The diff therefore always proposes dropping it.
+drop extension if exists "pg_net";

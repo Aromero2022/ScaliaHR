@@ -36,13 +36,6 @@ function anonymizeUser(user: UserRecord, personalRecords: PersonalInfo[]) {
     .digest("hex")
     .slice(0, 8);
 
-  const reidentificationMap = {
-    original_first_name: user.first_name,
-    original_last_name: user.last_name,
-    original_email: user.email,
-    token,
-  };
-
   const anonymizedUser: UserRecord = {
     ...user,
     first_name: token,
@@ -66,7 +59,7 @@ function anonymizeUser(user: UserRecord, personalRecords: PersonalInfo[]) {
     emergency_contact_phone: null,
   }));
 
-  return { anonymizedUser, anonymizedPersonal, reidentificationMap };
+  return { anonymizedUser, anonymizedPersonal };
 }
 
 function exportUserData(user: UserRecord, jobs: unknown[], comp: unknown[], personal: unknown[]) {
@@ -148,12 +141,11 @@ describe("ARCO: anonymize_user", () => {
     expect(anonymizedPersonal[0].user_id).toBe(user.id);
   });
 
-  it("returns reidentification map with original values", () => {
-    const { reidentificationMap } = anonymizeUser(user, personal);
-    expect(reidentificationMap.original_first_name).toBe("Pedro");
-    expect(reidentificationMap.original_last_name).toBe("Sánchez");
-    expect(reidentificationMap.original_email).toBe("pedro@acme.dev");
-    expect(reidentificationMap.token).toMatch(/^ANON-/);
+  it("keeps no original personal value anywhere in its result", () => {
+    const result = JSON.stringify(anonymizeUser(user, personal));
+    for (const original of ["Pedro", "Sánchez", "pedro@acme.dev", "pedro.personal@gmail.com", "SAPC850101HDFRRL09"]) {
+      expect(result).not.toContain(original);
+    }
   });
 
   it("uses consistent token across user and personal records", () => {

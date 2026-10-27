@@ -11,10 +11,18 @@ schemas = ["public", "storage"]
 port = 54322
 major_version = 17
 
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
 jwt_expiry = 900
+
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
 
 [auth.sessions]
 timebox = "24h"
