@@ -64,8 +64,13 @@ export class TestWorld {
     return { authId: data.user.id, email };
   }
 
+  // A throwaway client per sign-in: supabase-js keeps the session in memory and
+  // would otherwise send every later "anon" request with this user's token.
   async signIn(email: string): Promise<string> {
-    const { data, error } = await this.anon.auth.signInWithPassword({
+    const client = createClient(this.env.supabaseUrl, this.env.anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await client.auth.signInWithPassword({
       email,
       password: this.password,
     });
@@ -122,8 +127,9 @@ export class TestWorld {
       users[role] = { authId, userId, email };
     }
 
+    // The admin gets no job row: rls-isolation's generic fixtures attach their
+    // effective-dated rows to the admin, and the EXCLUDE constraints forbid overlaps.
     for (const [role, title, managerId] of [
-      ["admin", "HR Administrator", null],
       ["manager", "Team Manager", null],
       ["employee", "Analyst", users.manager.userId],
     ] as const) {
