@@ -35,7 +35,7 @@ export interface StoredFixture {
 
 export async function tenantScopedTables(pg: Client): Promise<string[]> {
   const { rows } = await pg.query<{ table_name: string }>(`
-    SELECT c.relname AS table_name
+    SELECT c.relname::text AS table_name
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     JOIN pg_attribute a ON a.attrelid = c.oid
@@ -61,11 +61,11 @@ export async function loadTableMeta(pg: Client, table: string): Promise<TableMet
     check_defs: string[] | null;
   }>(
     `
-    SELECT a.attname AS name,
+    SELECT a.attname::text AS name,
            format_type(a.atttypid, a.atttypmod) AS sql_type,
-           bt.typname AS type_name,
-           bt.typcategory AS category,
-           (SELECT array_agg(e.enumlabel ORDER BY e.enumsortorder)
+           bt.typname::text AS type_name,
+           bt.typcategory::text AS category,
+           (SELECT array_agg(e.enumlabel::text ORDER BY e.enumsortorder)
               FROM pg_enum e WHERE e.enumtypid = bt.oid) AS enum_labels,
            (a.attnotnull OR t.typnotnull) AS not_null,
            (a.atthasdef OR a.attidentity <> '' OR a.attgenerated <> '' OR t.typdefault IS NOT NULL) AS has_default,
@@ -90,12 +90,12 @@ export async function loadTableMeta(pg: Client, table: string): Promise<TableMet
     ref_columns: string[];
   }>(
     `
-    SELECT array(SELECT att.attname FROM unnest(con.conkey) WITH ORDINALITY k(attnum, ord)
+    SELECT array(SELECT att.attname::text FROM unnest(con.conkey) WITH ORDINALITY k(attnum, ord)
                  JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = k.attnum
                  ORDER BY k.ord) AS columns,
-           rn.nspname AS ref_schema,
-           rc.relname AS ref_table,
-           array(SELECT att.attname FROM unnest(con.confkey) WITH ORDINALITY k(attnum, ord)
+           rn.nspname::text AS ref_schema,
+           rc.relname::text AS ref_table,
+           array(SELECT att.attname::text FROM unnest(con.confkey) WITH ORDINALITY k(attnum, ord)
                  JOIN pg_attribute att ON att.attrelid = con.confrelid AND att.attnum = k.attnum
                  ORDER BY k.ord) AS ref_columns
     FROM pg_constraint con
