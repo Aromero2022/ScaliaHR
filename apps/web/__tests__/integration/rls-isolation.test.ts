@@ -153,6 +153,17 @@ afterAll(async () => {
 });
 
 describe("custom_access_token_hook", () => {
+  it("runs without error when called directly", async () => {
+    const { rows } = await db.query<{ claims: Record<string, unknown> }>(
+      `SELECT public.custom_access_token_hook(
+         jsonb_build_object('user_id', $1::text, 'claims', jsonb_build_object('sub', $1::text))
+       ) -> 'claims' AS claims`,
+      [tenantA.authUserId],
+    );
+    expect(rows[0].claims.tenant_id).toBe(tenantA.tenantId);
+    expect(rows[0].claims.app_role).toBe("admin");
+  });
+
   it("injects tenant_id from user_settings.active_tenant_id", () => {
     expect(claimsOf(tokenA).tenant_id).toBe(tenantA.tenantId);
   });
