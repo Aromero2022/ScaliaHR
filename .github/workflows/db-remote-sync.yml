@@ -24,26 +24,31 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  EXPECTED_MIGRATION_COUNT: "27"
   DEMO_TENANT_ID: "a0000000-0000-0000-0000-000000000001"
   RESET_PUBLIC_SQL: |
     DROP SCHEMA public CASCADE;
     CREATE SCHEMA public;
+    -- Schema-level privileges (matches Supabase defaults)
     GRANT USAGE  ON SCHEMA public TO postgres, anon, authenticated, service_role;
-    GRANT CREATE ON SCHEMA public TO postgres, service_role;
-    GRANT ALL    ON SCHEMA public TO postgres, service_role;
+    GRANT CREATE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+    GRANT ALL    ON SCHEMA public TO postgres, anon, authenticated, service_role;
+    -- Existing objects: ALL to every API role
+    GRANT ALL ON ALL TABLES    IN SCHEMA public TO postgres, anon, authenticated, service_role;
+    GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO postgres, anon, authenticated, service_role;
+    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+    -- Future objects: ALL to every API role
     ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT ALL    ON TABLES    TO postgres, service_role;
+      GRANT ALL ON TABLES    TO postgres, anon, authenticated, service_role;
     ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT SELECT ON TABLES    TO anon, authenticated;
+      GRANT ALL ON FUNCTIONS TO postgres, anon, authenticated, service_role;
     ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT ALL    ON FUNCTIONS TO postgres, service_role;
-    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT EXECUTE ON FUNCTIONS TO anon, authenticated;
-    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT ALL   ON SEQUENCES TO postgres, service_role;
-    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT USAGE ON SEQUENCES TO anon, authenticated;
+      GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
+    ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+      GRANT ALL ON TABLES    TO postgres, anon, authenticated, service_role;
+    ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+      GRANT ALL ON FUNCTIONS TO postgres, anon, authenticated, service_role;
+    ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+      GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
 
 jobs:
   sync:
@@ -138,11 +143,12 @@ jobs:
       - name: "Rehearsal: verify"
         run: |
           echo "=== Migration count ==="
+          EXPECTED=$(ls supabase/migrations/*.sql | wc -l)
           APPLIED=$(supabase migration list --db-url "$LOCAL_DB_URL" 2>/dev/null \
             | grep -cP '^\s*\d{14}' || echo "0")
-          echo "Applied: $APPLIED / Expected: $EXPECTED_MIGRATION_COUNT"
-          if [ "$APPLIED" -ne "$EXPECTED_MIGRATION_COUNT" ]; then
-            echo "::error::Rehearsal FAILED — expected $EXPECTED_MIGRATION_COUNT migrations, got $APPLIED"
+          echo "Applied: $APPLIED / Expected: $EXPECTED"
+          if [ "$APPLIED" -ne "$EXPECTED" ]; then
+            echo "::error::Rehearsal FAILED — expected $EXPECTED migrations, got $APPLIED"
             exit 1
           fi
 
@@ -263,7 +269,26 @@ jobs:
           fi
 
           echo ""
-          echo "✓ Rehearsal passed — all $EXPECTED_MIGRATION_COUNT migrations applied, no drift, all critical objects present."
+          echo "✓ Rehearsal passed — all $EXPECTED migrations applied, no drift, all critical objects present."
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: "Rehearsal: install dependencies"
+        run: npm ci
+
+      - name: "Rehearsal: run integration tests"
+        run: |
+          export SUPABASE_URL="$(supabase status --output env | grep 'API_URL=' | head -1 | sed 's/.*=//')"
+          export SUPABASE_ANON_KEY="$(supabase status --output env | grep 'ANON_KEY=' | head -1 | sed 's/.*=//')"
+          export SUPABASE_SERVICE_ROLE_KEY="$(supabase status --output env | grep 'SERVICE_ROLE_KEY=' | head -1 | sed 's/.*=//')"
+          export SUPABASE_JWT_SECRET="$(supabase status --output env | grep 'JWT_SECRET=' | head -1 | sed 's/.*=//')"
+          cd apps/web
+          npx vitest run __tests__/integration/
+        env:
+          NODE_ENV: test
 
       - name: "Rehearsal: stop local Supabase"
         if: always()
@@ -302,12 +327,13 @@ jobs:
 
       - name: "Verify: migration count"
         run: |
+          EXPECTED=$(ls supabase/migrations/*.sql | wc -l)
           supabase migration list --db-url "$SUPABASE_DB_URL"
           APPLIED=$(supabase migration list --db-url "$SUPABASE_DB_URL" 2>/dev/null \
             | grep -cP '^\s*\d{14}' || echo "0")
-          echo "Applied: $APPLIED / Expected: $EXPECTED_MIGRATION_COUNT"
-          if [ "$APPLIED" -ne "$EXPECTED_MIGRATION_COUNT" ]; then
-            echo "::error::Expected $EXPECTED_MIGRATION_COUNT migrations, got $APPLIED"
+          echo "Applied: $APPLIED / Expected: $EXPECTED"
+          if [ "$APPLIED" -ne "$EXPECTED" ]; then
+            echo "::error::Expected $EXPECTED migrations, got $APPLIED"
             exit 1
           fi
 
