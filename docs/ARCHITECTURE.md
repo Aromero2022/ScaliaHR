@@ -229,3 +229,28 @@ a comment explaining why it is tolerated.
   hosted project's Auth hook configuration lives in the dashboard
   (Authentication → Hooks), is not part of the database, and is untouched by
   `db-remote-sync` resets.
+
+---
+
+## D9 — Remote Sync and the Access-Token Hook
+
+**Decision:** The hosted project's `custom_access_token_hook` is disabled for the
+whole duration of a `db-remote-sync` run and re-enabled only after a run ends green.
+
+**Why:** a reset drops and recreates schema `public`, including the hook function and
+the tables it reads. While the hook is enabled and missing or half-migrated, GoTrue
+fails every sign-in and token refresh with "Error running hook URI". The hook setting
+lives in the dashboard, not in the database, so the reset does not change it.
+
+**Procedure:**
+1. Dashboard → Authentication → Hooks → "Customize Access Token (JWT) Claims":
+   **disable** the hook (Postgres → `public.custom_access_token_hook`).
+2. Run `db-remote-sync` (`mode`, `CONFIRM`, optional `load_seed` / `owner_email`).
+   The first and last steps of the workflow print this reminder.
+3. Only if the run ends **green**: **re-enable** the hook, pointing at
+   `public.custom_access_token_hook`.
+4. **Sign out and sign in again.** Existing tokens were issued without the hook and
+   carry no `tenant_id`; tenant-scoped policies return nothing until a new token is
+   issued.
+
+If the run fails, keep the hook disabled, fix the cause, and run the sync again.

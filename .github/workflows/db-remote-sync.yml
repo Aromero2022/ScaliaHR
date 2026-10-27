@@ -43,6 +43,13 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
 
     steps:
+      - name: "Reminder: access-token hook must be disabled"
+        run: |
+          MSG="Before this run: custom_access_token_hook must be DISABLED in the dashboard (Authentication -> Hooks). See docs/ARCHITECTURE.md (D9)."
+          echo "::warning title=Auth hook::$MSG"
+          echo "### Auth hook" >> "$GITHUB_STEP_SUMMARY"
+          echo "$MSG" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@v4
 
       - uses: supabase/setup-cli@v1
@@ -291,3 +298,17 @@ jobs:
           SQL
 
           echo "Owner linked: $OWNER_EMAIL → tenant $DEMO_TENANT_ID as 'owner'"
+
+      - name: "Reminder: access-token hook after the sync"
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ "$JOB_STATUS" = "success" ]; then
+            MSG="Sync finished green: re-enable custom_access_token_hook (Authentication -> Hooks -> Postgres -> public.custom_access_token_hook), then sign out and sign in again so new tokens carry tenant_id. See docs/ARCHITECTURE.md (D9)."
+          else
+            MSG="Sync did not finish green ($JOB_STATUS): keep custom_access_token_hook DISABLED until a run ends green. See docs/ARCHITECTURE.md (D9)."
+          fi
+          echo "::warning title=Auth hook::$MSG"
+          echo "### Auth hook" >> "$GITHUB_STEP_SUMMARY"
+          echo "$MSG" >> "$GITHUB_STEP_SUMMARY"
