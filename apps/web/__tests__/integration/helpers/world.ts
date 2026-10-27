@@ -86,6 +86,28 @@ export class TestWorld {
     return { authId, email, token, client: this.clientFor(token) };
   }
 
+  /** A signed-in member of an existing tenant with the given membership app_role. */
+  async addMember(tenantId: string, appRole: string): Promise<TestUser> {
+    const { authId, email } = await this.createAuthUser();
+    const userId = randomUUID();
+    await this.db.query(
+      `INSERT INTO public.users (id, tenant_id, auth_uid, email, first_name, last_name, status)
+       VALUES ($1, $2, $3, $4, $5, 'Integration', 'ACTIVE')`,
+      [userId, tenantId, authId, email, appRole],
+    );
+    await this.db.query(
+      `INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role, is_active)
+       VALUES ($1, $2, $3, true)`,
+      [authId, tenantId, appRole],
+    );
+    await this.db.query(
+      "INSERT INTO public.user_settings (user_id, active_tenant_id) VALUES ($1, $2)",
+      [authId, tenantId],
+    );
+    const token = await this.signIn(email);
+    return { authId, userId, email, token, client: this.clientFor(token) };
+  }
+
   /**
    * admin: member of an "Admins" group granted an is_admin_role role (target all).
    * manager/employee: members of an "Employees" group granted a non-admin role
