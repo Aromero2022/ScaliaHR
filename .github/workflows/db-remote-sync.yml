@@ -54,15 +54,35 @@ jobs:
           path: backup/
           retention-days: 30
 
-      - name: Apply — reset
-        if: inputs.mode == 'reset'
-        run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all
-
-      - name: Apply — repair-push
-        if: inputs.mode == 'repair-push'
+      - name: Revoke remote migration history
         run: |
-          supabase migration repair --status reverted --db-url "$SUPABASE_DB_URL" --all 2>/dev/null || true
+          REMOTE_VERSIONS=$(supabase migration list --db-url "$SUPABASE_DB_URL" 2>/dev/null \
+            | grep -oP '^\s*\K\d{14}' || true)
+          if [ -n "$REMOTE_VERSIONS" ]; then
+            echo "Revoking $(echo "$REMOTE_VERSIONS" | wc -l) remote migration(s)..."
+            for v in $REMOTE_VERSIONS; do
+              supabase migration repair --status reverted --db-url "$SUPABASE_DB_URL" "$v"
+            done
+          else
+            echo "No remote migrations to revoke."
+          fi
+
+      - name: Apply — reset (drop + recreate public schema)
+        if: inputs.mode == 'reset'
+        run: |
+          psql "$SUPABASE_DB_URL" <<'SQL'
+          DROP SCHEMA public CASCADE;
+          CREATE SCHEMA public;
+          GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+          GRANT ALL ON SCHEMA public TO postgres, service_role;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, service_role;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon, authenticated;
+          SQL
           supabase db push --db-url "$SUPABASE_DB_URL" --include-all
+
+      - name: Apply — repair-push (incremental)
+        if: inputs.mode == 'repair-push'
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all
 
       - name: Verify — migration list
         run: supabase migration list --db-url "$SUPABASE_DB_URL"
