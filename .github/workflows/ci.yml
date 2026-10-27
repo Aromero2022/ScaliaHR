@@ -91,6 +91,10 @@ jobs:
         env:
           NODE_ENV: test
 
+      - name: GoTrue logs (on failure)
+        if: failure()
+        run: docker logs --tail 200 "$(docker ps -a --filter name=supabase_auth --format '{{.Names}}' | head -1)" 2>&1 || true
+
   db-reset-test:
     name: DB reset sync test
     runs-on: ubuntu-latest
@@ -133,3 +137,7 @@ jobs:
           bash scripts/run-integration-tests.sh
         env:
           NODE_ENV: test
+
+      - name: GoTrue logs (on failure)
+        if: failure()
+        run: docker logs --tail 200 "$(docker ps -a --filter name=supabase_auth --format '{{.Names}}' | head -1)" 2>&1 || true

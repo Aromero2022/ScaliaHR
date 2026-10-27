@@ -244,6 +244,13 @@ describe("custom_access_token_hook", () => {
     expect(data).toBe(tenantA.tenantId);
   });
 
+  it("supabase_auth_admin can resolve it (USAGE on schema public)", async () => {
+    const { rows } = await db.query<{ usage: boolean }>(
+      "SELECT has_schema_privilege('supabase_auth_admin', 'public', 'USAGE') AS usage",
+    );
+    expect(rows[0].usage).toBe(true);
+  });
+
   it("is executable only by supabase_auth_admin", async () => {
     const { rows } = await db.query<{ grantee: string; can_execute: boolean }>(`
       SELECT r.rolname AS grantee,
