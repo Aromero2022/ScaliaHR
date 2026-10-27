@@ -58,12 +58,7 @@ fi
 
 echo ""
 echo "=== Step 5: Verify schema diff ==="
-DIFF="$(supabase db diff --db-url "$DB_URL" 2>&1)" || true
-echo "$DIFF"
-if [ -n "$DIFF" ] && echo "$DIFF" | grep -qiE '^(create|alter|drop)'; then
-  echo "::error::Schema drift detected after sync"
-  exit 1
-fi
+bash "$(dirname "${BASH_SOURCE[0]}")/check-schema-drift.sh" --db-url "$DB_URL"
 
 echo ""
 echo "=== Step 6: Verify critical objects ==="

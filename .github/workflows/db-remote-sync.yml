@@ -133,12 +133,7 @@ jobs:
           fi
 
           echo "=== Schema diff (should be empty) ==="
-          DIFF="$(supabase db diff --db-url "$LOCAL_DB_URL" 2>&1)" || true
-          echo "$DIFF"
-          if [ -n "$DIFF" ] && echo "$DIFF" | grep -qiE '^(create|alter|drop)'; then
-            echo "::error::Rehearsal FAILED — schema drift detected"
-            exit 1
-          fi
+          bash scripts/check-schema-drift.sh --db-url "$LOCAL_DB_URL"
 
           echo "Rehearsal verify passed."
 
@@ -206,12 +201,7 @@ jobs:
       - name: "Verify: schema diff"
         if: inputs.mode == 'repair-push'
         run: |
-          DIFF="$(supabase db diff --linked 2>&1)" || true
-          echo "$DIFF"
-          if [ -n "$DIFF" ] && echo "$DIFF" | grep -qiE '^(create|alter|drop)'; then
-            echo "::error::Schema drift detected after sync"
-            exit 1
-          fi
+          bash scripts/check-schema-drift.sh --linked
 
       - name: "Verify: critical objects"
         if: inputs.mode == 'repair-push'

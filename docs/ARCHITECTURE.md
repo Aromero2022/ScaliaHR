@@ -201,3 +201,31 @@ MCP `apply_migration` / `execute_sql` tools.
 - The Supabase MCP server is used in **read-only** mode for the remote project
   (queries, migration list, table inspection). DDL is prohibited via MCP.
 - Every sync run is traceable in the GitHub Actions history with its backup artifact.
+
+---
+
+## D8 — Platform Extensions & Schema Drift Allowlist
+
+**Decision:** The schema drift check (`scripts/check-schema-drift.sh`, used by
+`scripts/db-reset-sync.sh` and both drift steps of `db-remote-sync.yml`) fails on
+**any** statement printed by `supabase db diff` that is not listed in
+`supabase/drift-allowlist.txt`. The allowlist is versioned and every entry carries
+a comment explaining why it is tolerated.
+
+**Extensions:**
+- `hypopg` and `index_advisor` exist on the hosted project, so they are declared in
+  `20261027000000_declare_platform_extensions.sql` and repo and remote match.
+- `pg_net` is **not** installed on the hosted project and must not be. The CLI
+  shadow database that `supabase db diff` builds always contains it, so the diff
+  always proposes `drop extension if exists "pg_net";`. That single statement is
+  the only allowlist entry (decision of 2026-10-27).
+
+**Rules:**
+- Drift is never excluded by pattern or by schema; only exact statements in the
+  allowlist are tolerated.
+- Adding an allowlist entry requires the reason in the file and an update to this
+  section.
+- `custom_access_token_hook` is enabled locally in `supabase/config.toml`. The
+  hosted project's Auth hook configuration lives in the dashboard
+  (Authentication → Hooks), is not part of the database, and is untouched by
+  `db-remote-sync` resets.
