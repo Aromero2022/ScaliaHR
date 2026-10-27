@@ -164,10 +164,10 @@ export async function processArcoRequest(
   }
 
   if (request.request_type === "cancelacion") {
-    const { data: anonMap, error: anonErr } = await ctx.supabase.rpc(
-      "anonymize_user",
-      { p_user_id: request.subject_id }
-    );
+    const { error: anonErr } = await ctx.supabase.rpc("anonymize_user", {
+      p_user_id: request.subject_id,
+      p_arco_request_id: request.id,
+    });
 
     if (anonErr) return { success: false, error: anonErr.message };
 
@@ -177,7 +177,7 @@ export async function processArcoRequest(
       action: "arco.user_anonymized",
       entity: "users",
       entityId: request.subject_id,
-      diff: { requestId: request.id, token: (anonMap as { token: string }).token },
+      diff: { requestId: request.id },
     });
   }
 
