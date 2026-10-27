@@ -30,8 +30,8 @@ env:
     CREATE SCHEMA public;
     -- Schema-level privileges (matches Supabase defaults)
     GRANT USAGE  ON SCHEMA public TO postgres, anon, authenticated, service_role;
-    GRANT CREATE ON SCHEMA public TO postgres, anon, authenticated, service_role;
-    GRANT ALL    ON SCHEMA public TO postgres, anon, authenticated, service_role;
+    GRANT CREATE ON SCHEMA public TO postgres, service_role;
+    GRANT ALL    ON SCHEMA public TO postgres, service_role;
     -- Existing objects: ALL to every API role
     GRANT ALL ON ALL TABLES    IN SCHEMA public TO postgres, anon, authenticated, service_role;
     GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO postgres, anon, authenticated, service_role;
@@ -42,12 +42,6 @@ env:
     ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
       GRANT ALL ON FUNCTIONS TO postgres, anon, authenticated, service_role;
     ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-      GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
-    ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-      GRANT ALL ON TABLES    TO postgres, anon, authenticated, service_role;
-    ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-      GRANT ALL ON FUNCTIONS TO postgres, anon, authenticated, service_role;
-    ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
       GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
 
 jobs:
