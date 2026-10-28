@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
+import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
 import { can } from "@/lib/authz/can";
 import SkillsHubDashboard from "@/components/skills-hub-dashboard";
 
@@ -50,7 +51,7 @@ export default async function SkillsHubPage() {
   if (!bizUser) redirect("/login");
 
   const flags = await getModuleFlags(bizUser.tenant_id);
-  if (!flags.is_tih_active) {
+  if (isModuleRouteBlocked("/skills-hub", flags)) {
     notFound();
   }
 

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { clsx } from "clsx";
 import type { ModuleFlags } from "@/lib/tenant/module-flags";
+import { NAV_ITEMS, filterNavByFlags } from "@/lib/navigation/nav-config";
 
 type NavItem = {
   href: string;
@@ -13,17 +14,22 @@ type NavItem = {
   moduleFlag?: keyof ModuleFlags;
 };
 
-const navItems: NavItem[] = [
-  { href: "/dashboard", label: "Inicio (BizX)", icon: HomeIcon },
-  { href: "/employees", label: "Empleados (EC)", icon: EmployeesIcon, moduleFlag: "is_ec_active" },
-  { href: "/profile", label: "Mi Perfil", icon: UserIcon },
-  { href: "/org-chart", label: "Organigrama (EC)", icon: OrgIcon, moduleFlag: "is_ec_active" },
-  { href: "/performance", label: "Desempeño (PMGM)", icon: PerformanceIcon, moduleFlag: "is_pmgm_active" },
-  { href: "/lms", label: "Formación (LMS)", icon: LmsIcon, moduleFlag: "is_lms_active" },
-  { href: "/skills-hub", label: "Talent Hub (TIH)", icon: SkillsIcon, moduleFlag: "is_tih_active" },
-  { href: "/admin/arco", label: "Derechos ARCO", icon: ShieldIcon },
-  { href: "/admin-center", label: "Admin Center", icon: AdminIcon },
-];
+const iconMap: Record<string, React.ComponentType<{ active: boolean }>> = {
+  "/dashboard": HomeIcon,
+  "/employees": EmployeesIcon,
+  "/profile": UserIcon,
+  "/org-chart": OrgIcon,
+  "/performance": PerformanceIcon,
+  "/lms": LmsIcon,
+  "/skills-hub": SkillsIcon,
+  "/admin/arco": ShieldIcon,
+  "/admin-center": AdminIcon,
+};
+
+const navItems: NavItem[] = NAV_ITEMS.map((item) => ({
+  ...item,
+  icon: iconMap[item.href] ?? HomeIcon,
+}));
 
 export default function Sidebar({
   moduleFlags,
@@ -40,11 +46,7 @@ export default function Sidebar({
     router.refresh();
   }
 
-  const visibleItems = navItems.filter((item) => {
-    if (!item.moduleFlag) return true;
-    if (!moduleFlags) return false;
-    return moduleFlags[item.moduleFlag];
-  });
+  const visibleItems = filterNavByFlags(navItems, moduleFlags) as NavItem[];
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900">

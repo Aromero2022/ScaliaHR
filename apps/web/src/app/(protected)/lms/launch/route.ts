@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
+import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
 import * as moodle from "@/lib/lms/moodle-client";
 
 export async function GET(request: NextRequest) {
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
   }
 
   const flags = await getModuleFlags(tenantId);
-  if (!flags.is_lms_active) {
+  if (isModuleRouteBlocked("/lms/launch", flags)) {
     return new NextResponse(null, { status: 404 });
   }
 
