@@ -381,8 +381,7 @@ FROM (VALUES
   ('platform.locale',                  '"es"'),
   ('platform.timezone',                '"America/Mexico_City"'),
   ('security.password_policy',         '{"min_length":8,"require_uppercase":true,"require_number":true,"require_special":false,"max_age_days":90}'),
-  ('security.session_timeout_minutes', '30'),
-  ('modules.active',                   '["ec","pmgm","sdm","rbp","tih"]')
+  ('security.session_timeout_minutes', '30')
 ) AS v(key, value_json)
 ON CONFLICT DO NOTHING;
 
