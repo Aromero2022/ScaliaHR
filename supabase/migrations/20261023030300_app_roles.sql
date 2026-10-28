@@ -5,9 +5,8 @@
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
 -- Create the prisma_app role if it doesn't exist.
--- In production, password should be set via:
---   ALTER ROLE prisma_app WITH PASSWORD 'secure_password';
--- during provisioning (not stored in migration).
+-- Password is set ONLY by the db-remote-sync workflow from PRISMA_APP_PASSWORD secret.
+-- Never set or change the password manually.
 
 DO $$
 BEGIN
