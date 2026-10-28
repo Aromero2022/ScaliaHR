@@ -9,7 +9,8 @@
 -- (skill ontology, job role requirements, employee skill assessments).
 --
 -- Idempotent: fixed or md5-derived ids and ON CONFLICT DO NOTHING
--- everywhere, so running it again changes nothing.
+-- everywhere (the tenant's module flags are re-applied), so running it again
+-- changes nothing.
 -- Creates no auth users and no passwords; users.auth_uid stays NULL. If the
 -- auth user f0000000-…0001 (Elena) already exists, it gets her membership.
 --
@@ -21,11 +22,30 @@
 BEGIN;
 
 -- ── Tenant ──────────────────────────────────────────────────────────────
+-- Module flags (tenants.is_*_active, the single source of truth) are
+-- re-applied on every run, so a tenant created earlier ends up with the demo
+-- modules on. LMS stays off: it needs a Moodle instance (MOODLE_* variables).
 INSERT INTO public.tenants (id, name, slug, domain,
-  is_ec_active, is_pmgm_active, is_sdm_active, is_tih_active, is_pos_mgmt_active)
+  is_ec_active, is_pmgm_active, is_sdm_active, is_tih_active, is_pos_mgmt_active,
+  is_rcm_active, is_lms_active, is_onb_active, is_comp_active, is_wfa_active,
+  is_wfp_active, is_tme_active)
 VALUES ('a0000000-0000-0000-0000-000000000001', 'Acme Corp', 'acme-corp', 'acme.dev',
-  true, true, true, true, true)
-ON CONFLICT DO NOTHING;
+  true, true, true, true, true,
+  false, false, false, false, false,
+  false, false)
+ON CONFLICT (id) DO UPDATE SET
+  is_ec_active       = EXCLUDED.is_ec_active,
+  is_pmgm_active     = EXCLUDED.is_pmgm_active,
+  is_sdm_active      = EXCLUDED.is_sdm_active,
+  is_tih_active      = EXCLUDED.is_tih_active,
+  is_pos_mgmt_active = EXCLUDED.is_pos_mgmt_active,
+  is_rcm_active      = EXCLUDED.is_rcm_active,
+  is_lms_active      = EXCLUDED.is_lms_active,
+  is_onb_active      = EXCLUDED.is_onb_active,
+  is_comp_active     = EXCLUDED.is_comp_active,
+  is_wfa_active      = EXCLUDED.is_wfa_active,
+  is_wfp_active      = EXCLUDED.is_wfp_active,
+  is_tme_active      = EXCLUDED.is_tme_active;
 
 -- ── Foundation objects ──────────────────────────────────────────────────
 INSERT INTO public.legal_entities (id, tenant_id, code, name, country, rfc)
@@ -451,6 +471,14 @@ DECLARE
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.tenants WHERE id = v_tenant AND slug = 'acme-corp') THEN
     RAISE EXCEPTION 'seed.sql: demo tenant acme-corp (%) is missing', v_tenant;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.tenants
+    WHERE id = v_tenant
+      AND is_ec_active AND is_pmgm_active AND is_sdm_active AND is_tih_active AND is_pos_mgmt_active
+  ) THEN
+    RAISE EXCEPTION 'seed.sql: demo modules (ec, pmgm, sdm, tih, pos_mgmt) are not active in acme-corp';
   END IF;
 
   SELECT count(*) INTO v_count FROM public.users WHERE tenant_id = v_tenant;
