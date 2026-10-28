@@ -29,6 +29,10 @@ jobs:
         run: npm ci
         working-directory: .
 
+      - name: Check forbidden strings
+        run: npm run check:forbidden
+        working-directory: .
+
       - name: Prisma generate
         run: npx prisma generate
 
