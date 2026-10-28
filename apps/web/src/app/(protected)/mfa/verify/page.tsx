@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
+import { safeNextPath } from "@/lib/auth/mfa-policy";
 
 export default function MfaVerifyPage() {
   const [factorId, setFactorId] = useState<string | null>(null);
@@ -17,13 +18,14 @@ export default function MfaVerifyPage() {
     async function loadFactor() {
       const { data, error } = await supabase.auth.mfa.listFactors();
       if (error || !data.totp.length) {
-        router.push("/mfa/enroll");
+        const next = searchParams.get("next");
+        router.push(next ? `/mfa/enroll?next=${encodeURIComponent(next)}` : "/mfa/enroll");
         return;
       }
       setFactorId(data.totp[0].id);
     }
     loadFactor();
-  }, [supabase.auth.mfa, router]);
+  }, [supabase.auth.mfa, router, searchParams]);
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
@@ -51,8 +53,7 @@ export default function MfaVerifyPage() {
       return;
     }
 
-    const next = searchParams.get("next") ?? "/dashboard";
-    router.push(next);
+    router.push(safeNextPath(searchParams.get("next")));
     router.refresh();
   }
 

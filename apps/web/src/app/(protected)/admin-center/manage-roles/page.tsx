@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { requireAal2 } from "@/lib/supabase/claims";
 import Link from "next/link";
 import RoleManager from "@/components/role-manager";
 
@@ -19,11 +19,9 @@ export interface PermissionRoleRow {
 }
 
 export default async function ManageRolesPage() {
+  // AAL2 is enforced here too, not only in the middleware.
+  await requireAal2("/admin-center/manage-roles");
   const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
 
   const { data: roles } = await supabase
     .from("permission_roles")

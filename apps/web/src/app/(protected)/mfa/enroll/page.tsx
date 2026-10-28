@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { safeNextPath } from "@/lib/auth/mfa-policy";
 
 export default function MfaEnrollPage() {
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -13,10 +14,25 @@ export default function MfaEnrollPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   useEffect(() => {
     async function enroll() {
+      const { data: factors } = await supabase.auth.mfa.listFactors();
+      // A verified factor already exists: verify it instead of enrolling another.
+      if (factors?.totp.length) {
+        const next = searchParams.get("next");
+        router.replace(next ? `/mfa/verify?next=${encodeURIComponent(next)}` : "/mfa/verify");
+        return;
+      }
+      // Leftovers from an abandoned enrollment would block a new one.
+      for (const factor of factors?.all ?? []) {
+        if (factor.factor_type === "totp" && factor.status === "unverified") {
+          await supabase.auth.mfa.unenroll({ factorId: factor.id });
+        }
+      }
+
       const { data, error } = await supabase.auth.mfa.enroll({
         factorType: "totp",
         friendlyName: "Authenticator App",
@@ -30,7 +46,7 @@ export default function MfaEnrollPage() {
       setSecret(data.totp.secret);
     }
     enroll();
-  }, [supabase.auth.mfa]);
+  }, [supabase.auth.mfa, router, searchParams]);
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
@@ -58,7 +74,7 @@ export default function MfaEnrollPage() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(safeNextPath(searchParams.get("next")));
     router.refresh();
   }
 

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { requireAal2 } from "@/lib/supabase/claims";
 import Link from "next/link";
 
 interface StatCard {
@@ -22,11 +22,9 @@ interface AuditRow {
 }
 
 export default async function AdminCenterPage() {
+  // AAL2 is enforced here too, not only in the middleware.
+  await requireAal2("/admin-center");
   const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
 
   const [rolesRes, groupsRes, permsRes, configsRes, auditRes, usersRes] =
     await Promise.all([
