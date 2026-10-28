@@ -4,4 +4,4 @@
 
 ALTER POLICY "system_configurations_select"
   ON public.system_configurations
-  USING (tenant_id = requesting_tenant_id() AND is_tenant_admin());
+  USING (tenant_id = (SELECT public.requesting_tenant_id()) AND (SELECT public.is_tenant_admin()));
