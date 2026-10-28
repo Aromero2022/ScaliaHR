@@ -62,6 +62,11 @@ with `NOBYPASSRLS`. Every query runs inside a `$transaction` that first sets
   `lib/jobs/` and `lib/admin/`.
 - ESLint `no-restricted-imports` enforces boundaries.
 
+**Connection URL:** `DATABASE_URL` connects through the Supabase pooler as
+`prisma_app.<project-ref>` on port 6543 (transaction mode). The password is
+set by the `db-remote-sync` workflow from the `PRISMA_APP_PASSWORD` secret in
+the `remote-db` GitHub environment. See `.env.example` for the full URL format.
+
 ---
 
 ## D4 — Secrets & Network Hardening
