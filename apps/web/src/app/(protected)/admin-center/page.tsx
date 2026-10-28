@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { redirect, notFound } from "next/navigation";
+import { can } from "@/lib/authz/can";
 import Link from "next/link";
 
 interface StatCard {
@@ -22,6 +24,27 @@ interface AuditRow {
 
 export default async function AdminCenterPage() {
   const supabase = await createClient();
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) redirect("/login");
+
+  const { data: bizUser } = await supabase
+    .from("users")
+    .select("id")
+    .eq("auth_uid", authUser.id)
+    .single();
+  if (!bizUser) redirect("/login");
+
+  const [configPerm, auditPerm, rolesPerm] = await Promise.all([
+    can(bizUser.id, "admin.manage_config", "edit"),
+    can(bizUser.id, "admin.view_audit_logs", "view"),
+    can(bizUser.id, "admin.manage_roles", "edit"),
+  ]);
+
+  if (!configPerm.allowed && !auditPerm.allowed && !rolesPerm.allowed) {
+    notFound();
+  }
 
   const [rolesRes, groupsRes, permsRes, configsRes, auditRes, usersRes] =
     await Promise.all([
@@ -34,15 +57,19 @@ export default async function AdminCenterPage() {
       supabase
         .from("role_permissions")
         .select("id", { count: "exact", head: true }),
-      supabase
-        .from("system_configurations")
-        .select("key, value_json")
-        .order("key"),
-      supabase
-        .from("audit_logs")
-        .select("action, created_at, details_json, user:users(first_name, last_name)")
-        .order("created_at", { ascending: false })
-        .limit(5),
+      configPerm.allowed
+        ? supabase
+            .from("system_configurations")
+            .select("key, value_json")
+            .order("key")
+        : Promise.resolve({ data: [], error: null }),
+      auditPerm.allowed
+        ? supabase
+            .from("audit_logs")
+            .select("action, created_at, details_json, user:users(first_name, last_name)")
+            .order("created_at", { ascending: false })
+            .limit(5)
+        : Promise.resolve({ data: [], error: null }),
       supabase
         .from("users")
         .select("id", { count: "exact", head: true }),
@@ -88,12 +115,14 @@ export default async function AdminCenterPage() {
             la plataforma
           </p>
         </div>
-        <Link
-          href="/admin-center/manage-roles"
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
-        >
-          Gestionar Roles
-        </Link>
+        {rolesPerm.allowed && (
+          <Link
+            href="/admin-center/manage-roles"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
+          >
+            Gestionar Roles
+          </Link>
+        )}
       </div>
 
       {/* Stats Grid */}
@@ -113,82 +142,86 @@ export default async function AdminCenterPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* System Configuration */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-white">
-            Configuración del Sistema
-          </h2>
-          <div className="space-y-3">
-            {configs.map((c) => (
-              <div
-                key={c.key}
-                className="flex items-center justify-between rounded-lg bg-slate-800/50 px-4 py-3"
-              >
-                <span className="text-sm font-medium text-slate-300">
-                  {c.key}
-                </span>
-                <span className="text-sm text-slate-400">
-                  {typeof c.value_json === "string"
-                    ? c.value_json
-                    : JSON.stringify(c.value_json)}
-                </span>
-              </div>
-            ))}
-            {configs.length === 0 && (
-              <p className="text-sm text-slate-500">
-                Sin configuraciones registradas.
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Recent Audit Log */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-white">
-            Registro de Auditoría (Reciente)
-          </h2>
-          <div className="space-y-3">
-            {auditEntries.map((a, i) => {
-              const usr = Array.isArray(a.user) ? a.user[0] : a.user;
-              return (
+        {/* System Configuration — requires admin.manage_config:edit */}
+        {configPerm.allowed && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <h2 className="mb-4 text-lg font-semibold text-white">
+              Configuración del Sistema
+            </h2>
+            <div className="space-y-3">
+              {configs.map((c) => (
                 <div
-                  key={i}
-                  className="rounded-lg bg-slate-800/50 px-4 py-3"
+                  key={c.key}
+                  className="flex items-center justify-between rounded-lg bg-slate-800/50 px-4 py-3"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="inline-block rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-400">
-                      {a.action}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {new Date(a.created_at).toLocaleDateString("es-MX", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {usr
-                      ? `${(usr as Record<string, string>).first_name} ${(usr as Record<string, string>).last_name}`
-                      : "Sistema"}
-                    {a.details_json &&
-                    typeof a.details_json === "object" &&
-                    "description" in a.details_json
-                      ? ` — ${a.details_json.description}`
-                      : ""}
-                  </p>
+                  <span className="text-sm font-medium text-slate-300">
+                    {c.key}
+                  </span>
+                  <span className="text-sm text-slate-400">
+                    {typeof c.value_json === "string"
+                      ? c.value_json
+                      : JSON.stringify(c.value_json)}
+                  </span>
                 </div>
-              );
-            })}
-            {auditEntries.length === 0 && (
-              <p className="text-sm text-slate-500">
-                Sin entradas de auditoría.
-              </p>
-            )}
+              ))}
+              {configs.length === 0 && (
+                <p className="text-sm text-slate-500">
+                  Sin configuraciones registradas.
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Recent Audit Log — requires admin.view_audit_logs:view */}
+        {auditPerm.allowed && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <h2 className="mb-4 text-lg font-semibold text-white">
+              Registro de Auditoría (Reciente)
+            </h2>
+            <div className="space-y-3">
+              {auditEntries.map((a, i) => {
+                const usr = Array.isArray(a.user) ? a.user[0] : a.user;
+                return (
+                  <div
+                    key={i}
+                    className="rounded-lg bg-slate-800/50 px-4 py-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="inline-block rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-400">
+                        {a.action}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {new Date(a.created_at).toLocaleDateString("es-MX", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {usr
+                        ? `${(usr as Record<string, string>).first_name} ${(usr as Record<string, string>).last_name}`
+                        : "Sistema"}
+                      {a.details_json &&
+                      typeof a.details_json === "object" &&
+                      "description" in a.details_json
+                        ? ` — ${a.details_json.description}`
+                        : ""}
+                    </p>
+                  </div>
+                );
+              })}
+              {auditEntries.length === 0 && (
+                <p className="text-sm text-slate-500">
+                  Sin entradas de auditoría.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Quick Links */}
@@ -197,15 +230,17 @@ export default async function AdminCenterPage() {
           Acceso Rápido
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Link
-            href="/admin-center/manage-roles"
-            className="flex items-center gap-3 rounded-lg bg-slate-800/50 px-4 py-3 text-sm text-slate-300 transition hover:bg-slate-700/50"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600/20 text-indigo-400">
-              <ShieldSvg />
-            </span>
-            Gestionar Roles y Permisos
-          </Link>
+          {rolesPerm.allowed && (
+            <Link
+              href="/admin-center/manage-roles"
+              className="flex items-center gap-3 rounded-lg bg-slate-800/50 px-4 py-3 text-sm text-slate-300 transition hover:bg-slate-700/50"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600/20 text-indigo-400">
+                <ShieldSvg />
+              </span>
+              Gestionar Roles y Permisos
+            </Link>
+          )}
           <Link
             href="/org-chart"
             className="flex items-center gap-3 rounded-lg bg-slate-800/50 px-4 py-3 text-sm text-slate-300 transition hover:bg-slate-700/50"
