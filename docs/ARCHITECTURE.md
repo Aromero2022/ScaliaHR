@@ -167,6 +167,10 @@ to role-based access, and consolidate RBP to v2 model.
 
 6. **CI** — Prisma drift check added to db job. Integration tests moved to
    `__tests__/integration/`. New S1 integration tests (17 cases).
+   `mfa-flow.test.ts` verifies TOTP enroll/verify against the local
+   Supabase auth server (AAL1→AAL2 promotion, policy guards, invalid code
+   rejection). `module-flags.test.ts` verifies flag gating and RLS
+   isolation between tenants.
 
 ---
 

@@ -77,7 +77,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload backup
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: db-backup-${{ github.run_id }}
           path: backup/
