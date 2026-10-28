@@ -321,3 +321,38 @@ settings live in the dashboard and are not reproduced by `db-remote-sync`:
   `owner` or `hr_admin` and the subject must belong to the caller's tenant;
   `tenant_id`, `user_id`, dates, ids and unknown columns are rejected in `data`;
   values are cast through `jsonb_populate_record`.
+
+---
+
+## Known Risk — Open SELECT on Permission Matrix Tables
+
+**Status:** Accepted (temporary). Registered 2026-10-28.
+
+**Tables affected:** `permission_roles`, `role_permissions`, `permission_groups`,
+`role_grants`.
+
+**Current RLS policies:** SELECT is open to every `authenticated` user within their
+own tenant (filtered by `requesting_tenant_id()`). INSERT/UPDATE require
+`is_tenant_admin()`. DELETE has no policy (soft-delete only).
+
+**Why it exists:** The `can()` authorization function (RBP v2) runs Prisma queries
+against `role_permissions` and `role_grants` from the application layer using the
+caller's JWT. If SELECT were restricted to admins, non-admin users would lose
+authorization resolution — every `can()` call would return `false`.
+
+**Risk:** Any employee can read the full permission matrix of their tenant via the
+Supabase client: role names, permission keys, actions, group memberships, and grant
+scopes. This is an information disclosure issue — the structure of the RBAC model
+is visible to unprivileged users.
+
+**Planned fix (authorization hardening loop):**
+
+1. Move `can()` evaluation to a `SECURITY DEFINER` PostgreSQL function that reads
+   the permission tables with elevated privileges (bypassing RLS), receives the
+   user ID, permission key, action, and optional target/field parameters, and
+   returns a boolean. The application calls `SELECT can(...)` instead of querying
+   the tables directly.
+2. Restrict SELECT on `permission_roles`, `role_permissions`, `permission_groups`,
+   `role_grants`, and `group_members` to `is_tenant_admin()`.
+3. Unify `app_role` (JWT claim) with RBP v2 so that admin detection also runs
+   through the permission chain instead of relying on a static role string.
