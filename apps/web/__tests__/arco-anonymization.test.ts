@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createHash } from "crypto";
 
 /**
@@ -172,11 +172,16 @@ describe("ARCO: export_user_data", () => {
   });
 
   it("generates deterministic SHA-256 hash for same input", () => {
-    const input = { id: "u1", first_name: "A", last_name: "B", email: "a@b.c", status: "ACTIVE", is_anonymized: false, deleted_at: null };
-    const r1 = exportUserData(input, [], [], []);
-    const r2 = exportUserData(input, [], [], []);
-    expect(r1.hash).toBe(r2.hash);
-    expect(r1.hash).toHaveLength(64);
+    vi.useFakeTimers({ now: new Date("2026-01-01T00:00:00Z") });
+    try {
+      const input = { id: "u1", first_name: "A", last_name: "B", email: "a@b.c", status: "ACTIVE", is_anonymized: false, deleted_at: null };
+      const r1 = exportUserData(input, [], [], []);
+      const r2 = exportUserData(input, [], [], []);
+      expect(r1.hash).toBe(r2.hash);
+      expect(r1.hash).toHaveLength(64);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("different data produces different hash", () => {
