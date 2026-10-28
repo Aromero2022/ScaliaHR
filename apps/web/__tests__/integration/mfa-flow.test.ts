@@ -188,6 +188,38 @@ describe("MFA integration flow", () => {
     expect(assurance!.currentLevel).toBe("aal1");
   });
 
+  it("after enrollment (before verify), mfaStepFor directs to /mfa/verify", async () => {
+    const tenant = await world.createTenant();
+    const email = tenant.admin.email;
+
+    const client = createClient(env.supabaseUrl, env.anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const { data: signIn } = await client.auth.signInWithPassword({
+      email,
+      password: (world as unknown as { password: string }).password,
+    });
+    expect(signIn.session).toBeTruthy();
+
+    // Before enrollment: no factor → nextLevel is aal1 → enroll
+    const { data: before } =
+      await client.auth.mfa.getAuthenticatorAssuranceLevel();
+    expect(mfaStepFor(before!.nextLevel)).toBe("/mfa/enroll");
+
+    // Enroll a TOTP factor (but don't verify it)
+    const { data: enroll } = await client.auth.mfa.enroll({
+      factorType: "totp",
+      friendlyName: "step-test",
+    });
+    expect(enroll).toBeTruthy();
+
+    // After enrollment: factor exists → nextLevel is aal2 → verify
+    const { data: after } =
+      await client.auth.mfa.getAuthenticatorAssuranceLevel();
+    expect(mfaStepFor(after!.nextLevel)).toBe("/mfa/verify");
+  });
+
   it("non-admin employee at AAL1 is accepted on /dashboard but rejected on /admin-center", () => {
     // Pure policy test: employee role does not require MFA everywhere
     expect(requiresAal2("/dashboard", "employee")).toBe(false);
