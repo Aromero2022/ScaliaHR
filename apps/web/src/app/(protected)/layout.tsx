@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { getModuleFlags, type ModuleFlags } from "@/lib/tenant/get-module-flags";
+import { requireAuth } from "@/lib/supabase/claims";
+import { getModuleFlags } from "@/lib/tenant/get-module-flags";
+import type { ModuleFlags } from "@/lib/tenant/module-flags";
 import Sidebar from "@/components/sidebar";
 
 export default async function ProtectedLayout({
@@ -8,19 +8,11 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const claims = await requireAuth();
 
-  if (!user) {
-    redirect("/login");
-  }
-
-  const tenantId = (user.app_metadata?.tenant_id as string) ?? null;
   let moduleFlags: ModuleFlags | null = null;
-  if (tenantId) {
-    moduleFlags = await getModuleFlags(tenantId);
+  if (claims.tenantId) {
+    moduleFlags = await getModuleFlags(claims.tenantId);
   }
 
   return (

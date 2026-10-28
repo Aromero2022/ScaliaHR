@@ -20,6 +20,7 @@ import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import * as moodleClient from "@/lib/lms/moodle-client";
 import { GET } from "@/app/(protected)/lms/launch/route";
 import { NextRequest } from "next/server";
+import { toModuleFlags } from "@/lib/tenant/module-flags";
 
 const mockGetModuleFlags = vi.mocked(getModuleFlags);
 const mockMoodle = vi.mocked(moodleClient);
@@ -28,9 +29,26 @@ function makeRequest(url = "http://localhost:3000/lms/launch"): NextRequest {
   return new NextRequest(url);
 }
 
-function mockSupabaseUser(user: unknown) {
+type FakeUser = {
+  id: string;
+  email: string;
+  tenant_id?: string;
+  app_metadata?: Record<string, unknown>;
+  user_metadata: Record<string, unknown>;
+};
+
+// The route reads the verified JWT claims: sub, email, user_metadata and the
+// root tenant_id claim written by custom_access_token_hook.
+function mockSupabaseUser(user: FakeUser | null) {
+  const claims = user && {
+    sub: user.id,
+    email: user.email,
+    tenant_id: user.tenant_id,
+    app_metadata: user.app_metadata ?? {},
+    user_metadata: user.user_metadata,
+  };
   const supabase = {
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user }, error: null }) },
+    auth: { getClaims: vi.fn().mockResolvedValue({ data: claims && { claims }, error: null }) },
     from: vi.fn(() => {
       const chain: Record<string, unknown> = {};
       chain.select = vi.fn(() => chain);
@@ -61,15 +79,10 @@ describe("GET /lms/launch", () => {
     mockSupabaseUser({
       id: "user-1",
       email: "test@acme.dev",
-      app_metadata: { tenant_id: "tenant-1" },
+      tenant_id: "tenant-1",
       user_metadata: {},
     });
-    mockGetModuleFlags.mockResolvedValue({
-      is_ec_active: false, is_pmgm_active: false, is_sdm_active: false,
-      is_rcm_active: false, is_lms_active: false, is_onb_active: false,
-      is_comp_active: false, is_wfa_active: false, is_wfp_active: false,
-      is_tme_active: false, is_tih_active: false,
-    });
+    mockGetModuleFlags.mockResolvedValue(toModuleFlags({ is_lms_active: false }));
 
     const res = await GET(makeRequest());
 
@@ -80,15 +93,10 @@ describe("GET /lms/launch", () => {
     mockSupabaseUser({
       id: "user-1",
       email: "elena@acme.dev",
-      app_metadata: { tenant_id: "tenant-1" },
+      tenant_id: "tenant-1",
       user_metadata: { first_name: "Elena", last_name: "Martinez" },
     });
-    mockGetModuleFlags.mockResolvedValue({
-      is_ec_active: false, is_pmgm_active: false, is_sdm_active: false,
-      is_rcm_active: false, is_lms_active: true, is_onb_active: false,
-      is_comp_active: false, is_wfa_active: false, is_wfp_active: false,
-      is_tme_active: false, is_tih_active: false,
-    });
+    mockGetModuleFlags.mockResolvedValue(toModuleFlags({ is_lms_active: true }));
     mockMoodle.getUser.mockResolvedValue({ id: 501, username: "user-1", email: "elena@acme.dev" });
     mockMoodle.requestLoginUrl.mockResolvedValue(
       "https://moodle.local/auth/userkey/login.php?key=abc123"
@@ -105,15 +113,10 @@ describe("GET /lms/launch", () => {
     mockSupabaseUser({
       id: "user-2",
       email: "carlos@acme.dev",
-      app_metadata: { tenant_id: "tenant-1" },
+      tenant_id: "tenant-1",
       user_metadata: { first_name: "Carlos", last_name: "Lopez" },
     });
-    mockGetModuleFlags.mockResolvedValue({
-      is_ec_active: false, is_pmgm_active: false, is_sdm_active: false,
-      is_rcm_active: false, is_lms_active: true, is_onb_active: false,
-      is_comp_active: false, is_wfa_active: false, is_wfp_active: false,
-      is_tme_active: false, is_tih_active: false,
-    });
+    mockGetModuleFlags.mockResolvedValue(toModuleFlags({ is_lms_active: true }));
     mockMoodle.getUser.mockResolvedValue(null);
     mockMoodle.createUser.mockResolvedValue({ id: 502, username: "user-2", email: "carlos@acme.dev" });
     mockMoodle.requestLoginUrl.mockResolvedValue("https://moodle.local/auth/userkey/login.php?key=xyz");
@@ -134,12 +137,25 @@ describe("GET /lms/launch", () => {
     mockSupabaseUser({
       id: "user-3",
       email: "orphan@test.dev",
-      app_metadata: {},
       user_metadata: {},
     });
 
     const res = await GET(makeRequest());
 
     expect(res.status).toBe(403);
+  });
+
+  it("ignores tenant_id in app_metadata: only the root claim counts", async () => {
+    mockSupabaseUser({
+      id: "user-4",
+      email: "meta@test.dev",
+      app_metadata: { tenant_id: "tenant-1" },
+      user_metadata: {},
+    });
+
+    const res = await GET(makeRequest());
+
+    expect(res.status).toBe(403);
+    expect(mockGetModuleFlags).not.toHaveBeenCalled();
   });
 });

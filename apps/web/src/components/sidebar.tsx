@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { clsx } from "clsx";
-import type { ModuleFlags } from "@/lib/tenant/get-module-flags";
+import type { ModuleFlags } from "@/lib/tenant/module-flags";
 
 type NavItem = {
   href: string;

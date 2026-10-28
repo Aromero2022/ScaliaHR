@@ -6,15 +6,15 @@ import * as moodle from "@/lib/lms/moodle-client";
 export async function GET(request: NextRequest) {
   const origin = request.nextUrl.origin;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Verified JWT claims: tenant_id is written at the claim root by the hook.
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims;
 
-  if (!user) {
+  if (!claims?.sub) {
     return NextResponse.redirect(new URL("/login", origin));
   }
 
-  const tenantId = (user.app_metadata?.tenant_id as string) ?? null;
+  const tenantId = typeof claims.tenant_id === "string" ? claims.tenant_id : null;
   if (!tenantId) {
     return NextResponse.json({ error: "No tenant asignado" }, { status: 403 });
   }
@@ -24,9 +24,9 @@ export async function GET(request: NextRequest) {
     return new NextResponse(null, { status: 404 });
   }
 
-  const supabaseUuid = user.id;
-  const email = user.email ?? "";
-  const meta = user.user_metadata ?? {};
+  const supabaseUuid = claims.sub;
+  const email = claims.email ?? "";
+  const meta = claims.user_metadata ?? {};
   const firstName = (meta.first_name as string) ?? email.split("@")[0];
   const lastName = (meta.last_name as string) ?? "";
 
