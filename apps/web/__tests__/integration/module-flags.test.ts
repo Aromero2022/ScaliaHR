@@ -3,6 +3,8 @@ import pg from "pg";
 import { integrationEnv } from "./helpers/env";
 import { TestWorld, claimsOf } from "./helpers/world";
 import { MODULE_FLAG_KEYS, toModuleFlags } from "@/lib/tenant/module-flags";
+import { isModuleRouteBlocked, MODULE_ROUTE_GUARDS } from "@/lib/tenant/module-guards";
+import { NAV_ITEMS, filterNavByFlags } from "@/lib/navigation/nav-config";
 
 const env = integrationEnv();
 const db = new pg.Client({ connectionString: env.dbUrl });
@@ -114,5 +116,130 @@ describe("module flags", () => {
     );
     // createTenant doesn't set is_lms_active, so it defaults to false
     expect(rows[0].is_lms_active).toBe(false);
+  });
+
+  it("route guard blocks /skills-hub when is_tih_active is false", async () => {
+    const tenant = await world.createTenant();
+    await db.query(
+      "UPDATE public.tenants SET is_tih_active = false WHERE id = $1",
+      [tenant.id],
+    );
+    const { rows } = await db.query(
+      `SELECT ${MODULE_FLAG_KEYS.join(", ")} FROM public.tenants WHERE id = $1`,
+      [tenant.id],
+    );
+    const flags = toModuleFlags(rows[0] as Record<string, unknown>);
+    expect(isModuleRouteBlocked("/skills-hub", flags)).toBe(true);
+    expect(isModuleRouteBlocked("/skills-hub/some-skill", flags)).toBe(true);
+  });
+
+  it("route guard blocks /lms when is_lms_active is false", async () => {
+    const tenant = await world.createTenant();
+    // createTenant does not set is_lms_active, so it defaults to false
+    const { rows } = await db.query(
+      `SELECT ${MODULE_FLAG_KEYS.join(", ")} FROM public.tenants WHERE id = $1`,
+      [tenant.id],
+    );
+    const flags = toModuleFlags(rows[0] as Record<string, unknown>);
+    expect(isModuleRouteBlocked("/lms", flags)).toBe(true);
+    expect(isModuleRouteBlocked("/lms/launch", flags)).toBe(true);
+  });
+
+  it("route guard allows guarded routes when their flags are true", async () => {
+    const tenant = await world.createTenant();
+    await db.query(
+      "UPDATE public.tenants SET is_tih_active = true, is_lms_active = true WHERE id = $1",
+      [tenant.id],
+    );
+    const { rows } = await db.query(
+      `SELECT ${MODULE_FLAG_KEYS.join(", ")} FROM public.tenants WHERE id = $1`,
+      [tenant.id],
+    );
+    const flags = toModuleFlags(rows[0] as Record<string, unknown>);
+    expect(isModuleRouteBlocked("/skills-hub", flags)).toBe(false);
+    expect(isModuleRouteBlocked("/lms", flags)).toBe(false);
+    expect(isModuleRouteBlocked("/lms/launch", flags)).toBe(false);
+  });
+
+  it("route guard allows unguarded routes regardless of flags", async () => {
+    const tenant = await world.createTenant();
+    await db.query(
+      "UPDATE public.tenants SET is_ec_active = false, is_pmgm_active = false WHERE id = $1",
+      [tenant.id],
+    );
+    const { rows } = await db.query(
+      `SELECT ${MODULE_FLAG_KEYS.join(", ")} FROM public.tenants WHERE id = $1`,
+      [tenant.id],
+    );
+    const flags = toModuleFlags(rows[0] as Record<string, unknown>);
+    expect(isModuleRouteBlocked("/dashboard", flags)).toBe(false);
+    expect(isModuleRouteBlocked("/profile", flags)).toBe(false);
+    expect(isModuleRouteBlocked("/admin-center", flags)).toBe(false);
+  });
+
+  it("sidebar excludes module items when their flags are false", async () => {
+    const tenant = await world.createTenant();
+    await db.query(
+      "UPDATE public.tenants SET is_lms_active = false, is_tih_active = false, is_ec_active = false WHERE id = $1",
+      [tenant.id],
+    );
+    const { rows } = await db.query(
+      `SELECT ${MODULE_FLAG_KEYS.join(", ")} FROM public.tenants WHERE id = $1`,
+      [tenant.id],
+    );
+    const flags = toModuleFlags(rows[0] as Record<string, unknown>);
+    const visible = filterNavByFlags(NAV_ITEMS, flags);
+    const hrefs = visible.map((i) => i.href);
+
+    expect(hrefs).not.toContain("/lms");
+    expect(hrefs).not.toContain("/skills-hub");
+    expect(hrefs).not.toContain("/employees");
+    expect(hrefs).not.toContain("/org-chart");
+    // Items without moduleFlag are always visible
+    expect(hrefs).toContain("/dashboard");
+    expect(hrefs).toContain("/profile");
+    expect(hrefs).toContain("/admin-center");
+    expect(hrefs).toContain("/admin/arco");
+  });
+
+  it("sidebar includes all module items when their flags are true", async () => {
+    const tenant = await world.createTenant();
+    await db.query(
+      "UPDATE public.tenants SET is_lms_active = true, is_tih_active = true, is_ec_active = true, is_pmgm_active = true WHERE id = $1",
+      [tenant.id],
+    );
+    const { rows } = await db.query(
+      `SELECT ${MODULE_FLAG_KEYS.join(", ")} FROM public.tenants WHERE id = $1`,
+      [tenant.id],
+    );
+    const flags = toModuleFlags(rows[0] as Record<string, unknown>);
+    const visible = filterNavByFlags(NAV_ITEMS, flags);
+    const hrefs = visible.map((i) => i.href);
+
+    expect(hrefs).toContain("/lms");
+    expect(hrefs).toContain("/skills-hub");
+    expect(hrefs).toContain("/employees");
+    expect(hrefs).toContain("/org-chart");
+    expect(hrefs).toContain("/performance");
+    expect(hrefs).toContain("/dashboard");
+  });
+
+  it("sidebar with null flags hides all module-gated items", () => {
+    const visible = filterNavByFlags(NAV_ITEMS, null);
+    const hrefs = visible.map((i) => i.href);
+    expect(hrefs).toContain("/dashboard");
+    expect(hrefs).toContain("/profile");
+    expect(hrefs).toContain("/admin-center");
+    expect(hrefs).not.toContain("/employees");
+    expect(hrefs).not.toContain("/lms");
+    expect(hrefs).not.toContain("/skills-hub");
+  });
+
+  it("MODULE_ROUTE_GUARDS entries match sidebar moduleFlag for each guarded route", () => {
+    for (const { route, flag } of MODULE_ROUTE_GUARDS) {
+      const navItem = NAV_ITEMS.find((item) => item.href === route);
+      expect(navItem, `nav item for ${route}`).toBeTruthy();
+      expect(navItem!.moduleFlag, `${route} sidebar flag`).toBe(flag);
+    }
   });
 });
