@@ -312,6 +312,7 @@ FROM (
   SELECT r.role_id, p.permission_key, p.action
   FROM (VALUES ('bb100000-0000-0000-0000-000000000001'), ('bb100000-0000-0000-0000-000000000010')) AS r(role_id)
   CROSS JOIN (VALUES
+    ('admin_center.access', 'view'),
     ('admin.manage_roles', 'edit'), ('admin.manage_config', 'edit'), ('admin.view_audit_logs', 'view'),
     ('ec.manage_employees', 'edit'), ('ec.manage_positions', 'edit'), ('ec.manage_org_structure', 'edit'),
     ('pmgm.manage_goal_plans', 'edit'), ('sdm.manage_succession', 'edit'),
