@@ -33,8 +33,10 @@ const navItems: NavItem[] = NAV_ITEMS.map((item) => ({
 
 export default function Sidebar({
   moduleFlags,
+  grantedPermissions = [],
 }: {
   moduleFlags: ModuleFlags | null;
+  grantedPermissions?: string[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -46,7 +48,8 @@ export default function Sidebar({
     router.refresh();
   }
 
-  const visibleItems = filterNavByFlags(navItems, moduleFlags) as NavItem[];
+  const permSet = new Set(grantedPermissions);
+  const visibleItems = filterNavByFlags(navItems, moduleFlags, permSet) as NavItem[];
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900">
