@@ -356,3 +356,51 @@ is visible to unprivileged users.
    `role_grants`, and `group_members` to `is_tenant_admin()`.
 3. Unify `app_role` (JWT claim) with RBP v2 so that admin detection also runs
    through the permission chain instead of relying on a static role string.
+
+## Known Risk — Integration Tests Use Raw SQL Instead of `can()`
+
+**Status:** Accepted (temporary). Registered 2026-10-28.
+
+**Affected tests:** `admin-center-authz.test.ts` — the `canViaRbp()` helper.
+
+**Current state:** The integration tests verify the RBP permission chain
+(`group_members` → `role_grants` → `role_permissions`) by querying the database
+directly with a raw SQL `EXISTS` check. They do **not** call the application-level
+`can()` function from `@/lib/authz/can.ts`.
+
+**Risk:** If `can()` diverges from the raw SQL logic (e.g. adds caching, changes
+the join order, introduces field-level or population-based filtering), the tests
+will still pass while the real authorization path is broken.
+
+**Planned fix (authorization hardening loop):**
+
+1. Once `can()` is moved to a `SECURITY DEFINER` PostgreSQL function, the
+   integration tests should call `SELECT can(...)` directly against the database,
+   testing the same code path the application uses.
+2. Alternatively, expose a thin HTTP endpoint or Server Action that wraps `can()`
+   and have the integration tests call it with each user's token, exercising the
+   full stack (JWT → Supabase client → `can()`).
+
+## Known Risk — Admin Center Cannot Create or Edit Roles
+
+**Status:** Accepted (temporary). Registered 2026-10-28.
+
+**Affected component:** `apps/web/src/components/role-manager.tsx` — "Nuevo Rol"
+button and role editing UI.
+
+**Current state:** The Admin Center's "Gestionar Roles" page renders an expandable
+list of roles, permissions, groups, and grants. The "Nuevo Rol" button opens a
+modal, but the modal has no Server Action or API endpoint wired to it — submitting
+does nothing. Editing existing roles (rename, add/remove permissions, change group
+assignments) is similarly non-functional; the UI is read-only.
+
+**Risk:** Administrators who expect to manage roles through the UI will find it
+inoperable. Currently, role and permission changes can only be made via direct
+database operations or migrations.
+
+**Planned fix:**
+
+1. Implement Server Actions for role CRUD (`createRole`, `updateRole`,
+   `deleteRole`) gated by `admin.manage_roles:edit`.
+2. Wire the "Nuevo Rol" modal and inline-edit controls to these actions.
+3. Add integration tests that verify CRUD operations respect RBP guards.
