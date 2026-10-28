@@ -231,6 +231,34 @@ describe("admin-center — RLS on admin data tables", () => {
     expect(error).toBeNull();
     expect((data ?? []).length).toBeGreaterThan(0);
   });
+
+  it("employee cannot read system_configurations (restricted to admins)", async () => {
+    const { data, error } = await tenant.employee.client
+      .from("system_configurations")
+      .select("key");
+    expect(data ?? []).toEqual([]);
+  });
+
+  it("admin can read system_configurations", async () => {
+    const { data, error } = await tenant.admin.client
+      .from("system_configurations")
+      .select("key");
+    expect(error).toBeNull();
+  });
+
+  it("employee cannot read audit_logs (restricted to admins)", async () => {
+    const { data, error } = await tenant.employee.client
+      .from("audit_logs")
+      .select("id");
+    expect(data ?? []).toEqual([]);
+  });
+
+  it("admin can read audit_logs", async () => {
+    const { data, error } = await tenant.admin.client
+      .from("audit_logs")
+      .select("id");
+    expect(error).toBeNull();
+  });
 });
 
 describe("admin-center — migration correctness", () => {
