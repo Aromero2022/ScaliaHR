@@ -17,6 +17,7 @@ const world = new TestWorld(env, db);
 let tenant: TestTenant;
 let otherTenant: TestTenant;
 let owner: TestUser;
+let rbpAdmin: TestUser;
 
 async function tenantRow(id: string) {
   const { rows } = await db.query<{ name: string; slug: string; is_lms_active: boolean }>(
@@ -30,6 +31,12 @@ beforeAll(async () => {
   tenant = await world.createTenant();
   otherTenant = await world.createTenant();
   owner = await world.addMember(tenant.id, "owner");
+  rbpAdmin = await world.addMember(tenant.id, "employee");
+  await db.query(
+    `INSERT INTO public.group_members (tenant_id, group_id, user_id)
+     VALUES ($1, $2, $3)`,
+    [tenant.id, tenant.adminGroupId, rbpAdmin.userId],
+  );
 });
 
 afterAll(async () => {
@@ -74,7 +81,7 @@ describe("tenants — update", () => {
 
   it("members and RBP admins cannot change the tenant or its module flags", async () => {
     const before = await tenantRow(tenant.id);
-    for (const user of [tenant.employee, tenant.manager, tenant.admin]) {
+    for (const user of [tenant.employee, tenant.manager, rbpAdmin]) {
       const { error } = await user.client
         .from("tenants")
         .update({ name: "Hijacked", is_lms_active: !before.is_lms_active })

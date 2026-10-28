@@ -19,6 +19,7 @@ let tenant: TestTenant;
 let otherTenant: TestTenant;
 let owner: TestUser;
 let hrAdmin: TestUser;
+let rbpAdmin: TestUser;
 let otherOwner: TestUser;
 
 beforeAll(async () => {
@@ -26,6 +27,12 @@ beforeAll(async () => {
   otherTenant = await world.createTenant();
   owner = await world.addMember(tenant.id, "owner");
   hrAdmin = await world.addMember(tenant.id, "hr_admin");
+  rbpAdmin = await world.addMember(tenant.id, "employee");
+  await db.query(
+    `INSERT INTO public.group_members (tenant_id, group_id, user_id)
+     VALUES ($1, $2, $3)`,
+    [tenant.id, tenant.adminGroupId, rbpAdmin.userId],
+  );
   otherOwner = await world.addMember(otherTenant.id, "owner");
 });
 
@@ -90,7 +97,7 @@ describe("insert_effective_record()", () => {
   });
 
   it("cannot be used by employees, managers or RBP admins without owner/hr_admin role", async () => {
-    for (const user of [tenant.employee, tenant.manager, tenant.admin]) {
+    for (const user of [tenant.employee, tenant.manager, rbpAdmin]) {
       const { error } = await user.client.rpc("insert_effective_record", {
         p_table: "ec_compensation",
         p_user_id: tenant.employee.userId,
