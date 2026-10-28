@@ -188,7 +188,8 @@ describe("module flags", () => {
       [tenant.id],
     );
     const flags = toModuleFlags(rows[0] as Record<string, unknown>);
-    const visible = filterNavByFlags(NAV_ITEMS, flags);
+    const perms = new Set(["admin_center.access"]);
+    const visible = filterNavByFlags(NAV_ITEMS, flags, perms);
     const hrefs = visible.map((i) => i.href);
 
     expect(hrefs).not.toContain("/lms");
@@ -225,7 +226,8 @@ describe("module flags", () => {
   });
 
   it("sidebar with null flags hides all module-gated items", () => {
-    const visible = filterNavByFlags(NAV_ITEMS, null);
+    const perms = new Set(["admin_center.access"]);
+    const visible = filterNavByFlags(NAV_ITEMS, null, perms);
     const hrefs = visible.map((i) => i.href);
     expect(hrefs).toContain("/dashboard");
     expect(hrefs).toContain("/profile");

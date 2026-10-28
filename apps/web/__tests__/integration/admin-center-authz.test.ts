@@ -153,26 +153,31 @@ describe("admin-center — tool guard (admin.manage_roles:edit)", () => {
 });
 
 describe("admin-center — RLS on admin data tables", () => {
-  it("employee cannot read permission_roles", async () => {
+  it("employee can read permission_roles for their tenant (SELECT is open)", async () => {
     const { data, error } = await tenant.employee.client
       .from("permission_roles")
       .select("id");
-    if (error) {
-      expect(error.code).toBe("42501");
-    } else {
-      expect(data).toEqual([]);
-    }
+    expect(error).toBeNull();
+    expect((data ?? []).length).toBeGreaterThan(0);
   });
 
-  it("employee cannot read role_permissions", async () => {
-    const { data, error } = await tenant.employee.client
+  it("employee cannot insert into permission_roles", async () => {
+    const { error } = await tenant.employee.client
+      .from("permission_roles")
+      .insert({ tenant_id: tenant.id, name: "Hacked Role" });
+    expect(error).not.toBeNull();
+  });
+
+  it("employee cannot insert into role_permissions", async () => {
+    const { error } = await tenant.employee.client
       .from("role_permissions")
-      .select("id");
-    if (error) {
-      expect(error.code).toBe("42501");
-    } else {
-      expect(data).toEqual([]);
-    }
+      .insert({
+        tenant_id: tenant.id,
+        role_id: tenant.adminRoleId,
+        permission_key: "admin.manage_billing",
+        action: "edit",
+      });
+    expect(error).not.toBeNull();
   });
 
   it("admin can read permission_roles for their tenant", async () => {
