@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireAal2 } from "@/lib/supabase/claims";
 import Link from "next/link";
 
 interface StatCard {
@@ -22,8 +21,6 @@ interface AuditRow {
 }
 
 export default async function AdminCenterPage() {
-  // AAL2 is enforced here too, not only in the middleware.
-  await requireAal2("/admin-center");
   const supabase = await createClient();
 
   const [rolesRes, groupsRes, permsRes, configsRes, auditRes, usersRes] =
