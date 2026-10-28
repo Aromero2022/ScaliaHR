@@ -281,3 +281,26 @@ irreversible suppression step** of an ARCO cancellation, not its first step.
 plazos de conservación de LFT art. 804, LSS art. 15 y CFF. Validar plazos con
 asesoría jurídica antes de operar con clientes reales. Mientras tanto, la
 cancelación ARCO no debe ejecutarse en tenants productivos.
+
+---
+
+## D11 — Manual Project Settings and Privileged RPCs
+
+**Manual settings (hosted project, not in migrations):** some Supabase Auth
+settings live in the dashboard and are not reproduced by `db-remote-sync`:
+- **Leaked password protection** (HaveIBeenPwned check): Dashboard →
+  Authentication → Attack Protection (password security). Enabled manually by
+  the project owner when the plan allows it. The `auth_leaked_password_protection`
+  advisor stays until it is turned on.
+- **Custom access token hook**: see D9.
+
+**Privileged RPCs (SECURITY DEFINER, executable by `authenticated`):**
+- `write_audit_log(...)`: ignores the tenant and actor it receives and always
+  records `requesting_tenant_id()` and `current_app_user_id()`; fails for callers
+  without tenant. `audit_logs` has no INSERT policy or privilege for `anon`,
+  `authenticated` or `prisma_app`: entries are written only through this function.
+- `insert_effective_record(table, user, data, start)`: only `ec_job_information`,
+  `ec_compensation` and `ec_personal_information`; caller must hold app_role
+  `owner` or `hr_admin` and the subject must belong to the caller's tenant;
+  `tenant_id`, `user_id`, dates, ids and unknown columns are rejected in `data`;
+  values are cast through `jsonb_populate_record`.

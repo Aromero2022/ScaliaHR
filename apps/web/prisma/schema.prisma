@@ -113,6 +113,9 @@ model User {
   @@index([deleted_at], map: "idx_users_deleted_at")
   @@index([position_id], map: "idx_users_position")
   @@index([tenant_id], map: "idx_users_tenant")
+  @@index([tenant_id, department_id], map: "idx_users_tenant_id_department_id_fk")
+  @@index([tenant_id, job_info_id], map: "idx_users_tenant_id_job_info_id_fk")
+  @@index([tenant_id, position_id], map: "idx_users_tenant_id_position_id_fk")
   @@map("users")
   @@schema("public")
 }
@@ -145,6 +148,10 @@ model Department {
   @@index([legal_entity_id], map: "idx_departments_legal_entity")
   @@index([location_id], map: "idx_departments_location")
   @@index([tenant_id], map: "idx_departments_tenant")
+  @@index([tenant_id, business_unit_id], map: "idx_departments_tenant_id_business_unit_id_fk")
+  @@index([tenant_id, legal_entity_id], map: "idx_departments_tenant_id_legal_entity_id_fk")
+  @@index([tenant_id, location_id], map: "idx_departments_tenant_id_location_id_fk")
+  @@index([tenant_id, parent_id], map: "idx_departments_tenant_id_parent_id_fk")
   @@map("departments")
   @@schema("public")
 }
@@ -183,6 +190,7 @@ model JobRole {
   @@unique([tenant_id, id], map: "job_roles_tenant_id_uniq")
   @@index([job_family_id], map: "idx_job_roles_family")
   @@index([tenant_id], map: "idx_job_roles_tenant")
+  @@index([tenant_id, job_family_id], map: "idx_job_roles_tenant_id_job_family_id_fk")
   @@map("job_roles")
   @@schema("public")
 }
@@ -206,6 +214,7 @@ model JobClassification {
   @@unique([tenant_id, id])
   @@index([job_role_id], map: "idx_job_classifications_role")
   @@index([tenant_id], map: "idx_job_classifications_tenant")
+  @@index([tenant_id, job_role_id], map: "idx_job_classifications_tenant_id_job_role_id_fk")
   @@map("job_classifications")
   @@schema("public")
 }
@@ -236,6 +245,9 @@ model Position {
   @@index([department_id], map: "idx_positions_department")
   @@index([parent_position_id], map: "idx_positions_parent")
   @@index([tenant_id], map: "idx_positions_tenant")
+  @@index([tenant_id, department_id], map: "idx_positions_tenant_id_department_id_fk")
+  @@index([tenant_id, job_classification_id], map: "idx_positions_tenant_id_job_classification_id_fk")
+  @@index([tenant_id, parent_position_id], map: "idx_positions_tenant_id_parent_position_id_fk")
   @@map("positions")
   @@schema("public")
 }
@@ -261,6 +273,8 @@ model JobInformation {
   @@unique([tenant_id, id])
   @@index([position_id], map: "idx_job_informations_position")
   @@index([tenant_id], map: "idx_job_informations_tenant")
+  @@index([tenant_id, job_classification_id], map: "idx_job_informations_tenant_id_job_classification_id_fk")
+  @@index([tenant_id, position_id], map: "idx_job_informations_tenant_id_position_id_fk")
   @@map("job_informations")
   @@schema("public")
 }
@@ -322,6 +336,7 @@ model PerformanceGoal {
 
   @@index([tenant_id], map: "idx_performance_goals_tenant")
   @@index([user_id], map: "idx_performance_goals_user")
+  @@index([tenant_id, user_id], map: "idx_performance_goals_tenant_id_user_id_fk")
   @@map("performance_goals")
   @@schema("public")
 }
@@ -343,6 +358,8 @@ model ContinuousFeedback {
   @@index([author_id], map: "idx_continuous_feedbacks_author")
   @@index([subject_id], map: "idx_continuous_feedbacks_subject")
   @@index([tenant_id], map: "idx_continuous_feedbacks_tenant")
+  @@index([tenant_id, author_id], map: "idx_continuous_feedbacks_tenant_id_author_id_fk")
+  @@index([tenant_id, subject_id], map: "idx_continuous_feedbacks_tenant_id_subject_id_fk")
   @@map("continuous_feedbacks")
   @@schema("public")
 }
@@ -375,6 +392,7 @@ model TalentPoolEntry {
   user           User           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([talent_pool_id, user_id])
+  @@index([user_id], map: "idx_talent_pool_entries_user_id_fk")
   @@map("talent_pool_entries")
   @@schema("public")
 }
@@ -409,6 +427,7 @@ model SuccessionNominee {
   user               User           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([succession_plan_id, user_id])
+  @@index([user_id], map: "idx_succession_nominees_user_id_fk")
   @@map("succession_nominees")
   @@schema("public")
 }
@@ -451,6 +470,7 @@ model JobRoleSkill {
   @@index([job_role_id], map: "idx_job_role_skills_role")
   @@index([skill_id], map: "idx_job_role_skills_skill")
   @@index([tenant_id], map: "idx_job_role_skills_tenant")
+  @@index([tenant_id, skill_id], map: "idx_job_role_skills_tenant_id_skill_id_fk")
   @@map("job_role_skills")
   @@schema("public")
 }
@@ -475,6 +495,8 @@ model EmployeeSkill {
   @@index([skill_id], map: "idx_employee_skills_skill")
   @@index([tenant_id], map: "idx_employee_skills_tenant")
   @@index([user_id], map: "idx_employee_skills_user")
+  @@index([tenant_id, manager_assessed_by], map: "idx_employee_skills_tenant_id_manager_assessed_by_fk")
+  @@index([tenant_id, skill_id], map: "idx_employee_skills_tenant_id_skill_id_fk")
   @@map("employee_skills")
   @@schema("public")
 }
@@ -531,6 +553,7 @@ model RolePermission {
   @@index([permission_key, action], map: "idx_role_permissions_pkey_action")
   @@index([role_id], map: "idx_role_permissions_role")
   @@index([tenant_id], map: "idx_role_permissions_tenant")
+  @@index([tenant_id, role_id], map: "idx_role_permissions_tenant_id_role_id_fk")
   @@map("role_permissions")
   @@schema("public")
 }
@@ -570,6 +593,7 @@ model AuditLog {
   @@index([entity, entity_id], map: "idx_audit_logs_entity")
   @@index([tenant_id], map: "idx_audit_logs_tenant")
   @@index([user_id], map: "idx_audit_logs_user")
+  @@index([tenant_id, user_id], map: "idx_audit_logs_tenant_id_user_id_fk")
   @@map("audit_logs")
   @@schema("public")
 }
@@ -1151,6 +1175,8 @@ model arco_requests {
   @@index([status], map: "idx_arco_requests_status")
   @@index([subject_id], map: "idx_arco_requests_subject")
   @@index([tenant_id], map: "idx_arco_requests_tenant")
+  @@index([tenant_id, requester_id], map: "idx_arco_requests_tenant_id_requester_id_fk")
+  @@index([tenant_id, subject_id], map: "idx_arco_requests_tenant_id_subject_id_fk")
   @@schema("public")
 }
 
@@ -1171,6 +1197,7 @@ model business_units {
   @@unique([tenant_id, id])
   @@index([legal_entity_id], map: "idx_business_units_legal_entity")
   @@index([tenant_id], map: "idx_business_units_tenant")
+  @@index([tenant_id, legal_entity_id], map: "idx_business_units_tenant_id_legal_entity_id_fk")
   @@schema("public")
 }
 
@@ -1196,6 +1223,7 @@ model ec_compensation {
 
   @@index([tenant_id], map: "idx_ec_comp_tenant")
   @@index([user_id], map: "idx_ec_comp_user")
+  @@index([tenant_id, user_id], map: "idx_ec_compensation_tenant_id_user_id_fk")
   @@schema("public")
 }
 
@@ -1229,6 +1257,12 @@ model ec_job_information {
   @@index([position_id], map: "idx_ec_job_info_position")
   @@index([tenant_id], map: "idx_ec_job_info_tenant")
   @@index([user_id], map: "idx_ec_job_info_user")
+  @@index([tenant_id, department_id], map: "idx_ec_job_information_tenant_id_department_id_fk")
+  @@index([tenant_id, job_classification_id], map: "idx_ec_job_information_tenant_id_job_classification_id_fk")
+  @@index([tenant_id, location_id], map: "idx_ec_job_information_tenant_id_location_id_fk")
+  @@index([tenant_id, manager_id], map: "idx_ec_job_information_tenant_id_manager_id_fk")
+  @@index([tenant_id, position_id], map: "idx_ec_job_information_tenant_id_position_id_fk")
+  @@index([tenant_id, user_id], map: "idx_ec_job_information_tenant_id_user_id_fk")
   @@schema("public")
 }
 
@@ -1268,6 +1302,7 @@ model ec_personal_information {
 
   @@index([tenant_id], map: "idx_ec_personal_tenant")
   @@index([user_id], map: "idx_ec_personal_user")
+  @@index([tenant_id, user_id], map: "idx_ec_personal_information_tenant_id_user_id_fk")
   @@schema("public")
 }
 
@@ -1286,6 +1321,8 @@ model group_members {
   @@index([group_id], map: "idx_group_members_group")
   @@index([tenant_id], map: "idx_group_members_tenant")
   @@index([user_id], map: "idx_group_members_user")
+  @@index([tenant_id, group_id], map: "idx_group_members_tenant_id_group_id_fk")
+  @@index([tenant_id, user_id], map: "idx_group_members_tenant_id_user_id_fk")
   @@schema("public")
 }
 
@@ -1394,6 +1431,8 @@ model role_grants {
   @@unique([role_id, granted_group_id, target_population])
   @@index([role_id], map: "idx_role_grants_role")
   @@index([tenant_id], map: "idx_role_grants_tenant")
+  @@index([tenant_id, granted_group_id], map: "idx_role_grants_tenant_id_granted_group_id_fk")
+  @@index([tenant_id, role_id], map: "idx_role_grants_tenant_id_role_id_fk")
   @@schema("public")
 }
 
@@ -1406,6 +1445,7 @@ model user_settings {
   tenants          Tenant?  @relation(fields: [active_tenant_id], references: [id], onUpdate: NoAction)
   users            users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
+  @@index([active_tenant_id], map: "idx_user_settings_active_tenant_id_fk")
   @@schema("public")
 }
 
