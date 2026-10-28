@@ -188,36 +188,48 @@ describe("MFA integration flow", () => {
     expect(assurance!.currentLevel).toBe("aal1");
   });
 
-  it("after enrollment (before verify), mfaStepFor directs to /mfa/verify", async () => {
+  it("after verified factor, new session mfaStepFor directs to /mfa/verify", async () => {
     const tenant = await world.createTenant();
     const email = tenant.admin.email;
+    const pw = (world as unknown as { password: string }).password;
 
-    const client = createClient(env.supabaseUrl, env.anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
-    const { data: signIn } = await client.auth.signInWithPassword({
+    // Session 1: enroll + verify so the factor is marked verified
+    const client1 = freshClient();
+    const { data: s1 } = await client1.auth.signInWithPassword({
       email,
-      password: (world as unknown as { password: string }).password,
+      password: pw,
     });
-    expect(signIn.session).toBeTruthy();
+    expect(s1.session).toBeTruthy();
 
-    // Before enrollment: no factor → nextLevel is aal1 → enroll
-    const { data: before } =
-      await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    expect(mfaStepFor(before!.nextLevel)).toBe("/mfa/enroll");
-
-    // Enroll a TOTP factor (but don't verify it)
-    const { data: enroll } = await client.auth.mfa.enroll({
+    const { data: enroll } = await client1.auth.mfa.enroll({
       factorType: "totp",
       friendlyName: "step-test",
     });
     expect(enroll).toBeTruthy();
+    const code = generateSync({ secret: enroll!.totp.secret });
+    const { data: ch } = await client1.auth.mfa.challenge({
+      factorId: enroll!.id,
+    });
+    const { error: vErr } = await client1.auth.mfa.verify({
+      factorId: enroll!.id,
+      challengeId: ch!.id,
+      code,
+    });
+    expect(vErr).toBeNull();
 
-    // After enrollment: factor exists → nextLevel is aal2 → verify
-    const { data: after } =
-      await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    expect(mfaStepFor(after!.nextLevel)).toBe("/mfa/verify");
+    // Session 2: fresh sign-in starts at AAL1 but factor is verified
+    const client2 = freshClient();
+    const { data: s2 } = await client2.auth.signInWithPassword({
+      email,
+      password: pw,
+    });
+    expect(s2.session).toBeTruthy();
+
+    const { data: assurance } =
+      await client2.auth.mfa.getAuthenticatorAssuranceLevel();
+    expect(assurance!.currentLevel).toBe("aal1");
+    expect(assurance!.nextLevel).toBe("aal2");
+    expect(mfaStepFor(assurance!.nextLevel)).toBe("/mfa/verify");
   });
 
   it("non-admin employee at AAL1 is accepted on /dashboard but rejected on /admin-center", () => {
