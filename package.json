@@ -17,7 +17,7 @@
     "check:forbidden": "bash scripts/check-forbidden.sh"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx}": [
+    "*.{ts,tsx,js,jsx,json,yml,yaml,md,sql,sh,toml}": [
       "bash scripts/check-forbidden.sh"
     ]
   },

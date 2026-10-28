@@ -70,9 +70,17 @@ with `NOBYPASSRLS`. Every query runs inside a `$transaction` that first sets
 - All secrets read from `.env` (never committed). `.env.example` has
   placeholders only.
 - Docker services publish ports on `127.0.0.1` only.
-- `check:forbidden` script fails on `"service_role"`, `"bitnami"`, or
-  `"MOODLE_WS_TOKEN"` in client code (server-only files allowlisted).
-- Pre-commit hook (husky + lint-staged) runs `check:forbidden` + lint.
+- `check:forbidden` (`scripts/check-forbidden.sh`, run as `npm run
+  check:forbidden`) enforces two categories:
+  1. **Old project name** — the pattern is assembled at runtime from string
+     fragments so the script never contains the literal name. It searches
+     ALL git-tracked file contents and filenames with zero exceptions.
+  2. **Secret patterns** — `"service_role"`, `"bitnami"`, `"MOODLE_WS_TOKEN"`
+     in client code (`apps/web/src`, `packages`); server-only files that
+     legitimately reference them are allowlisted inside the script.
+- The check runs in three places: CI (`app` job, before lint), pre-commit
+  (husky + lint-staged on `*.{ts,tsx,js,jsx,json,yml,yaml,md,sql,sh,toml}`),
+  and a Vitest test (`forbidden-name.test.ts`).
 
 ---
 
