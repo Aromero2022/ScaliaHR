@@ -49,6 +49,48 @@ export async function createTenant(input: CreateTenantInput) {
         `
       );
 
+      const bizUserId = await tx.$queryRaw<{ id: string }[]>(
+        Prisma.sql`SELECT id FROM public.users WHERE auth_uid = ${user.id}::uuid LIMIT 1`
+      );
+
+      if (bizUserId.length > 0) {
+        await tx.$executeRaw(
+          Prisma.sql`
+            WITH new_group AS (
+              INSERT INTO public.permission_groups (tenant_id, name, description)
+              VALUES (${tenant.id}::uuid, 'Administrators', 'Users with administrative access')
+              RETURNING id
+            ),
+            new_role AS (
+              INSERT INTO public.permission_roles (tenant_id, name, description, is_admin_role)
+              VALUES (${tenant.id}::uuid, 'Owner', 'Tenant owner with full control', true)
+              RETURNING id
+            ),
+            _perms AS (
+              INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
+              SELECT ${tenant.id}::uuid, r.id, p.key, p.act::public.rbp_action
+              FROM new_role r
+              CROSS JOIN (VALUES
+                ('admin_center.access',    'view'),
+                ('admin.manage_roles',     'edit'),
+                ('admin.manage_config',    'edit'),
+                ('admin.view_audit_logs',  'view'),
+                ('admin.manage_tenant',    'edit'),
+                ('admin.manage_billing',   'edit')
+              ) AS p(key, act)
+            ),
+            _grant AS (
+              INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
+              SELECT ${tenant.id}::uuid, r.id, g.id, 'all'::public.target_population_type
+              FROM new_role r, new_group g
+            )
+            INSERT INTO public.group_members (tenant_id, group_id, user_id)
+            SELECT ${tenant.id}::uuid, g.id, ${bizUserId[0].id}::uuid
+            FROM new_group g
+          `
+        );
+      }
+
       return tenant;
     });
 
