@@ -138,7 +138,7 @@ export class TestWorld {
       await this.db.query(
         `INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role, is_active)
          VALUES ($1, $2, $3, true)`,
-        [authId, id, role === "admin" ? "admin" : "member"],
+        [authId, id, role === "admin" ? "owner" : "employee"],
       );
       if (activeTenantSetting) {
         await this.db.query(

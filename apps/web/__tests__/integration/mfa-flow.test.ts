@@ -101,8 +101,8 @@ describe("MFA integration flow", () => {
 
   it("policy guards: AAL1 session is redirected, AAL2 is accepted", async () => {
     const tenant = await world.createTenant();
-    // createTenant assigns app_role "admin" which is NOT in MFA_REQUIRED_ROLES.
-    // Use addMember with "owner" role to test MFA-required policy paths.
+    // createTenant assigns app_role "owner" which IS in MFA_REQUIRED_ROLES.
+    // Use a separate addMember with "owner" to isolate the test user.
     const owner = await world.addMember(tenant.id, "owner");
 
     const client = createClient(env.supabaseUrl, env.anonKey, {

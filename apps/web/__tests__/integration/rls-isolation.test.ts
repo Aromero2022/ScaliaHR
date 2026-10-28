@@ -163,7 +163,7 @@ describe("custom_access_token_hook", () => {
       [tenantA.authUserId],
     );
     expect(rows[0].claims.tenant_id).toBe(tenantA.tenantId);
-    expect(rows[0].claims.app_role).toBe("admin");
+    expect(rows[0].claims.app_role).toBe("owner");
   });
 
   it("injects tenant_id from user_settings.active_tenant_id", () => {
