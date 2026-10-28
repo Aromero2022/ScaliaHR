@@ -49,6 +49,16 @@ jobs:
           echo "::error::owner_email requires load_seed when mode=reset. A reset wipes the database; without the seed there is no demo tenant to link the owner to."
           exit 1
 
+      - name: "Validate PRISMA_APP_PASSWORD secret"
+        env:
+          PRISMA_APP_PASSWORD: ${{ secrets.PRISMA_APP_PASSWORD }}
+        run: |
+          if [ -z "$PRISMA_APP_PASSWORD" ]; then
+            echo "::error::Secret PRISMA_APP_PASSWORD is missing or empty. The workflow needs it to set the prisma_app role password after migrations. Add it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "PRISMA_APP_PASSWORD secret is present."
+
       - name: "Reminder: access-token hook must be disabled"
         run: |
           MSG="Before this run: custom_access_token_hook must be DISABLED in the dashboard (Authentication -> Hooks). See docs/ARCHITECTURE.md (D9)."
@@ -262,7 +272,6 @@ jobs:
         run: psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql
 
       - name: "Remote: set prisma_app password"
-        if: env.PRISMA_APP_PASSWORD != ''
         env:
           PRISMA_APP_PASSWORD: ${{ secrets.PRISMA_APP_PASSWORD }}
         run: |
