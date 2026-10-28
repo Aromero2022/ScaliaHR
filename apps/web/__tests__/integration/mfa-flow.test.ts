@@ -101,20 +101,23 @@ describe("MFA integration flow", () => {
 
   it("policy guards: AAL1 session is redirected, AAL2 is accepted", async () => {
     const tenant = await world.createTenant();
-    const email = tenant.admin.email;
+    // createTenant assigns app_role "admin" which is NOT in MFA_REQUIRED_ROLES.
+    // Use addMember with "owner" role to test MFA-required policy paths.
+    const owner = await world.addMember(tenant.id, "owner");
 
     const client = createClient(env.supabaseUrl, env.anonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const { data: signIn } = await client.auth.signInWithPassword({
-      email,
+      email: owner.email,
       password: (world as unknown as { password: string }).password,
     });
     const aal1Claims = claimsOf(signIn.session!.access_token);
     const appRole = appRoleFromClaims(aal1Claims);
 
-    // Admin at AAL1 should require AAL2 on any path (MFA_REQUIRED_ROLES)
+    // Owner at AAL1 should require AAL2 on any path (MFA_REQUIRED_ROLES)
+    expect(appRole).toBe("owner");
     expect(requiresAal2("/dashboard", appRole)).toBe(true);
     expect(requiresAal2("/admin-center", appRole)).toBe(true);
 
@@ -144,8 +147,6 @@ describe("MFA integration flow", () => {
     // After AAL2 the policy accepts the session
     expect(aalFromClaims(aal2Claims)).toBe("aal2");
     expect(requiresAal2("/dashboard", aal2Role)).toBe(true);
-    // requiresAal2 returns true because the role requires it —
-    // the guard compares aal >= required: aal2 >= aal2 → allowed
   });
 
   it("rejects an invalid TOTP code and session stays AAL1", async () => {
