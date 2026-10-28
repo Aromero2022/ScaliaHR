@@ -152,6 +152,50 @@ describe("admin-center — tool guard (admin.manage_roles:edit)", () => {
   });
 });
 
+describe("admin-center — tool guard (admin.manage_config:edit)", () => {
+  it("owner with admin.manage_config is allowed", async () => {
+    const allowed = await canViaRbp(owner.userId, "admin.manage_config", "edit");
+    expect(allowed).toBe(true);
+  });
+
+  it("hr_admin with admin.manage_config is allowed", async () => {
+    const allowed = await canViaRbp(hrAdmin.userId, "admin.manage_config", "edit");
+    expect(allowed).toBe(true);
+  });
+
+  it("limitedAdmin without admin.manage_config is denied", async () => {
+    const allowed = await canViaRbp(limitedAdmin.userId, "admin.manage_config", "edit");
+    expect(allowed).toBe(false);
+  });
+
+  it("employee without any admin permission is denied", async () => {
+    const allowed = await canViaRbp(tenant.employee.userId, "admin.manage_config", "edit");
+    expect(allowed).toBe(false);
+  });
+});
+
+describe("admin-center — tool guard (admin.view_audit_logs:view)", () => {
+  it("owner with admin.view_audit_logs is allowed", async () => {
+    const allowed = await canViaRbp(owner.userId, "admin.view_audit_logs", "view");
+    expect(allowed).toBe(true);
+  });
+
+  it("hr_admin with admin.view_audit_logs is allowed", async () => {
+    const allowed = await canViaRbp(hrAdmin.userId, "admin.view_audit_logs", "view");
+    expect(allowed).toBe(true);
+  });
+
+  it("limitedAdmin without admin.view_audit_logs is denied", async () => {
+    const allowed = await canViaRbp(limitedAdmin.userId, "admin.view_audit_logs", "view");
+    expect(allowed).toBe(false);
+  });
+
+  it("employee without any admin permission is denied", async () => {
+    const allowed = await canViaRbp(tenant.employee.userId, "admin.view_audit_logs", "view");
+    expect(allowed).toBe(false);
+  });
+});
+
 describe("admin-center — RLS on admin data tables", () => {
   it("employee can read permission_roles for their tenant (SELECT is open)", async () => {
     const { data, error } = await tenant.employee.client
