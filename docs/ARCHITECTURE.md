@@ -404,3 +404,28 @@ database operations or migrations.
    `deleteRole`) gated by `admin.manage_roles:edit`.
 2. Wire the "Nuevo Rol" modal and inline-edit controls to these actions.
 3. Add integration tests that verify CRUD operations respect RBP guards.
+
+## Known Risk — Denial Tests Do Not Assert Rows Exist Before Checking Zero
+
+**Status:** Accepted (temporary). Registered 2026-10-29.
+
+**Affected component:** `apps/web/__tests__/integration/admin-center-authz.test.ts`
+and any integration test that asserts `expect(data ?? []).toEqual([])` as proof
+that RLS denied access (e.g., `audit_logs`, `system_configurations`).
+
+**Current state:** The denial assertions check that an employee's Supabase client
+receives zero rows. However, the tests do not first verify that at least one row
+exists for the tenant in that table. If the table happens to be empty, the test
+passes vacuously — it proves nothing about the RLS policy.
+
+**Risk:** A migration could silently drop the INSERT policy or the seed data that
+populates the table, and the denial tests would still pass, masking a real RLS
+regression.
+
+**Planned fix:**
+
+1. Before each denial assertion, run a positive-control query with the admin
+   client (`tenant.admin.client`) confirming `data.length > 0` for the same
+   table and tenant.
+2. Alternatively, insert a known row in `beforeAll` and assert it is visible
+   to the admin but not to the employee.
