@@ -12,7 +12,7 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from("users")
-    .select("*, job_informations(*), departments(*)")
+    .select("*, ec_job_information!ec_job_information_user_id_fkey(job_title, end_date), departments(name)")
     .eq("auth_uid", authUser.id)
     .single();
 
@@ -24,8 +24,13 @@ export default async function DashboardPage() {
     );
   }
 
-  const job = profile.job_informations;
-  const dept = profile.departments;
+  const ecJobs = Array.isArray(profile.ec_job_information)
+    ? profile.ec_job_information
+    : profile.ec_job_information ? [profile.ec_job_information] : [];
+  const currentJob = ecJobs.find(
+    (j: { end_date: string | null }) => j.end_date === null,
+  ) as { job_title: string } | undefined;
+  const dept = Array.isArray(profile.departments) ? profile.departments[0] : profile.departments;
 
   const { count: totalEmployees } = await supabase
     .from("users")
@@ -50,7 +55,7 @@ export default async function DashboardPage() {
           Bienvenido, {profile.first_name}
         </h1>
         <p className="mt-1 text-sm text-slate-400">
-          {job?.title ?? "Sin puesto asignado"} &middot;{" "}
+          {currentJob?.job_title ?? "Sin puesto asignado"} &middot;{" "}
           {dept?.name ?? "Sin departamento"}
         </p>
       </div>
@@ -90,9 +95,7 @@ export default async function DashboardPage() {
           <Field label="Employee ID" value={profile.employee_id ?? "—"} />
           <Field label="Estado" value={profile.status} />
           <Field label="Fecha de ingreso" value={profile.hire_date ? new Date(profile.hire_date).toLocaleDateString("es-ES") : "—"} />
-          <Field label="Job Code" value={job?.job_code ?? "—"} />
-          <Field label="Grade / Pay Band" value={`${job?.grade ?? "—"} / ${job?.pay_band ?? "—"}`} />
-          <Field label="Job Family" value={job?.job_family ?? "—"} />
+          <Field label="Puesto" value={currentJob?.job_title ?? "—"} />
           <Field label="Departamento" value={dept?.name ?? "—"} />
         </dl>
       </section>
