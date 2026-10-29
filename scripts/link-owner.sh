@@ -37,7 +37,7 @@ SELECT au.id, :'tenant'::uuid, :'email',
        coalesce(nullif(au.raw_user_meta_data->>'first_name', ''), 'Owner'),
        coalesce(nullif(au.raw_user_meta_data->>'last_name', ''), 'Account'),
        'ACTIVE', now(),
-       'OWN-' || lpad(floor(random() * 9999 + 1)::int::text, 4, '0'),
+       'OWN-' || lpad(abs(('x' || left(au.id::text, 8))::bit(32)::int % 9999 + 1)::text, 4, '0'),
        (SELECT id FROM public.departments WHERE tenant_id = :'tenant'::uuid ORDER BY created_at LIMIT 1)
 FROM auth.users au WHERE au.id = :'owner_id'::uuid
 ON CONFLICT (auth_uid) DO UPDATE SET
