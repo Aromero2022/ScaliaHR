@@ -28,26 +28,34 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Verified JWT claims: app_role and aal come from the token itself.
-  const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims ?? null;
-  const pathname = request.nextUrl.pathname;
+  // Validate session server-side and refresh the token when needed.
+  // getUser() is required so the cookie carries the latest JWT from the
+  // custom_access_token_hook (with app_role and tenant_id).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
+  const pathname = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
-  if (!claims && !isPublic) {
+  if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  if (claims && requiresAal2(pathname, appRoleFromClaims(claims)) && aalFromClaims(claims) !== "aal2") {
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    const url = request.nextUrl.clone();
-    url.pathname = mfaStepFor(aal?.nextLevel);
-    url.search = "";
-    url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+  if (user) {
+    const { data } = await supabase.auth.getClaims();
+    const claims = data?.claims ?? null;
+
+    if (claims && requiresAal2(pathname, appRoleFromClaims(claims)) && aalFromClaims(claims) !== "aal2") {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const url = request.nextUrl.clone();
+      url.pathname = mfaStepFor(aal?.nextLevel);
+      url.search = "";
+      url.searchParams.set("next", pathname);
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;
