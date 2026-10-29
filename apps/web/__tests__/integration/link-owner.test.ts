@@ -25,7 +25,7 @@ function deterministicEmployeeId(authId: string): string {
   const hex8 = authId.slice(0, 8);
   let val = parseInt(hex8, 16);
   if (val >= 0x80000000) val = val - 0x100000000;
-  const num = (Math.abs(val) % 9999) + 1;
+  const num = Math.abs((val % 9999) + 1);
   return `OWN-${String(num).padStart(4, "0")}`;
 }
 
