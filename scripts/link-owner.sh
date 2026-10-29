@@ -79,7 +79,7 @@ JOIN public.role_grants rg
 JOIN public.permission_roles pr
   ON pr.id = rg.role_id AND pr.tenant_id = rg.tenant_id
 WHERE u.auth_uid = :'owner_id'::uuid
-  AND lower(pr.name) = 'employee'
+  AND lower(pr.name) LIKE 'employee%'
 ON CONFLICT (group_id, user_id) DO NOTHING;
 
 -- Current EC records, only when the owner has none yet.

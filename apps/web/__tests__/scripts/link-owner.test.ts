@@ -35,7 +35,7 @@ describe("link-owner.sh completeness", () => {
   });
 
   it("also inserts group_members for the Employee role groups", () => {
-    expect(script).toMatch(/lower\(pr\.name\)\s*=\s*'employee'/);
+    expect(script).toMatch(/lower\(pr\.name\)\s*LIKE\s*'employee%'/);
   });
 
   it("creates ec_personal_information (idempotent)", () => {

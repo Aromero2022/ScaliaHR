@@ -22,8 +22,10 @@ afterAll(async () => {
 });
 
 function deterministicEmployeeId(authId: string): string {
-  const hex8 = authId.replace(/-/g, "").slice(0, 8);
-  const num = (parseInt(hex8, 16) % 9999) + 1;
+  const hex8 = authId.slice(0, 8);
+  let val = parseInt(hex8, 16);
+  if (val >= 0x80000000) val = val - 0x100000000;
+  const num = (Math.abs(val) % 9999) + 1;
   return `OWN-${String(num).padStart(4, "0")}`;
 }
 
@@ -88,7 +90,7 @@ async function linkOwnerSql(ownerId: string, email: string): Promise<void> {
      FROM public.users u
      JOIN public.role_grants rg ON rg.tenant_id = u.tenant_id
      JOIN public.permission_roles pr ON pr.id = rg.role_id AND pr.tenant_id = rg.tenant_id
-     WHERE u.auth_uid = $1::uuid AND lower(pr.name) = 'employee'
+     WHERE u.auth_uid = $1::uuid AND lower(pr.name) LIKE 'employee%'
      ON CONFLICT (group_id, user_id) DO NOTHING`,
     [ownerId],
   );
@@ -194,7 +196,7 @@ describe("link-owner integration", () => {
     );
     const roleNames = ownerGroups.map((r) => r.role_name.toLowerCase());
     expect(roleNames).toContain("owner");
-    expect(roleNames).toContain("employee");
+    expect(roleNames.some((n) => n.startsWith("employee"))).toBe(true);
   });
 
   it("grants admin_center.access view permission (can check)", async () => {
