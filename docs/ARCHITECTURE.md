@@ -272,6 +272,23 @@ lives in the dashboard, not in the database, so the reset does not change it.
 
 If the run fails, keep the hook disabled, fix the cause, and run the sync again.
 
+### What happens when the seed fails on the remote
+
+`supabase/seed.sql` runs inside a single transaction (`BEGIN … COMMIT`). If any
+statement fails (constraint violation, missing dependency, etc.) the entire seed
+is rolled back — the database keeps the schema applied by the migrations but
+contains no demo data.
+
+**Recovery:** fix the seed locally, verify with `supabase db reset`, push the fix,
+and run `db-remote-sync` again with `load_seed: true`. Because the seed uses
+`ON CONFLICT DO NOTHING` everywhere, re-running after a partial or rolled-back
+load is safe and idempotent.
+
+**CI safety net:** the `db-reset-test` job and the rehearsal phase both create the
+demo auth user `f0000000-0000-0000-0000-000000000001` before loading the seed, so
+conditional blocks guarded by `IF EXISTS (… auth.users …)` always execute and
+constraint violations surface before the workflow touches the remote database.
+
 ---
 
 ## D10 — ARCO: Suppression (`anonymize_user`)

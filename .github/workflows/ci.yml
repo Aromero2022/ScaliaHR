@@ -131,6 +131,22 @@ jobs:
       - name: Run reset sync script
         run: bash scripts/db-reset-sync.sh "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 
+      - name: Create demo auth user for seed coverage
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
+                                  email_confirmed_at, created_at, updated_at,
+                                  raw_app_meta_data, raw_user_meta_data, confirmation_token)
+          VALUES ('f0000000-0000-0000-0000-000000000001',
+                  '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+                  'elena.demo@acme-corp.test',
+                  crypt('DemoPass123!', gen_salt('bf')),
+                  now(), now(), now(),
+                  '{"provider":"email","providers":["email"]}'::jsonb,
+                  '{}'::jsonb, '')
+          ON CONFLICT (id) DO NOTHING;
+          SQL
+
       - name: Load seed (twice, idempotency)
         run: |
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/seed.sql
