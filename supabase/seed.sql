@@ -454,7 +454,7 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM auth.users WHERE id = 'f0000000-0000-0000-0000-000000000001') THEN
     INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role)
-    VALUES ('f0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'admin')
+    VALUES ('f0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'hr_admin')
     ON CONFLICT DO NOTHING;
 
     INSERT INTO public.user_settings (user_id, active_tenant_id)
