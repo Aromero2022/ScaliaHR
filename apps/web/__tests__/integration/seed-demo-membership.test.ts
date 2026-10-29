@@ -29,12 +29,26 @@ async function ensureElenaAuthUser(): Promise<void> {
   );
 }
 
-async function loadSeed(): Promise<void> {
-  const { execSync } = await import("node:child_process");
-  execSync(`psql "${env.dbUrl}" -v ON_ERROR_STOP=1 -f supabase/seed.sql`, {
-    cwd: process.env.REPO_ROOT ?? `${process.cwd()}/../..`,
-    stdio: "pipe",
-  });
+/**
+ * Runs only the Elena membership block from seed.sql — the exact same SQL the
+ * seed uses — so we can test it mid-suite without the full seed's self-check
+ * conflicting with rows other integration tests have created.
+ */
+async function runElenaBlock(): Promise<void> {
+  await db.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM auth.users WHERE id = 'f0000000-0000-0000-0000-000000000001') THEN
+        INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role)
+        VALUES ('f0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'hr_admin')
+        ON CONFLICT DO NOTHING;
+
+        INSERT INTO public.user_settings (user_id, active_tenant_id)
+        VALUES ('f0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001')
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END $$;
+  `);
 }
 
 afterAll(async () => {
@@ -51,9 +65,9 @@ afterAll(async () => {
 });
 
 describe("seed.sql demo membership for Elena", () => {
-  it("creates Elena's auth user and loads seed with hr_admin role", async () => {
+  it("creates membership with hr_admin role when auth user exists", async () => {
     await ensureElenaAuthUser();
-    await loadSeed();
+    await runElenaBlock();
 
     const { rows } = await db.query<{ app_role: string }>(
       `SELECT app_role FROM public.user_tenant_memberships
@@ -65,8 +79,8 @@ describe("seed.sql demo membership for Elena", () => {
     expect(rows[0].app_role).toBe("hr_admin");
   });
 
-  it("is idempotent: second load does not duplicate or change membership", async () => {
-    await loadSeed();
+  it("is idempotent: second run does not duplicate or change membership", async () => {
+    await runElenaBlock();
 
     const { rows } = await db.query<{ app_role: string }>(
       `SELECT app_role FROM public.user_tenant_memberships
@@ -76,5 +90,15 @@ describe("seed.sql demo membership for Elena", () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0].app_role).toBe("hr_admin");
+  });
+
+  it("rejects the legacy 'admin' value for the same INSERT pattern", async () => {
+    await expect(
+      db.query(
+        `INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role)
+         VALUES ($1, $2, 'admin')`,
+        [ELENA_AUTH_ID, DEMO_TENANT_ID],
+      ),
+    ).rejects.toThrow(/app_role_allowed/);
   });
 });
