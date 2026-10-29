@@ -28,7 +28,7 @@ export default async function EmployeesPage({
   let query = supabase
     .from("users")
     .select(
-      "id, first_name, last_name, email, employee_id, status, departments(name), positions(title), ec_job_information(job_title, end_date)",
+      "id, first_name, last_name, email, employee_id, status, departments(name), positions(title), ec_job_information!ec_job_information_user_id_fkey(job_title, end_date)",
       { count: "exact" }
     )
     .eq("status", "ACTIVE")
@@ -42,7 +42,24 @@ export default async function EmployeesPage({
     );
   }
 
-  const { data: employees, count } = await query;
+  const { data: employees, count, error: queryError } = await query;
+
+  if (queryError) {
+    console.error("[/employees] PostgREST query error:", queryError.message, queryError.details);
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Empleados</h1>
+        </div>
+        <div className="rounded-xl border border-red-800 bg-red-950/50 p-6 text-center">
+          <p className="text-sm text-red-300">
+            Error al cargar empleados: {queryError.message}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const total = count ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
