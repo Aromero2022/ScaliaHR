@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/supabase/claims";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
+import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
@@ -11,7 +12,7 @@ export default async function LmsPage() {
   }
 
   const flags = await getModuleFlags(claims.tenantId);
-  if (!flags.is_lms_active) {
+  if (isModuleRouteBlocked("/lms", flags)) {
     redirect("/dashboard");
   }
 

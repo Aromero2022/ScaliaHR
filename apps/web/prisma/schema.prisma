@@ -1453,7 +1453,7 @@ model user_settings {
 model user_tenant_memberships {
   user_id    String   @db.Uuid
   tenant_id  String   @db.Uuid
-  app_role   String   @default("member")
+  app_role   String   @default("employee")
   is_active  Boolean  @default(true)
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @default(now()) @db.Timestamptz(6)

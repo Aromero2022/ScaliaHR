@@ -1,6 +1,8 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getModuleFlags, type ModuleFlags } from "@/lib/tenant/get-module-flags";
+import { requireAuth } from "@/lib/supabase/claims";
+import { getModuleFlags } from "@/lib/tenant/get-module-flags";
+import type { ModuleFlags } from "@/lib/tenant/module-flags";
+import { can } from "@/lib/authz/can";
 import Sidebar from "@/components/sidebar";
 
 export default async function ProtectedLayout({
@@ -8,24 +10,32 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const claims = await requireAuth();
 
-  if (!user) {
-    redirect("/login");
+  let moduleFlags: ModuleFlags | null = null;
+  if (claims.tenantId) {
+    moduleFlags = await getModuleFlags(claims.tenantId);
   }
 
-  const tenantId = (user.app_metadata?.tenant_id as string) ?? null;
-  let moduleFlags: ModuleFlags | null = null;
-  if (tenantId) {
-    moduleFlags = await getModuleFlags(tenantId);
+  const grantedPermissions: string[] = [];
+
+  if (claims.tenantId) {
+    const supabase = await createClient();
+    const { data: bizUser } = await supabase
+      .from("users")
+      .select("id")
+      .eq("auth_uid", claims.userId)
+      .single();
+
+    if (bizUser) {
+      const { allowed } = await can(bizUser.id, "admin_center.access", "view");
+      if (allowed) grantedPermissions.push("admin_center.access");
+    }
   }
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar moduleFlags={moduleFlags} />
+      <Sidebar moduleFlags={moduleFlags} grantedPermissions={grantedPermissions} />
       <main className="flex-1 overflow-y-auto p-8">{children}</main>
     </div>
   );

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
+import { can } from "@/lib/authz/can";
 import Link from "next/link";
 import RoleManager from "@/components/role-manager";
 
@@ -24,6 +25,16 @@ export default async function ManageRolesPage() {
     data: { user: authUser },
   } = await supabase.auth.getUser();
   if (!authUser) redirect("/login");
+
+  const { data: bizUser } = await supabase
+    .from("users")
+    .select("id")
+    .eq("auth_uid", authUser.id)
+    .single();
+  if (!bizUser) redirect("/login");
+
+  const { allowed } = await can(bizUser.id, "admin.manage_roles", "edit");
+  if (!allowed) notFound();
 
   const { data: roles } = await supabase
     .from("permission_roles")

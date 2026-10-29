@@ -34,7 +34,7 @@ env:
 jobs:
   sync:
     name: "Sync remote DB (${{ inputs.mode }})"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: remote-db
     if: inputs.confirm == 'CONFIRM'
     env:
@@ -43,6 +43,22 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
 
     steps:
+      - name: "Validate inputs"
+        if: inputs.owner_email != '' && inputs.mode == 'reset' && !inputs.load_seed
+        run: |
+          echo "::error::owner_email requires load_seed when mode=reset. A reset wipes the database; without the seed there is no demo tenant to link the owner to."
+          exit 1
+
+      - name: "Validate PRISMA_APP_PASSWORD secret"
+        env:
+          PRISMA_APP_PASSWORD: ${{ secrets.PRISMA_APP_PASSWORD }}
+        run: |
+          if [ -z "$PRISMA_APP_PASSWORD" ]; then
+            echo "::error::Secret PRISMA_APP_PASSWORD is missing or empty. The workflow needs it to set the prisma_app role password after migrations. Add it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "PRISMA_APP_PASSWORD secret is present."
+
       - name: "Reminder: access-token hook must be disabled"
         run: |
           MSG="Before this run: custom_access_token_hook must be DISABLED in the dashboard (Authentication -> Hooks). See docs/ARCHITECTURE.md (D9)."
@@ -50,9 +66,9 @@ jobs:
           echo "### Auth hook" >> "$GITHUB_STEP_SUMMARY"
           echo "$MSG" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         with:
           version: latest
 
@@ -71,7 +87,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload backup
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: db-backup-${{ github.run_id }}
           path: backup/
@@ -160,7 +176,7 @@ jobs:
         if: inputs.owner_email != '' && (inputs.mode == 'reset' || inputs.load_seed)
         run: bash scripts/require-demo-tenant.sh "$LOCAL_DB_URL"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -255,6 +271,13 @@ jobs:
         if: inputs.load_seed
         run: psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql
 
+      - name: "Remote: set prisma_app password"
+        env:
+          PRISMA_APP_PASSWORD: ${{ secrets.PRISMA_APP_PASSWORD }}
+        run: |
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -c "ALTER ROLE prisma_app WITH PASSWORD '$(printf '%s' "$PRISMA_APP_PASSWORD" | sed "s/'/''/g")';"
+          echo "prisma_app password set from PRISMA_APP_PASSWORD secret."
+
       # ──────────────────────────────────────────────────────────
       # PHASE 5 — Link owner (optional)
       # ──────────────────────────────────────────────────────────
@@ -263,41 +286,7 @@ jobs:
         if: inputs.owner_email != ''
         env:
           OWNER_EMAIL: ${{ inputs.owner_email }}
-        run: |
-          bash scripts/require-demo-tenant.sh "$SUPABASE_DB_URL"
-
-          echo "Looking up auth.users for: $OWNER_EMAIL"
-          OWNER_ID=$(psql "$SUPABASE_DB_URL" -t -A -v ON_ERROR_STOP=1 -v email="$OWNER_EMAIL" <<'SQL'
-          SELECT id FROM auth.users WHERE email = :'email' LIMIT 1;
-          SQL
-          )
-          if [ -z "$OWNER_ID" ]; then
-            echo "::warning::No auth.users record found for $OWNER_EMAIL. Skipping owner link."
-            exit 0
-          fi
-          echo "Found auth user: $OWNER_ID"
-
-          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
-            -v owner_id="$OWNER_ID" -v tenant="$DEMO_TENANT_ID" -v email="$OWNER_EMAIL" <<'SQL'
-          INSERT INTO public.users (id, auth_uid, tenant_id, email, first_name, last_name, status)
-          VALUES (gen_random_uuid(), :'owner_id', :'tenant', :'email', 'Owner', 'Account', 'ACTIVE')
-          ON CONFLICT (auth_uid) DO UPDATE SET
-            tenant_id = EXCLUDED.tenant_id,
-            status    = 'ACTIVE';
-
-          INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role, is_active)
-          VALUES (:'owner_id', :'tenant', 'owner', true)
-          ON CONFLICT (user_id, tenant_id) DO UPDATE SET
-            app_role  = 'owner',
-            is_active = true;
-
-          INSERT INTO public.user_settings (user_id, active_tenant_id)
-          VALUES (:'owner_id', :'tenant')
-          ON CONFLICT (user_id) DO UPDATE SET
-            active_tenant_id = EXCLUDED.active_tenant_id;
-          SQL
-
-          echo "Owner linked: $OWNER_EMAIL → tenant $DEMO_TENANT_ID as 'owner'"
+        run: bash scripts/link-owner.sh "$SUPABASE_DB_URL" "$OWNER_EMAIL"
 
       - name: "Reminder: access-token hook after the sync"
         if: always()
