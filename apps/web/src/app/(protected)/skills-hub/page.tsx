@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/claims";
 import { redirect, notFound } from "next/navigation";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
@@ -36,21 +37,19 @@ interface DirectReportSkillRow {
 }
 
 export default async function SkillsHubPage() {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
+  const claims = await requireAuth();
+  if (!claims.tenantId) redirect("/login");
 
+  const supabase = await createClient();
   const { data: bizUser } = await supabase
     .from("users")
-    .select("id, tenant_id, position_id")
-    .eq("auth_uid", authUser.id)
+    .select("id, position_id")
+    .eq("auth_uid", claims.userId)
     .single();
 
   if (!bizUser) redirect("/login");
 
-  const flags = await getModuleFlags(bizUser.tenant_id);
+  const flags = await getModuleFlags(claims.tenantId);
   if (isModuleRouteBlocked("/skills-hub", flags)) {
     notFound();
   }
@@ -72,7 +71,7 @@ export default async function SkillsHubPage() {
     }
   }
 
-  const canViewTeam = await can(bizUser.id, "tih.employee_skills", "view", "check-any");
+  const canViewTeam = await can(bizUser.id, claims.tenantId, "tih.employee_skills", "view", "check-any");
   const isManager = canViewTeam.allowed;
 
   const [ontologyRes, mySkillsRes, roleSkillsRes] = await Promise.all([

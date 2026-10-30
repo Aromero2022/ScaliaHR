@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/claims";
 import { redirect, notFound } from "next/navigation";
 import { can } from "@/lib/authz/can";
 import Link from "next/link";
@@ -23,23 +24,21 @@ interface AuditRow {
 }
 
 export default async function AdminCenterPage() {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
+  const claims = await requireAuth();
+  if (!claims.tenantId) redirect("/login");
 
+  const supabase = await createClient();
   const { data: bizUser } = await supabase
     .from("users")
     .select("id")
-    .eq("auth_uid", authUser.id)
+    .eq("auth_uid", claims.userId)
     .single();
   if (!bizUser) redirect("/login");
 
   const [configPerm, auditPerm, rolesPerm] = await Promise.all([
-    can(bizUser.id, "admin.manage_config", "edit"),
-    can(bizUser.id, "admin.view_audit_logs", "view"),
-    can(bizUser.id, "admin.manage_roles", "edit"),
+    can(bizUser.id, claims.tenantId, "admin.manage_config", "edit"),
+    can(bizUser.id, claims.tenantId, "admin.view_audit_logs", "view"),
+    can(bizUser.id, claims.tenantId, "admin.manage_roles", "edit"),
   ]);
 
   if (!configPerm.allowed && !auditPerm.allowed && !rolesPerm.allowed) {

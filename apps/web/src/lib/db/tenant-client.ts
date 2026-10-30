@@ -37,4 +37,5 @@ export async function withTenant<T>(
   });
 }
 
+export type { PrismaClient };
 export { prisma, Prisma };

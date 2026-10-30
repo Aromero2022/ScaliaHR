@@ -520,3 +520,31 @@ expectation of self-service that the system does not deliver.
 3. Hide or disable the admin processing UI for non-admin roles.
 4. Gate the menu visibility by `can(actor, "arco.request", "view")` so it
    only appears for users who can do something with it.
+
+## Known Risk — `can()` Receives `tenantId` as a Parameter
+
+**Status:** Accepted (temporary). Registered 2026-10-30.
+
+**Affected component:** `apps/web/src/lib/authz/can.ts` — the `can()` function
+and all its callers.
+
+**Current state:** `can(userId, tenantId, permissionKey, action, ...)` receives
+`tenantId` as an explicit parameter. Today every caller obtains this value from
+`getClaims()` (the verified JWT `tenant_id` claim), which is correct. However,
+`can()` itself does not verify the origin of the `tenantId` it receives — it
+trusts whatever the caller passes and forwards it to `withTenant()`, which sets
+the RLS context for the queries.
+
+**Risk:** A future caller could inadvertently pass a `tenantId` from an
+unverified source (user input, a database query without RLS, a URL parameter),
+allowing cross-tenant authorization bypass: the user would be evaluated against
+another tenant's permission matrix.
+
+**Planned fix:**
+
+1. Have `can()` read the tenant directly from the session's JWT claim
+   internally, ignoring the parameter, or validate that the passed `tenantId`
+   matches the session claim before proceeding.
+2. Alternatively, replace the `tenantId` parameter with a session/claims
+   object that `can()` extracts the tenant from, making it impossible to pass
+   an arbitrary value.

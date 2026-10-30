@@ -1,19 +1,18 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getClaims } from "@/lib/supabase/claims";
 import { revalidatePath } from "next/cache";
 
 export async function createGoal(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) return { error: "No autenticado" };
+  const claims = await getClaims();
+  if (!claims?.tenantId) return { error: "No autenticado" };
 
+  const supabase = await createClient();
   const { data: bizUser } = await supabase
     .from("users")
-    .select("id, tenant_id")
-    .eq("auth_uid", authUser.id)
+    .select("id")
+    .eq("auth_uid", claims.userId)
     .single();
 
   if (!bizUser) return { error: "Usuario no encontrado" };
@@ -32,7 +31,7 @@ export async function createGoal(formData: FormData) {
   }
 
   const { error } = await supabase.from("performance_goals").insert({
-    tenant_id: bizUser.tenant_id,
+    tenant_id: claims.tenantId,
     user_id: bizUser.id,
     title,
     description: description || null,
@@ -53,16 +52,14 @@ export async function createGoal(formData: FormData) {
 }
 
 export async function sendFeedback(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) return { error: "No autenticado" };
+  const claims = await getClaims();
+  if (!claims?.tenantId) return { error: "No autenticado" };
 
+  const supabase = await createClient();
   const { data: bizUser } = await supabase
     .from("users")
-    .select("id, tenant_id")
-    .eq("auth_uid", authUser.id)
+    .select("id")
+    .eq("auth_uid", claims.userId)
     .single();
 
   if (!bizUser) return { error: "Usuario no encontrado" };
@@ -77,7 +74,7 @@ export async function sendFeedback(formData: FormData) {
   }
 
   const { error } = await supabase.from("continuous_feedbacks").insert({
-    tenant_id: bizUser.tenant_id,
+    tenant_id: claims.tenantId,
     author_id: bizUser.id,
     subject_id: subjectId,
     content,

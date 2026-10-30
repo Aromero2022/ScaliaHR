@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getClaims } from "@/lib/supabase/claims";
 import { revalidatePath } from "next/cache";
 import { can } from "@/lib/authz/can";
 import { writeAuditLog } from "@/lib/audit/log";
@@ -41,21 +42,19 @@ const JobRoleSkillSchema = z.object({
 });
 
 async function getAuthContext() {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) return null;
+  const claims = await getClaims();
+  if (!claims?.tenantId) return null;
 
-  const { data: bizUser } = await supabase
+  const supabase = await createClient();
+  const { data: profile } = await supabase
     .from("users")
-    .select("id, tenant_id")
-    .eq("auth_uid", authUser.id)
+    .select("id")
+    .eq("auth_uid", claims.userId)
     .single();
 
-  if (!bizUser) return null;
+  if (!profile) return null;
 
-  return { supabase, authUser, bizUser };
+  return { supabase, actorId: profile.id, tenantId: claims.tenantId };
 }
 
 export async function updateSelfAssessment(
@@ -67,10 +66,10 @@ export async function updateSelfAssessment(
   const ctx = await getAuthContext();
   if (!ctx) return { error: "No autenticado" };
 
-  const { supabase, bizUser } = ctx;
+  const { supabase, actorId, tenantId } = ctx;
   const { skillId, level } = parsed.data;
 
-  const perm = await can(bizUser.id, "tih.employee_skills", "edit");
+  const perm = await can(actorId, tenantId, "tih.employee_skills", "edit");
   if (!perm.allowed) return { error: "Sin permiso para evaluar habilidades" };
 
   const { error } = await supabase.rpc("upsert_self_assessment", {
@@ -115,15 +114,15 @@ export async function createSkill(input: unknown): Promise<ActionResult> {
   const ctx = await getAuthContext();
   if (!ctx) return { error: "No autenticado" };
 
-  const { supabase, bizUser } = ctx;
+  const { supabase, actorId, tenantId } = ctx;
 
-  const perm = await can(bizUser.id, "tih.ontology", "edit");
+  const perm = await can(actorId, tenantId, "tih.ontology", "edit");
   if (!perm.allowed) return { error: "Sin permiso para gestionar ontología" };
 
   const { data, error } = await supabase
     .from("skill_ontology")
     .insert({
-      tenant_id: bizUser.tenant_id,
+      tenant_id: tenantId,
       code: parsed.data.code,
       name: parsed.data.name,
       description: parsed.data.description ?? null,
@@ -135,8 +134,8 @@ export async function createSkill(input: unknown): Promise<ActionResult> {
   if (error) return { error: error.message };
 
   await writeAuditLog({
-    tenantId: bizUser.tenant_id,
-    actorId: bizUser.id,
+    tenantId: tenantId,
+    actorId: actorId,
     action: "tih.ontology.create",
     entity: "skill_ontology",
     entityId: data.id,
@@ -154,9 +153,9 @@ export async function updateSkill(input: unknown): Promise<ActionResult> {
   const ctx = await getAuthContext();
   if (!ctx) return { error: "No autenticado" };
 
-  const { supabase, bizUser } = ctx;
+  const { supabase, actorId, tenantId } = ctx;
 
-  const perm = await can(bizUser.id, "tih.ontology", "edit");
+  const perm = await can(actorId, tenantId, "tih.ontology", "edit");
   if (!perm.allowed) return { error: "Sin permiso para gestionar ontología" };
 
   const { skillId, ...updates } = parsed.data;
@@ -165,7 +164,7 @@ export async function updateSkill(input: unknown): Promise<ActionResult> {
     .from("skill_ontology")
     .select("name, description, category, is_active")
     .eq("id", skillId)
-    .eq("tenant_id", bizUser.tenant_id)
+    .eq("tenant_id", tenantId)
     .single();
 
   if (!before) return { error: "Habilidad no encontrada" };
@@ -182,7 +181,7 @@ export async function updateSkill(input: unknown): Promise<ActionResult> {
     .from("skill_ontology")
     .update(payload)
     .eq("id", skillId)
-    .eq("tenant_id", bizUser.tenant_id);
+    .eq("tenant_id", tenantId);
 
   if (error) return { error: error.message };
 
@@ -196,8 +195,8 @@ export async function updateSkill(input: unknown): Promise<ActionResult> {
 
   if (Object.keys(diff).length > 0) {
     await writeAuditLog({
-      tenantId: bizUser.tenant_id,
-      actorId: bizUser.id,
+      tenantId: tenantId,
+      actorId: actorId,
       action: "tih.ontology.update",
       entity: "skill_ontology",
       entityId: skillId,
@@ -218,9 +217,9 @@ export async function updateJobRoleSkill(
   const ctx = await getAuthContext();
   if (!ctx) return { error: "No autenticado" };
 
-  const { supabase, bizUser } = ctx;
+  const { supabase, actorId, tenantId } = ctx;
 
-  const perm = await can(bizUser.id, "tih.job_requirements", "edit");
+  const perm = await can(actorId, tenantId, "tih.job_requirements", "edit");
   if (!perm.allowed)
     return { error: "Sin permiso para gestionar requisitos de puesto" };
 
@@ -229,7 +228,7 @@ export async function updateJobRoleSkill(
   const { data: existing } = await supabase
     .from("job_role_skills")
     .select("required_proficiency_level")
-    .eq("tenant_id", bizUser.tenant_id)
+    .eq("tenant_id", tenantId)
     .eq("job_role_id", jobRoleId)
     .eq("skill_id", skillId)
     .maybeSingle();
@@ -238,7 +237,7 @@ export async function updateJobRoleSkill(
 
   const { error } = await supabase.from("job_role_skills").upsert(
     {
-      tenant_id: bizUser.tenant_id,
+      tenant_id: tenantId,
       job_role_id: jobRoleId,
       skill_id: skillId,
       required_proficiency_level: requiredProficiencyLevel,
@@ -249,8 +248,8 @@ export async function updateJobRoleSkill(
   if (error) return { error: error.message };
 
   await writeAuditLog({
-    tenantId: bizUser.tenant_id,
-    actorId: bizUser.id,
+    tenantId: tenantId,
+    actorId: actorId,
     action: "tih.job_requirements.upsert",
     entity: "job_role_skills",
     entityId: `${jobRoleId}:${skillId}`,

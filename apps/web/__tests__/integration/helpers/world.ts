@@ -179,7 +179,9 @@ export class TestWorld {
     await this.db.query(
       `INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
        VALUES ($1, $2, 'employee_profile', 'view'), ($1, $3, 'employee_profile', 'view'),
-              ($1, $2, 'employee_profile', 'edit')`,
+              ($1, $2, 'employee_profile', 'edit'),
+              ($1, $2, 'admin_center.access', 'view'),
+              ($1, $2, 'arco.manage', 'view')`,
       [id, adminRoleId, employeeRoleId],
     );
     await this.db.query(

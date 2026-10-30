@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getClaims } from "@/lib/supabase/claims";
 import { writeAuditLog } from "@/lib/audit/log";
 import { can } from "@/lib/authz/can";
 import { createHash } from "crypto";
@@ -14,22 +15,19 @@ type ActionResult<T = unknown> =
   | { success: false; error: string };
 
 async function getActorContext() {
+  const claims = await getClaims();
+  if (!claims?.tenantId) return null;
+
   const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) return null;
-
   const { data: profile } = await supabase
     .from("users")
-    .select("id, tenant_id")
-    .eq("auth_uid", authUser.id)
+    .select("id")
+    .eq("auth_uid", claims.userId)
     .single();
 
   if (!profile) return null;
 
-  return { supabase, actorId: profile.id, tenantId: profile.tenant_id };
+  return { supabase, actorId: profile.id, tenantId: claims.tenantId };
 }
 
 // ─── Create ARCO Request ──────────────────────────────────────
@@ -51,7 +49,7 @@ export async function createArcoRequest(
   const ctx = await getActorContext();
   if (!ctx) return { success: false, error: "No autenticado" };
 
-  const { allowed } = await can(ctx.actorId, "arco.manage", "view");
+  const { allowed } = await can(ctx.actorId, ctx.tenantId, "arco.manage", "view");
   if (!allowed) return { success: false, error: "Sin permiso para gestionar ARCO" };
 
   const { data: dueDate } = await ctx.supabase.rpc("compute_arco_due_date");
@@ -106,7 +104,7 @@ export async function processArcoRequest(
   const ctx = await getActorContext();
   if (!ctx) return { success: false, error: "No autenticado" };
 
-  const { allowed } = await can(ctx.actorId, "arco.manage", "view");
+  const { allowed } = await can(ctx.actorId, ctx.tenantId, "arco.manage", "view");
   if (!allowed) return { success: false, error: "Sin permiso para gestionar ARCO" };
 
   const { data: request } = await ctx.supabase
@@ -225,7 +223,7 @@ export async function exportUserData(
   const ctx = await getActorContext();
   if (!ctx) return { success: false, error: "No autenticado" };
 
-  const { allowed } = await can(ctx.actorId, "arco.manage", "view");
+  const { allowed } = await can(ctx.actorId, ctx.tenantId, "arco.manage", "view");
   if (!allowed) return { success: false, error: "Sin permiso para gestionar ARCO" };
 
   const { data, error } = await ctx.supabase.rpc("export_user_data", {
