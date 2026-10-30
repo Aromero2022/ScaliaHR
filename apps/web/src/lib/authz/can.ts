@@ -1,4 +1,4 @@
-import { Prisma, withTenant } from "@/lib/db/tenant-client";
+import { Prisma, prisma } from "@/lib/db/tenant-client";
 import type { PrismaClient } from "@/lib/db/tenant-client";
 
 type RbpAction = "view" | "edit";
@@ -77,7 +77,9 @@ async function evaluate(
   targetUserId?: string,
   fieldKey?: string
 ): Promise<CanResult> {
-  return withTenant({ tenantId }, async (tx) => {
+  // BUG REPRODUCTION: no withTenant() — RLS blocks everything
+  const tx = prisma as unknown as PrismaClient;
+  {
     const grants = await findUserGrants(tx, userId, tenantId);
 
     if (grants.length === 0) {
@@ -156,5 +158,5 @@ async function evaluate(
     }
 
     return { allowed: false, reason: "target_population_mismatch" };
-  });
+  }
 }
