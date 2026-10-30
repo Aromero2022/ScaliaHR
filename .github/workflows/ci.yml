@@ -89,9 +89,6 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
 
-      - name: Prisma generate (for integration tests)
-        run: cd apps/web && npx prisma generate
-
       - name: Run integration tests
         run: |
           bash scripts/run-integration-tests.sh
@@ -154,9 +151,6 @@ jobs:
         run: |
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/seed.sql
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/seed.sql
-
-      - name: Prisma generate (for integration tests)
-        run: cd apps/web && npx prisma generate
 
       - name: Run integration tests
         run: |
