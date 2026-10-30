@@ -446,3 +446,77 @@ regression.
    table and tenant.
 2. Alternatively, insert a known row in `beforeAll` and assert it is visible
    to the admin but not to the employee.
+
+## Known Risk — Integration Tests Duplicate Script SQL Instead of Running It
+
+**Status:** Accepted (temporary). Registered 2026-10-30.
+
+**Affected tests:** `__tests__/integration/link-owner.test.ts` and the seed
+fixture in `__tests__/integration/helpers/world.ts` (`createTenant`).
+
+**Current state:** The link-owner integration test contains a `linkOwnerSql()`
+helper that reproduces the SQL from `scripts/link-owner.sh` as parameterized
+queries in TypeScript. Similarly, the seed setup in `world.ts` replicates
+parts of `supabase/seed.sql` manually. Neither test actually invokes the
+original script or seed file.
+
+**Risk:** If the script or seed drifts (new columns, changed role names,
+additional inserts), the test's copy stays stale and gives a false green.
+The Employee role name mismatch (`'employee'` vs `'Employee (Self-Service)'`)
+was an instance of this drift.
+
+**Planned fix:**
+
+1. `link-owner.test.ts` should shell out to `bash scripts/link-owner.sh`
+   with the test DB URL and assert the results, instead of duplicating SQL.
+2. The seed fixture should run `psql -f supabase/seed.sql` or source the
+   relevant blocks, not hand-write equivalent INSERT statements.
+
+## Known Risk — ~35 Supabase Queries Ignore Returned Errors
+
+**Status:** Accepted (temporary). Registered 2026-10-30.
+
+**Affected files:** ~15 files across `apps/web/src/`, primarily in page
+components (`employees/page.tsx`, `dashboard/page.tsx`, `profile/page.tsx`,
+`admin-center/page.tsx`, etc.) and some Server Actions.
+
+**Current state:** Many `.from(...).select(...)` calls destructure only
+`{ data }` and never check `error`. A failed query silently returns `null`
+data, rendering an empty page or quietly skipping logic instead of surfacing
+the problem.
+
+**Risk:** RLS misconfigurations, network issues, schema changes, or
+PostgREST errors are masked. The user sees an empty list and assumes there
+is no data, when in fact the query failed.
+
+**Planned fix:**
+
+1. Add a shared `assertSupabaseResult()` helper that throws on non-null
+   `error` and returns typed `data`.
+2. Wrap existing queries incrementally, starting with the pages that
+   display employee or configuration data.
+3. Add error boundaries or toast notifications for query failures.
+
+## Known Risk — ARCO Self-Service Not Yet Implemented
+
+**Status:** Accepted (deferred to DRTM phase). Registered 2026-10-30.
+
+**Current state:** The "Derechos ARCO" menu item is visible to all
+authenticated users, but every Server Action (`createArcoRequest`,
+`processArcoRequest`, `exportUserData`) gates access with
+`can(actorId, "arco.manage", "view")`, which only admin roles hold. An
+employee who clicks the menu sees an empty page or an error.
+
+**Risk:** Employees cannot exercise their ARCO rights (access, rectification,
+cancellation, opposition) through the UI. The menu entry creates the
+expectation of self-service that the system does not deliver.
+
+**Planned fix (DRTM — Data Retention & Transparency Module):**
+
+1. Split permissions: `arco.request` (employee: create and view own requests)
+   vs `arco.manage` (admin: process all requests).
+2. Add a self-service form where the employee creates a request for their own
+   data, scoped by `target_population = 'self'`.
+3. Hide or disable the admin processing UI for non-admin roles.
+4. Gate the menu visibility by `can(actor, "arco.request", "view")` so it
+   only appears for users who can do something with it.
