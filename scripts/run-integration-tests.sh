@@ -12,6 +12,8 @@ source scripts/supabase-test-env.sh
 REPORT="$(mktemp -d)/integration-report.json"
 
 cd apps/web
+npx prisma generate --no-hints
+
 set +e
 npx vitest run --config vitest.integration.config.ts \
   --reporter=default --reporter=json --outputFile.json="$REPORT"
@@ -28,11 +30,21 @@ const report = require(process.argv[2]);
 const total = report.numTotalTests;
 const passed = report.numPassedTests;
 const failed = report.numFailedTests;
+const failedSuites = report.numFailedTestSuites || 0;
 const skipped = report.numPendingTests + report.numTodoTests;
-console.log(`Integration tests: total=${total} passed=${passed} failed=${failed} skipped=${skipped}`);
+console.log(`Integration tests: total=${total} passed=${passed} failed=${failed} failedSuites=${failedSuites} skipped=${skipped}`);
 let ok = true;
 if (total === 0) {
   console.log("::error::No integration tests were collected");
+  ok = false;
+}
+if (failedSuites > 0) {
+  for (const file of report.testResults) {
+    if (file.status === "failed" && file.assertionResults.length === 0) {
+      console.log(`::error::Suite failed to load: ${file.name} — ${file.message.split('\n')[0]}`);
+    }
+  }
+  console.log(`::error::${failedSuites} test suite(s) failed (includes suites that did not load)`);
   ok = false;
 }
 if (skipped > 0) {
