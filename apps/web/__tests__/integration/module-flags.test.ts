@@ -188,7 +188,7 @@ describe("module flags", () => {
       [tenant.id],
     );
     const flags = toModuleFlags(rows[0] as Record<string, unknown>);
-    const perms = new Set(["admin_center.access"]);
+    const perms = new Set(["admin_center.access", "arco.manage"]);
     const visible = filterNavByFlags(NAV_ITEMS, flags, perms);
     const hrefs = visible.map((i) => i.href);
 
