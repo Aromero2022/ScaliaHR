@@ -72,6 +72,7 @@ export async function createTenant(input: CreateTenantInput) {
               FROM new_role r
               CROSS JOIN (VALUES
                 ('admin_center.access',    'view'),
+                ('arco.manage',            'view'),
                 ('admin.manage_roles',     'edit'),
                 ('admin.manage_config',    'edit'),
                 ('admin.view_audit_logs',  'view'),
