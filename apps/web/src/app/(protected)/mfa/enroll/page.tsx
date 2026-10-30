@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeNextPath } from "@/lib/auth/mfa-policy";
@@ -42,7 +41,7 @@ export default function MfaEnrollPage() {
         return;
       }
       setFactorId(data.id);
-      setQrCode(data.totp.qr_code);
+      setQrCode(data.totp.qr_code.trim());
       setSecret(data.totp.secret);
     }
     enroll();
@@ -90,7 +89,8 @@ export default function MfaEnrollPage() {
 
       {qrCode && (
         <div className="flex justify-center rounded-xl border border-slate-800 bg-white p-6">
-          <Image src={qrCode} alt="QR Code" width={200} height={200} unoptimized />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={qrCode} alt="QR Code" width={200} height={200} />
         </div>
       )}
 

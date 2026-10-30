@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const auth = {
+  getUser: vi.fn(),
   getClaims: vi.fn(),
   mfa: { getAuthenticatorAssuranceLevel: vi.fn() },
 };
@@ -13,6 +14,10 @@ vi.mock("@supabase/ssr", () => ({
 import { updateSession } from "@/lib/supabase/middleware";
 
 function session(claims: Record<string, unknown> | null, nextLevel: "aal1" | "aal2" = "aal1") {
+  auth.getUser.mockResolvedValue({
+    data: { user: claims ? { id: claims.sub } : null },
+    error: claims ? null : { message: "not authenticated" },
+  });
   auth.getClaims.mockResolvedValue({ data: claims && { claims }, error: null });
   auth.mfa.getAuthenticatorAssuranceLevel.mockResolvedValue({
     data: { currentLevel: claims?.aal ?? null, nextLevel },
@@ -79,5 +84,22 @@ describe("middleware MFA policy", () => {
     session({ ...base, app_role: "owner" });
     expect(await visit("/mfa/enroll")).toBeNull();
     expect(await visit("/mfa/verify")).toBeNull();
+  });
+
+  it("calls getUser() before getClaims() to validate and refresh the session", async () => {
+    session({ ...base, app_role: "owner" });
+    await visit("/dashboard");
+    const getUserOrder = auth.getUser.mock.invocationCallOrder[0];
+    const getClaimsOrder = auth.getClaims.mock.invocationCallOrder[0];
+    expect(getUserOrder).toBeLessThan(getClaimsOrder);
+  });
+
+  it("redirects to login when getUser returns null (even if getClaims would succeed)", async () => {
+    auth.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    auth.getClaims.mockResolvedValue({
+      data: { claims: { ...base, app_role: "owner" } },
+      error: null,
+    });
+    expect((await visit("/dashboard"))?.pathname).toBe("/login");
   });
 });

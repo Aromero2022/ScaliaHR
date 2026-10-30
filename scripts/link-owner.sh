@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Links an existing auth.users account to the demo tenant as 'owner':
-# public.users row, membership, active tenant and the owner's current
-# Employee Central records (ec_personal_information, ec_job_information).
+# public.users row, membership, active tenant, the owner's current
+# Employee Central records (ec_personal_information, ec_job_information),
+# and RBP group memberships (via role_grants for the Owner role).
 # Idempotent: running it again changes nothing.
 # Usage: scripts/link-owner.sh <DB_URL> <OWNER_EMAIL>
 set -euo pipefail
@@ -30,15 +31,20 @@ UPDATE public.users SET auth_uid = :'owner_id'::uuid, status = 'ACTIVE', updated
 WHERE tenant_id = :'tenant'::uuid AND lower(email) = lower(:'email') AND auth_uid IS NULL
   AND NOT EXISTS (SELECT 1 FROM public.users WHERE auth_uid = :'owner_id'::uuid);
 
-INSERT INTO public.users (auth_uid, tenant_id, email, first_name, last_name, status, hire_date)
+-- Generate employee_id if the tenant has a sequence-based convention.
+INSERT INTO public.users (auth_uid, tenant_id, email, first_name, last_name, status, hire_date, employee_id, department_id)
 SELECT au.id, :'tenant'::uuid, :'email',
        coalesce(nullif(au.raw_user_meta_data->>'first_name', ''), 'Owner'),
        coalesce(nullif(au.raw_user_meta_data->>'last_name', ''), 'Account'),
-       'ACTIVE', now()
+       'ACTIVE', now(),
+       'OWN-' || lpad(abs(('x' || left(au.id::text, 8))::bit(32)::int % 9999 + 1)::text, 4, '0'),
+       (SELECT id FROM public.departments WHERE tenant_id = :'tenant'::uuid ORDER BY created_at LIMIT 1)
 FROM auth.users au WHERE au.id = :'owner_id'::uuid
 ON CONFLICT (auth_uid) DO UPDATE SET
-  tenant_id = EXCLUDED.tenant_id,
-  status    = 'ACTIVE';
+  tenant_id     = EXCLUDED.tenant_id,
+  status        = 'ACTIVE',
+  employee_id   = COALESCE(public.users.employee_id, EXCLUDED.employee_id),
+  department_id = COALESCE(public.users.department_id, EXCLUDED.department_id);
 
 INSERT INTO public.user_tenant_memberships (user_id, tenant_id, app_role, is_active)
 VALUES (:'owner_id'::uuid, :'tenant'::uuid, 'owner', true)
@@ -51,6 +57,31 @@ VALUES (:'owner_id'::uuid, :'tenant'::uuid)
 ON CONFLICT (user_id) DO UPDATE SET
   active_tenant_id = EXCLUDED.active_tenant_id;
 
+-- RBP: add the owner to every permission group that the Owner role grants to.
+-- This discovers groups dynamically via role_grants instead of hardcoding UUIDs.
+INSERT INTO public.group_members (tenant_id, group_id, user_id)
+SELECT rg.tenant_id, rg.granted_group_id, u.id
+FROM public.users u
+JOIN public.role_grants rg
+  ON rg.tenant_id = u.tenant_id
+JOIN public.permission_roles pr
+  ON pr.id = rg.role_id AND pr.tenant_id = rg.tenant_id
+WHERE u.auth_uid = :'owner_id'::uuid
+  AND lower(pr.name) = 'owner'
+ON CONFLICT (group_id, user_id) DO NOTHING;
+
+-- Also add to the "All Employees" group (the group granted the Employee role).
+INSERT INTO public.group_members (tenant_id, group_id, user_id)
+SELECT rg.tenant_id, rg.granted_group_id, u.id
+FROM public.users u
+JOIN public.role_grants rg
+  ON rg.tenant_id = u.tenant_id
+JOIN public.permission_roles pr
+  ON pr.id = rg.role_id AND pr.tenant_id = rg.tenant_id
+WHERE u.auth_uid = :'owner_id'::uuid
+  AND lower(pr.name) LIKE 'employee%'
+ON CONFLICT (group_id, user_id) DO NOTHING;
+
 -- Current EC records, only when the owner has none yet.
 INSERT INTO public.ec_personal_information (tenant_id, user_id, start_date, first_name, last_name, event_reason)
 SELECT u.tenant_id, u.id, current_date, u.first_name, u.last_name, 'Hire'
@@ -61,8 +92,10 @@ WHERE u.auth_uid = :'owner_id'::uuid
     WHERE pi.user_id = u.id AND pi.tenant_id = u.tenant_id AND pi.end_date IS NULL
   );
 
-INSERT INTO public.ec_job_information (tenant_id, user_id, start_date, job_title, event_reason)
-SELECT u.tenant_id, u.id, current_date, 'Owner', 'Hire'
+INSERT INTO public.ec_job_information (
+  tenant_id, user_id, start_date, job_title, event_reason, department_id
+)
+SELECT u.tenant_id, u.id, current_date, 'Director General', 'Hire', u.department_id
 FROM public.users u
 WHERE u.auth_uid = :'owner_id'::uuid
   AND NOT EXISTS (
@@ -71,4 +104,4 @@ WHERE u.auth_uid = :'owner_id'::uuid
   );
 SQL
 
-echo "Owner linked: $OWNER_EMAIL → tenant $TENANT_ID as 'owner' (with EC records)"
+echo "Owner linked: $OWNER_EMAIL → tenant $TENANT_ID as 'owner' (with EC records + RBP groups)"

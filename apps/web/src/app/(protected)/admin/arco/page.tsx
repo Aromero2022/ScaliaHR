@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { can } from "@/lib/authz/can";
 import ArcoPanel from "./arco-panel";
 
 export default async function ArcoPage() {
@@ -18,15 +19,18 @@ export default async function ArcoPage() {
 
   if (!currentUser) redirect("/login");
 
-  const { data: adminMembership } = await supabase
-    .from("group_members")
-    .select("id")
-    .eq("user_id", currentUser.id)
-    .eq("group_id", "cc100000-0000-0000-0000-000000000001")
-    .limit(1);
-
-  const isAdmin = (adminMembership?.length ?? 0) > 0;
-  if (!isAdmin) redirect("/dashboard");
+  const { allowed } = await can(currentUser.id, "arco.manage", "view");
+  if (!allowed) {
+    return (
+      <div className="mx-auto max-w-md py-12 text-center">
+        <h1 className="text-xl font-bold text-white">Acceso denegado</h1>
+        <p className="mt-2 text-sm text-slate-400">
+          No tiene permisos para gestionar solicitudes ARCO. Contacte al
+          administrador del tenant.
+        </p>
+      </div>
+    );
+  }
 
   const { data: requests } = await supabase
     .from("arco_requests")

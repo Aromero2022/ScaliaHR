@@ -12,7 +12,7 @@ export default async function ProfilePage() {
 
   const { data: profile } = await supabase
     .from("users")
-    .select("*, job_informations(*), departments(*)")
+    .select("*, ec_job_information!ec_job_information_user_id_fkey(job_title, department_id, manager_id, start_date, end_date), departments(name)")
     .eq("auth_uid", authUser.id)
     .single();
 
@@ -24,14 +24,20 @@ export default async function ProfilePage() {
     );
   }
 
-  const job = profile.job_informations;
-  const dept = profile.departments;
+  const ecJobs = Array.isArray(profile.ec_job_information)
+    ? profile.ec_job_information
+    : profile.ec_job_information ? [profile.ec_job_information] : [];
+  const currentJob = ecJobs.find(
+    (j: { end_date: string | null }) => j.end_date === null,
+  ) as { job_title: string; department_id: string | null; manager_id: string | null } | undefined;
+  const dept = Array.isArray(profile.departments) ? profile.departments[0] : profile.departments;
 
-  const { data: manager } = profile.manager_id
+  const managerId = currentJob?.manager_id ?? null;
+  const { data: manager } = managerId
     ? await supabase
         .from("users")
         .select("first_name, last_name, email")
-        .eq("id", profile.manager_id)
+        .eq("id", managerId)
         .single()
     : { data: null };
 
@@ -62,7 +68,7 @@ export default async function ProfilePage() {
             {profile.first_name} {profile.last_name}
           </p>
           <p className="text-sm text-slate-400">
-            {job?.title ?? "Sin puesto"} &middot;{" "}
+            {currentJob?.job_title ?? "Sin puesto"} &middot;{" "}
             {dept?.name ?? "Sin departamento"}
           </p>
         </div>
@@ -101,19 +107,8 @@ export default async function ProfilePage() {
           Información del Puesto
         </h2>
         <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-          <Field label="Título" value={job?.title ?? "—"} />
-          <Field label="Job Code" value={job?.job_code ?? "—"} />
-          <Field label="Job Family" value={job?.job_family ?? "—"} />
-          <Field label="Grade" value={job?.grade ?? "—"} />
-          <Field label="Pay Band" value={job?.pay_band ?? "—"} />
-          <Field
-            label="Rango salarial"
-            value={
-              job?.salary_min != null && job?.salary_max != null
-                ? `$${job.salary_min.toLocaleString()} – $${job.salary_max.toLocaleString()}`
-                : "—"
-            }
-          />
+          <Field label="Título" value={currentJob?.job_title ?? "—"} />
+          <Field label="Departamento" value={dept?.name ?? "—"} />
         </dl>
       </section>
 

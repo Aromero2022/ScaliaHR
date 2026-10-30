@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { writeAuditLog } from "@/lib/audit/log";
+import { can } from "@/lib/authz/can";
 import { createHash } from "crypto";
 
 const uuidSchema = z.string().uuid();
@@ -49,6 +50,9 @@ export async function createArcoRequest(
 
   const ctx = await getActorContext();
   if (!ctx) return { success: false, error: "No autenticado" };
+
+  const { allowed } = await can(ctx.actorId, "arco.manage", "view");
+  if (!allowed) return { success: false, error: "Sin permiso para gestionar ARCO" };
 
   const { data: dueDate } = await ctx.supabase.rpc("compute_arco_due_date");
 
@@ -101,6 +105,9 @@ export async function processArcoRequest(
 
   const ctx = await getActorContext();
   if (!ctx) return { success: false, error: "No autenticado" };
+
+  const { allowed } = await can(ctx.actorId, "arco.manage", "view");
+  if (!allowed) return { success: false, error: "Sin permiso para gestionar ARCO" };
 
   const { data: request } = await ctx.supabase
     .from("arco_requests")
@@ -217,6 +224,9 @@ export async function exportUserData(
 
   const ctx = await getActorContext();
   if (!ctx) return { success: false, error: "No autenticado" };
+
+  const { allowed } = await can(ctx.actorId, "arco.manage", "view");
+  if (!allowed) return { success: false, error: "Sin permiso para gestionar ARCO" };
 
   const { data, error } = await ctx.supabase.rpc("export_user_data", {
     p_user_id: subjectId,
