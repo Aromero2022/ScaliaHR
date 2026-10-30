@@ -548,3 +548,38 @@ another tenant's permission matrix.
 2. Alternatively, replace the `tenantId` parameter with a session/claims
    object that `can()` extracts the tenant from, making it impossible to pass
    an arbitrary value.
+
+## Known Risk — `can()` requestCache Is Global and Never Invalidated
+
+**Status:** Accepted (planned fix). Registered 2026-10-30.
+
+**Affected component:** `apps/web/src/lib/authz/can.ts` — the module-level
+`requestCache` (`Map<string, CanResult>`).
+
+**Current state:** Every call to `can()` stores its result in a `Map` that
+lives at module scope. Because Next.js App Router keeps the Node.js process
+alive across requests, the cache is effectively global to the server process
+and survives across all HTTP requests.
+
+`clearCanCache()` is exported but never called anywhere in the application
+code — not after role edits, group-membership changes, or permission-key
+updates.
+
+**Risk:** When an admin changes a user's permissions (adds/removes a role,
+changes group membership, edits a permission key), the change does not take
+effect until the Node.js server process is restarted. In development this is
+nearly invisible because the dev server restarts often; in production with
+long-lived workers the stale cache window can be hours or days.
+
+**Planned fix:**
+
+1. **Short term — per-request cache:** Replace the module-level `Map` with
+   React's `cache()` (available in Server Components) or Next.js
+   `unstable_cache` scoped to the current request. This ensures the cache
+   lives only for the duration of a single HTTP request and is garbage
+   collected automatically.
+2. **Alternative — TTL-based expiration:** If cross-request caching is
+   desirable for performance, wrap the `Map` with a short TTL (e.g. 30–60
+   seconds) so stale entries expire automatically. Pair with an explicit
+   `clearCanCache()` call in the role/group mutation Server Actions for
+   immediate invalidation.
