@@ -4,6 +4,11 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
+const mockGetClaims = vi.fn();
+vi.mock("@/lib/supabase/claims", () => ({
+  getClaims: (...args: unknown[]) => mockGetClaims(...args),
+}));
+
 vi.mock("@/lib/authz/can", () => ({
   can: vi.fn(),
 }));
@@ -76,13 +81,13 @@ function buildChain(overrides?: {
 
 function mockSupabase(options?: {
   user?: unknown;
+  claims?: { userId: string; tenantId: string; email?: string; appRole?: string; aal?: string } | null;
   rpcResult?: { data: unknown; error: unknown };
   chainOverrides?: Parameters<typeof buildChain>[0];
 }) {
-  const user = options && "user" in options ? options.user : {
-    id: "auth-uid-1",
-    app_metadata: { tenant_id: "tenant-1" },
-  };
+  const defaultClaims = { userId: "auth-uid-1", tenantId: "tenant-1", email: "test@test.com", appRole: "member", aal: "aal1" };
+  const claims = options && "claims" in options ? options.claims : defaultClaims;
+  mockGetClaims.mockResolvedValue(claims);
 
   const chain = buildChain(options?.chainOverrides);
 
@@ -92,7 +97,7 @@ function mockSupabase(options?: {
 
   const supabase = {
     auth: {
-      getUser: vi.fn().mockResolvedValue({ data: { user }, error: null }),
+      getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
     },
     from: vi.fn(() => chain),
     rpc: rpcFn,
@@ -120,14 +125,7 @@ describe("updateSelfAssessment", () => {
   });
 
   it("returns error when not authenticated", async () => {
-    const noAuthSupabase = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
-      },
-      from: vi.fn(),
-      rpc: vi.fn(),
-    };
-    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue(noAuthSupabase);
+    mockGetClaims.mockResolvedValue(null);
 
     const res = await updateSelfAssessment({ skillId: UUID_SKILL, level: 3 });
     expect(res).toEqual({ error: "No autenticado" });

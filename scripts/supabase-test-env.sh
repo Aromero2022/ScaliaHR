@@ -23,6 +23,30 @@ export SUPABASE_SERVICE_ROLE_KEY="$(_status_value SERVICE_ROLE_KEY)"
 export SUPABASE_JWT_SECRET="$(_status_value JWT_SECRET)"
 export SUPABASE_TEST_DB_URL="$(_status_value DB_URL)"
 
+# Create a non-BYPASSRLS role for Prisma integration tests so RLS is enforced.
+_db_url="$SUPABASE_TEST_DB_URL"
+if [ -n "$_db_url" ]; then
+  psql "$_db_url" -v ON_ERROR_STOP=1 -q <<'ROLE_SQL'
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'prisma_test') THEN
+    CREATE ROLE prisma_test LOGIN PASSWORD 'prisma_test_pw'
+           NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+    GRANT authenticated TO prisma_test;
+    GRANT USAGE ON SCHEMA public TO prisma_test;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO prisma_test;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO prisma_test;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO prisma_test;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT USAGE, SELECT ON SEQUENCES TO prisma_test;
+  END IF;
+END $$;
+ROLE_SQL
+  export PRISMA_TEST_DB_URL="${_db_url/postgres:postgres/prisma_test:prisma_test_pw}"
+fi
+unset _db_url
+
 _missing=""
 for _var in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_JWT_SECRET SUPABASE_TEST_DB_URL; do
   if [ -z "${!_var}" ]; then

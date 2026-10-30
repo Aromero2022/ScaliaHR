@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/claims";
 import { redirect, notFound } from "next/navigation";
 import { can } from "@/lib/authz/can";
 import Link from "next/link";
@@ -20,20 +21,18 @@ export interface PermissionRoleRow {
 }
 
 export default async function ManageRolesPage() {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
+  const claims = await requireAuth();
+  if (!claims.tenantId) redirect("/login");
 
+  const supabase = await createClient();
   const { data: bizUser } = await supabase
     .from("users")
-    .select("id, tenant_id")
-    .eq("auth_uid", authUser.id)
+    .select("id")
+    .eq("auth_uid", claims.userId)
     .single();
   if (!bizUser) redirect("/login");
 
-  const { allowed } = await can(bizUser.id, bizUser.tenant_id, "admin.manage_roles", "edit");
+  const { allowed } = await can(bizUser.id, claims.tenantId, "admin.manage_roles", "edit");
   if (!allowed) notFound();
 
   const { data: roles } = await supabase

@@ -14,6 +14,7 @@ export interface IntegrationEnv {
   serviceKey: string;
   jwtSecret: string;
   dbUrl: string;
+  prismaDbUrl: string;
 }
 
 export function integrationEnv(): IntegrationEnv {
@@ -41,5 +42,6 @@ export function integrationEnv(): IntegrationEnv {
     serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
     jwtSecret: process.env.SUPABASE_JWT_SECRET!,
     dbUrl: process.env.SUPABASE_TEST_DB_URL!,
+    prismaDbUrl: process.env.PRISMA_TEST_DB_URL ?? process.env.SUPABASE_TEST_DB_URL!,
   };
 }

@@ -1,25 +1,23 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/claims";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/authz/can";
 import ArcoPanel from "./arco-panel";
 
 export default async function ArcoPage() {
+  const claims = await requireAuth();
+  if (!claims.tenantId) redirect("/login");
+
   const supabase = await createClient();
-
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
-
   const { data: currentUser } = await supabase
     .from("users")
-    .select("id, tenant_id")
-    .eq("auth_uid", authUser.id)
+    .select("id")
+    .eq("auth_uid", claims.userId)
     .single();
 
   if (!currentUser) redirect("/login");
 
-  const { allowed } = await can(currentUser.id, currentUser.tenant_id, "arco.manage", "view");
+  const { allowed } = await can(currentUser.id, claims.tenantId, "arco.manage", "view");
   if (!allowed) {
     return (
       <div className="mx-auto max-w-md py-12 text-center">

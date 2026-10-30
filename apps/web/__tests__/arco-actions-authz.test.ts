@@ -14,6 +14,11 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }));
 
+const mockGetClaims = vi.fn();
+vi.mock("@/lib/supabase/claims", () => ({
+  getClaims: (...args: unknown[]) => mockGetClaims(...args),
+}));
+
 const mockCan = vi.fn();
 vi.mock("@/lib/authz/can", () => ({
   can: (...args: unknown[]) => mockCan(...args),
@@ -59,9 +64,12 @@ function mockProfile(userId: string, tenantId: string) {
 }
 
 function authenticatedAsEmployee() {
-  mockGetUser.mockResolvedValue({
-    data: { user: { id: "auth-emp-1" } },
-    error: null,
+  mockGetClaims.mockResolvedValue({
+    userId: "auth-emp-1",
+    tenantId: "t1",
+    email: "emp@test.com",
+    appRole: "member",
+    aal: "aal1",
   });
   mockProfile("user-emp-1", "t1");
   mockCan.mockResolvedValue({ allowed: false, reason: "no_permission" });

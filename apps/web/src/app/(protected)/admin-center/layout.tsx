@@ -8,23 +8,19 @@ export default async function AdminCenterLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireAal2("/admin-center");
+  const claims = await requireAal2("/admin-center");
+  if (!claims.tenantId) redirect("/login");
 
   const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
-
   const { data: bizUser } = await supabase
     .from("users")
-    .select("id, tenant_id")
-    .eq("auth_uid", authUser.id)
+    .select("id")
+    .eq("auth_uid", claims.userId)
     .single();
 
   if (!bizUser) redirect("/login");
 
-  const { allowed } = await can(bizUser.id, bizUser.tenant_id, "admin_center.access", "view");
+  const { allowed } = await can(bizUser.id, claims.tenantId, "admin_center.access", "view");
   if (!allowed) notFound();
 
   return <>{children}</>;

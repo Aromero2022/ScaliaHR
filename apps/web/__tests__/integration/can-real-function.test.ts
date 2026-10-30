@@ -5,12 +5,13 @@ import { TestWorld, type TestTenant } from "./helpers/world";
 
 const env = integrationEnv();
 
-// Prisma reads DATABASE_URL at module-init; set it before the dynamic import.
-process.env.DATABASE_URL ??= env.dbUrl;
+// Prisma must use a non-BYPASSRLS role so RLS is actually enforced.
+process.env.DATABASE_URL = env.prismaDbUrl;
 
 const { can, clearCanCache } = await import("@/lib/authz/can");
 const { prisma } = await import("@/lib/db/tenant-client");
 
+// Setup client uses superuser to insert test fixtures (bypasses RLS intentionally).
 const db = new pg.Client({ connectionString: env.dbUrl });
 await db.connect();
 const world = new TestWorld(env, db);
@@ -32,6 +33,15 @@ afterAll(async () => {
     await db.end();
     await prisma.$disconnect();
   }
+});
+
+describe("Prisma connection does NOT have BYPASSRLS", () => {
+  it("current_user has rolbypassrls = false", async () => {
+    const [row] = await prisma.$queryRaw<{ cu: string; bypass: boolean }[]>`
+      SELECT current_user AS cu, rolbypassrls AS bypass
+      FROM pg_roles WHERE rolname = current_user`;
+    expect(row.bypass).toBe(false);
+  });
 });
 
 describe("real can() — admin gets admin_center.access and arco.manage", () => {
