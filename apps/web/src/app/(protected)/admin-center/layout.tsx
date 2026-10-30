@@ -18,13 +18,13 @@ export default async function AdminCenterLayout({
 
   const { data: bizUser } = await supabase
     .from("users")
-    .select("id")
+    .select("id, tenant_id")
     .eq("auth_uid", authUser.id)
     .single();
 
   if (!bizUser) redirect("/login");
 
-  const { allowed } = await can(bizUser.id, "admin_center.access", "view");
+  const { allowed } = await can(bizUser.id, bizUser.tenant_id, "admin_center.access", "view");
   if (!allowed) notFound();
 
   return <>{children}</>;

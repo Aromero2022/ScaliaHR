@@ -15,7 +15,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   { href: "/performance", label: "Desempeño (PMGM)", moduleFlag: "is_pmgm_active" },
   { href: "/lms", label: "Formación (LMS)", moduleFlag: "is_lms_active" },
   { href: "/skills-hub", label: "Talent Hub (TIH)", moduleFlag: "is_tih_active" },
-  { href: "/admin/arco", label: "Derechos ARCO" },
+  { href: "/admin/arco", label: "Derechos ARCO", permissionKey: "arco.manage" },
   { href: "/admin-center", label: "Admin Center", permissionKey: "admin_center.access" },
 ];
 

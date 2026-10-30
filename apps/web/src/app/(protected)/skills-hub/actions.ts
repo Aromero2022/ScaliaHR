@@ -70,7 +70,7 @@ export async function updateSelfAssessment(
   const { supabase, bizUser } = ctx;
   const { skillId, level } = parsed.data;
 
-  const perm = await can(bizUser.id, "tih.employee_skills", "edit");
+  const perm = await can(bizUser.id, bizUser.tenant_id, "tih.employee_skills", "edit");
   if (!perm.allowed) return { error: "Sin permiso para evaluar habilidades" };
 
   const { error } = await supabase.rpc("upsert_self_assessment", {
@@ -117,7 +117,7 @@ export async function createSkill(input: unknown): Promise<ActionResult> {
 
   const { supabase, bizUser } = ctx;
 
-  const perm = await can(bizUser.id, "tih.ontology", "edit");
+  const perm = await can(bizUser.id, bizUser.tenant_id, "tih.ontology", "edit");
   if (!perm.allowed) return { error: "Sin permiso para gestionar ontología" };
 
   const { data, error } = await supabase
@@ -156,7 +156,7 @@ export async function updateSkill(input: unknown): Promise<ActionResult> {
 
   const { supabase, bizUser } = ctx;
 
-  const perm = await can(bizUser.id, "tih.ontology", "edit");
+  const perm = await can(bizUser.id, bizUser.tenant_id, "tih.ontology", "edit");
   if (!perm.allowed) return { error: "Sin permiso para gestionar ontología" };
 
   const { skillId, ...updates } = parsed.data;
@@ -220,7 +220,7 @@ export async function updateJobRoleSkill(
 
   const { supabase, bizUser } = ctx;
 
-  const perm = await can(bizUser.id, "tih.job_requirements", "edit");
+  const perm = await can(bizUser.id, bizUser.tenant_id, "tih.job_requirements", "edit");
   if (!perm.allowed)
     return { error: "Sin permiso para gestionar requisitos de puesto" };
 

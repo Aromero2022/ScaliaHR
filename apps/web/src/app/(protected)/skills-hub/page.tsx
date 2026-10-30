@@ -72,7 +72,7 @@ export default async function SkillsHubPage() {
     }
   }
 
-  const canViewTeam = await can(bizUser.id, "tih.employee_skills", "view", "check-any");
+  const canViewTeam = await can(bizUser.id, bizUser.tenant_id, "tih.employee_skills", "view", "check-any");
   const isManager = canViewTeam.allowed;
 
   const [ontologyRes, mySkillsRes, roleSkillsRes] = await Promise.all([

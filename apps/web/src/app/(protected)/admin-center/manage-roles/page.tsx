@@ -28,12 +28,12 @@ export default async function ManageRolesPage() {
 
   const { data: bizUser } = await supabase
     .from("users")
-    .select("id")
+    .select("id, tenant_id")
     .eq("auth_uid", authUser.id)
     .single();
   if (!bizUser) redirect("/login");
 
-  const { allowed } = await can(bizUser.id, "admin.manage_roles", "edit");
+  const { allowed } = await can(bizUser.id, bizUser.tenant_id, "admin.manage_roles", "edit");
   if (!allowed) notFound();
 
   const { data: roles } = await supabase

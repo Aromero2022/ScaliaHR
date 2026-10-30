@@ -217,7 +217,7 @@ describe("createSkill — permission gating", () => {
     mockCan.mockResolvedValue({ allowed: false, reason: "no_permission" });
     const res = await createSkill(validSkill);
     expect(res).toEqual({ error: "Sin permiso para gestionar ontología" });
-    expect(mockCan).toHaveBeenCalledWith("user-1", "tih.ontology", "edit");
+    expect(mockCan).toHaveBeenCalledWith("user-1", "tenant-1", "tih.ontology", "edit");
   });
 
   it("succeeds when user has admin permission", async () => {

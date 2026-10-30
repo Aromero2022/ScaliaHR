@@ -23,13 +23,17 @@ export default async function ProtectedLayout({
     const supabase = await createClient();
     const { data: bizUser } = await supabase
       .from("users")
-      .select("id")
+      .select("id, tenant_id")
       .eq("auth_uid", claims.userId)
       .single();
 
     if (bizUser) {
-      const { allowed } = await can(bizUser.id, "admin_center.access", "view");
-      if (allowed) grantedPermissions.push("admin_center.access");
+      const [adminPerm, arcoPerm] = await Promise.all([
+        can(bizUser.id, bizUser.tenant_id, "admin_center.access", "view"),
+        can(bizUser.id, bizUser.tenant_id, "arco.manage", "view"),
+      ]);
+      if (adminPerm.allowed) grantedPermissions.push("admin_center.access");
+      if (arcoPerm.allowed) grantedPermissions.push("arco.manage");
     }
   }
 

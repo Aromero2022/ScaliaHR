@@ -12,12 +12,19 @@ vi.mock("@/lib/db/tenant-client", () => ({
       values,
     }),
   },
+  withTenant: async (_ctx: unknown, fn: (tx: unknown) => Promise<unknown>) => {
+    const fakeTx = {
+      $queryRaw: (...args: unknown[]) => mockQueryRaw(...args),
+    };
+    return fn(fakeTx);
+  },
 }));
 
 import { can, clearCanCache } from "@/lib/authz/can";
 
 const USER_A = "user-a";
 const USER_B = "user-b";
+const TENANT = "tenant-1";
 const ROLE_1 = "role-1";
 
 let queryCallIndex = 0;
@@ -44,7 +51,7 @@ describe("can()", () => {
     setupQuerySequence(
       [],
     );
-    const result = await can(USER_A, "employee.view", "view");
+    const result = await can(USER_A, TENANT, "employee.view", "view");
     expect(result.allowed).toBe(false);
     expect(result.reason).toBe("no_group_membership");
   });
@@ -54,7 +61,7 @@ describe("can()", () => {
       [{ role_id: ROLE_1, target_population: "all" }],
       [],
     );
-    const result = await can(USER_A, "employee.view", "view");
+    const result = await can(USER_A, TENANT, "employee.view", "view");
     expect(result.allowed).toBe(false);
     expect(result.reason).toBe("no_permission");
   });
@@ -65,7 +72,7 @@ describe("can()", () => {
         [{ role_id: ROLE_1, target_population: "all" }],
         [{ role_id: ROLE_1 }],
       );
-      const result = await can(USER_A, "employee.view", "view", USER_B);
+      const result = await can(USER_A, TENANT, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(true);
     });
 
@@ -74,7 +81,7 @@ describe("can()", () => {
         [{ role_id: ROLE_1, target_population: "all" }],
         [{ role_id: ROLE_1 }],
       );
-      const result = await can(USER_A, "employee.view", "view");
+      const result = await can(USER_A, TENANT, "employee.view", "view");
       expect(result.allowed).toBe(true);
     });
   });
@@ -85,7 +92,7 @@ describe("can()", () => {
         [{ role_id: ROLE_1, target_population: "self" }],
         [{ role_id: ROLE_1 }],
       );
-      const result = await can(USER_A, "employee.view", "view", USER_A);
+      const result = await can(USER_A, TENANT, "employee.view", "view", USER_A);
       expect(result.allowed).toBe(true);
     });
 
@@ -94,7 +101,7 @@ describe("can()", () => {
         [{ role_id: ROLE_1, target_population: "self" }],
         [{ role_id: ROLE_1 }],
       );
-      const result = await can(USER_A, "employee.view", "view", USER_B);
+      const result = await can(USER_A, TENANT, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe("target_population_mismatch");
     });
@@ -107,7 +114,7 @@ describe("can()", () => {
         [{ role_id: ROLE_1 }],
         [{ match: true }],
       );
-      const result = await can(USER_A, "employee.view", "view", USER_B);
+      const result = await can(USER_A, TENANT, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(true);
     });
 
@@ -117,7 +124,7 @@ describe("can()", () => {
         [{ role_id: ROLE_1 }],
         [{ match: false }],
       );
-      const result = await can(USER_A, "employee.view", "view", USER_B);
+      const result = await can(USER_A, TENANT, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe("target_population_mismatch");
     });
@@ -128,7 +135,7 @@ describe("can()", () => {
         [{ role_id: ROLE_1 }],
         [],
       );
-      const result = await can(USER_A, "employee.view", "view", USER_B);
+      const result = await can(USER_A, TENANT, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(false);
     });
   });
@@ -140,7 +147,7 @@ describe("can()", () => {
         [{ role_id: ROLE_1 }],
         [{ manager_id: USER_A }],
       );
-      const result = await can(USER_A, "employee.view", "view", USER_B);
+      const result = await can(USER_A, TENANT, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(true);
     });
 
@@ -150,7 +157,7 @@ describe("can()", () => {
         [{ role_id: ROLE_1 }],
         [{ manager_id: "other-manager" }],
       );
-      const result = await can(USER_A, "employee.view", "view", USER_B);
+      const result = await can(USER_A, TENANT, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe("target_population_mismatch");
     });
@@ -161,7 +168,7 @@ describe("can()", () => {
         [{ role_id: ROLE_1 }],
         [{ manager_id: null }],
       );
-      const result = await can(USER_A, "employee.view", "view", USER_B);
+      const result = await can(USER_A, TENANT, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(false);
     });
   });
@@ -172,8 +179,8 @@ describe("can()", () => {
         [{ role_id: ROLE_1, target_population: "all" }],
         [{ role_id: ROLE_1 }],
       );
-      await can(USER_A, "employee.view", "view");
-      await can(USER_A, "employee.view", "view");
+      await can(USER_A, TENANT, "employee.view", "view");
+      await can(USER_A, TENANT, "employee.view", "view");
 
       expect(mockQueryRaw).toHaveBeenCalledTimes(2);
     });
@@ -183,14 +190,14 @@ describe("can()", () => {
         [{ role_id: ROLE_1, target_population: "all" }],
         [{ role_id: ROLE_1 }],
       );
-      await can(USER_A, "employee.view", "view");
+      await can(USER_A, TENANT, "employee.view", "view");
 
       clearCanCache();
       setupQuerySequence(
         [{ role_id: ROLE_1, target_population: "all" }],
         [{ role_id: ROLE_1 }],
       );
-      await can(USER_A, "compensation.view", "view");
+      await can(USER_A, TENANT, "compensation.view", "view");
 
       expect(mockQueryRaw).toHaveBeenCalledTimes(4);
     });

@@ -31,15 +31,15 @@ export default async function AdminCenterPage() {
 
   const { data: bizUser } = await supabase
     .from("users")
-    .select("id")
+    .select("id, tenant_id")
     .eq("auth_uid", authUser.id)
     .single();
   if (!bizUser) redirect("/login");
 
   const [configPerm, auditPerm, rolesPerm] = await Promise.all([
-    can(bizUser.id, "admin.manage_config", "edit"),
-    can(bizUser.id, "admin.view_audit_logs", "view"),
-    can(bizUser.id, "admin.manage_roles", "edit"),
+    can(bizUser.id, bizUser.tenant_id, "admin.manage_config", "edit"),
+    can(bizUser.id, bizUser.tenant_id, "admin.view_audit_logs", "view"),
+    can(bizUser.id, bizUser.tenant_id, "admin.manage_roles", "edit"),
   ]);
 
   if (!configPerm.allowed && !auditPerm.allowed && !rolesPerm.allowed) {
