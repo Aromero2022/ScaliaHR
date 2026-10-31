@@ -205,11 +205,12 @@ afterAll(async () => {
       "role_permissions", "role_grants", "group_members",
       "permission_roles", "permission_groups",
       "ec_job_information", "ec_compensation", "ec_personal_information",
-      "user_tenant_memberships", "user_settings", "users",
+      "user_tenant_memberships", "users",
     ];
     for (const t of tables) {
       await db.query(`DELETE FROM public."${t}" WHERE tenant_id = $1`, [tenant.id]);
     }
+    await db.query(`DELETE FROM public.user_settings WHERE active_tenant_id = $1`, [tenant.id]);
     await db.query("DELETE FROM public.tenants WHERE id = $1", [tenant.id]);
   } finally {
     await db.end();

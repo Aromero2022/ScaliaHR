@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { integrationEnv } from "./helpers/env";
 import { TestWorld } from "./helpers/world";
@@ -30,15 +31,23 @@ const world = new TestWorld(env, db);
 
 let authUser: { authId: string; email: string };
 let createdTenantId: string | null = null;
+let setupTenantId: string;
 
 beforeAll(async () => {
   authUser = await world.createAuthUser();
   const userId = authUser.authId;
+
+  setupTenantId = randomUUID();
+  await db.query(
+    `INSERT INTO public.tenants (id, name, slug) VALUES ($1, 'CT Bootstrap', $2)`,
+    [setupTenantId, `ct-boot-${setupTenantId.slice(0, 8)}`],
+  );
+
   await db.query(
     `INSERT INTO public.users (auth_uid, tenant_id, email, first_name, last_name, status, hire_date, employee_id)
-     VALUES ($1::uuid, NULL, $2, 'Test', 'Owner', 'ACTIVE', NOW(), 'CT-0001')
+     VALUES ($1::uuid, $2, $3, 'Test', 'Owner', 'ACTIVE', NOW(), 'CT-0001')
      ON CONFLICT (auth_uid) DO NOTHING`,
-    [userId, authUser.email],
+    [userId, setupTenantId, authUser.email],
   );
   mockGetUser.mockResolvedValue({ data: { user: { id: userId } }, error: null });
 }, 15_000);
@@ -49,13 +58,16 @@ afterAll(async () => {
       const tables = [
         "role_permissions", "role_grants", "group_members",
         "permission_roles", "permission_groups",
-        "user_tenant_memberships", "user_settings", "users",
+        "user_tenant_memberships",
       ];
       for (const t of tables) {
         await db.query(`DELETE FROM public."${t}" WHERE tenant_id = $1`, [createdTenantId]);
       }
+      await db.query(`DELETE FROM public.user_settings WHERE active_tenant_id = $1`, [createdTenantId]);
       await db.query("DELETE FROM public.tenants WHERE id = $1", [createdTenantId]);
     }
+    await db.query("DELETE FROM public.users WHERE tenant_id = $1", [setupTenantId]);
+    await db.query("DELETE FROM public.tenants WHERE id = $1", [setupTenantId]);
     await world.cleanup();
   } finally {
     await db.end();
