@@ -92,8 +92,11 @@ export async function setManagerAssessment(
   const ctx = await getAuthContext();
   if (!ctx) return { error: "No autenticado" };
 
-  const { supabase } = ctx;
+  const { supabase, actorId } = ctx;
   const { userId, skillId, level } = parsed.data;
+
+  const perm = await can(actorId, "tih.manager_assessment", "edit", userId);
+  if (!perm.allowed) return { error: "Sin permiso para evaluar como manager" };
 
   const { error } = await supabase.rpc("set_manager_assessment", {
     p_user_id: userId,
