@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import pg from "pg";
 import { integrationEnv } from "./helpers/env";
 import { TestWorld, type TestTenant } from "./helpers/world";
@@ -8,7 +8,17 @@ const env = integrationEnv();
 // Prisma must use a non-BYPASSRLS role so RLS is actually enforced.
 process.env.DATABASE_URL = env.prismaDbUrl;
 
-const { can, clearCanCache } = await import("@/lib/authz/can");
+const mockGetClaims = vi.fn();
+vi.mock("@/lib/supabase/claims", () => ({
+  getClaims: (...args: unknown[]) => mockGetClaims(...args),
+}));
+
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react");
+  return { ...actual, cache: (fn: (...a: unknown[]) => unknown) => fn };
+});
+
+const { can } = await import("@/lib/authz/can");
 const { prisma } = await import("@/lib/db/tenant-client");
 
 // Setup client uses superuser to insert test fixtures (bypasses RLS intentionally).
@@ -18,12 +28,23 @@ const world = new TestWorld(env, db);
 
 let tenant: TestTenant;
 
+function claimsFor(tenantId: string) {
+  mockGetClaims.mockResolvedValue({
+    userId: "auth-uid",
+    email: "",
+    tenantId,
+    appRole: null,
+    aal: "aal1" as const,
+  });
+}
+
 beforeAll(async () => {
   tenant = await world.createTenant();
 });
 
 beforeEach(() => {
-  clearCanCache();
+  vi.clearAllMocks();
+  claimsFor(tenant?.id ?? "unknown");
 });
 
 afterAll(async () => {
@@ -48,7 +69,6 @@ describe("real can() — admin gets admin_center.access and arco.manage", () => 
   it("admin has admin_center.access:view", async () => {
     const result = await can(
       tenant.admin.userId,
-      tenant.id,
       "admin_center.access",
       "view",
     );
@@ -58,7 +78,6 @@ describe("real can() — admin gets admin_center.access and arco.manage", () => 
   it("admin has arco.manage:view", async () => {
     const result = await can(
       tenant.admin.userId,
-      tenant.id,
       "arco.manage",
       "view",
     );
@@ -70,7 +89,6 @@ describe("real can() — employee lacks admin permissions", () => {
   it("employee does NOT have admin_center.access:view", async () => {
     const result = await can(
       tenant.employee.userId,
-      tenant.id,
       "admin_center.access",
       "view",
     );
@@ -80,7 +98,6 @@ describe("real can() — employee lacks admin permissions", () => {
   it("employee does NOT have arco.manage:view", async () => {
     const result = await can(
       tenant.employee.userId,
-      tenant.id,
       "arco.manage",
       "view",
     );
@@ -92,7 +109,6 @@ describe("real can() — manager lacks admin permissions", () => {
   it("manager does NOT have admin_center.access:view", async () => {
     const result = await can(
       tenant.manager.userId,
-      tenant.id,
       "admin_center.access",
       "view",
     );
@@ -102,7 +118,6 @@ describe("real can() — manager lacks admin permissions", () => {
   it("manager does NOT have arco.manage:view", async () => {
     const result = await can(
       tenant.manager.userId,
-      tenant.id,
       "arco.manage",
       "view",
     );
@@ -114,7 +129,6 @@ describe("real can() — reason field for denied access", () => {
   it("employee denied with reason no_permission or no_group_membership", async () => {
     const result = await can(
       tenant.employee.userId,
-      tenant.id,
       "admin_center.access",
       "view",
     );
@@ -161,12 +175,11 @@ describe("real can() — link-owner on demo tenant", () => {
       [DEMO_TENANT, userId],
     );
 
-    clearCanCache();
-    const adminResult = await can(userId, DEMO_TENANT, "admin_center.access", "view");
+    claimsFor(DEMO_TENANT);
+    const adminResult = await can(userId, "admin_center.access", "view");
     expect(adminResult).toEqual({ allowed: true });
 
-    clearCanCache();
-    const arcoResult = await can(userId, DEMO_TENANT, "arco.manage", "view");
+    const arcoResult = await can(userId, "arco.manage", "view");
     expect(arcoResult).toEqual({ allowed: true });
   });
 });

@@ -29,8 +29,8 @@ export default async function ProtectedLayout({
 
     if (bizUser) {
       const [adminPerm, arcoPerm] = await Promise.all([
-        can(bizUser.id, claims.tenantId!, "admin_center.access", "view"),
-        can(bizUser.id, claims.tenantId!, "arco.manage", "view"),
+        can(bizUser.id, "admin_center.access", "view"),
+        can(bizUser.id, "arco.manage", "view"),
       ]);
       if (adminPerm.allowed) grantedPermissions.push("admin_center.access");
       if (arcoPerm.allowed) grantedPermissions.push("arco.manage");

@@ -1,5 +1,7 @@
+import { cache } from "react";
 import { Prisma, withTenant } from "@/lib/db/tenant-client";
 import type { PrismaClient } from "@/lib/db/tenant-client";
+import { getClaims } from "@/lib/supabase/claims";
 
 type RbpAction = "view" | "edit";
 
@@ -8,45 +10,28 @@ type CanResult = {
   reason?: string;
 };
 
-const requestCache = new Map<string, CanResult>();
-
-function cacheKey(
-  userId: string,
-  tenantId: string,
-  permissionKey: string,
-  action: RbpAction,
-  targetUserId?: string,
-  fieldKey?: string
-): string {
-  return `${userId}:${tenantId}:${permissionKey}:${action}:${targetUserId ?? ""}:${fieldKey ?? ""}`;
-}
+export type { RbpAction, CanResult };
 
 export async function can(
   userId: string,
-  tenantId: string,
   permissionKey: string,
   action: RbpAction,
   targetUserId?: string,
   fieldKey?: string
 ): Promise<CanResult> {
-  const key = cacheKey(userId, tenantId, permissionKey, action, targetUserId, fieldKey);
-  const cached = requestCache.get(key);
-  if (cached) return cached;
+  const claims = await getClaims();
+  if (!claims?.tenantId) {
+    return { allowed: false, reason: "no_tenant" };
+  }
 
-  const result = await evaluate(
+  return evaluateCached(
     userId,
-    tenantId,
+    claims.tenantId,
     permissionKey,
     action,
     targetUserId,
-    fieldKey
+    fieldKey,
   );
-  requestCache.set(key, result);
-  return result;
-}
-
-export function clearCanCache() {
-  requestCache.clear();
 }
 
 type GrantRow = {
@@ -75,7 +60,7 @@ async function evaluate(
   permissionKey: string,
   action: RbpAction,
   targetUserId?: string,
-  fieldKey?: string
+  fieldKey?: string,
 ): Promise<CanResult> {
   return withTenant({ tenantId }, async (tx) => {
     const grants = await findUserGrants(tx, userId, tenantId);
@@ -158,3 +143,5 @@ async function evaluate(
     return { allowed: false, reason: "target_population_mismatch" };
   });
 }
+
+const evaluateCached = cache(evaluate);

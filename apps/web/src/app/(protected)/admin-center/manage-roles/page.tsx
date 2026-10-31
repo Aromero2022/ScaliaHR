@@ -32,7 +32,7 @@ export default async function ManageRolesPage() {
     .single();
   if (!bizUser) redirect("/login");
 
-  const { allowed } = await can(bizUser.id, claims.tenantId, "admin.manage_roles", "edit");
+  const { allowed } = await can(bizUser.id, "admin.manage_roles", "edit");
   if (!allowed) notFound();
 
   const { data: roles } = await supabase
