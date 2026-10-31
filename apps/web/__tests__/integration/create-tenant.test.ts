@@ -67,7 +67,7 @@ afterAll(async () => {
       await db.query(`DELETE FROM public.user_settings WHERE active_tenant_id = $1`, [createdTenantId]);
       await db.query("DELETE FROM public.tenants WHERE id = $1", [createdTenantId]);
     }
-    await db.query("DELETE FROM public.users WHERE tenant_id = $1", [setupTenantId]);
+    await db.query("DELETE FROM public.users WHERE auth_uid = $1::uuid", [authUser.authId]);
     await db.query("DELETE FROM public.tenants WHERE id = $1", [setupTenantId]);
     await world.cleanup();
   } finally {
@@ -90,9 +90,6 @@ describe("createTenant() produces same structure as seed.sql demo tenant", () =>
       },
     });
 
-    if ("error" in result) {
-      console.error("createTenant returned error:", result.error);
-    }
     expect(result).toHaveProperty("success", true);
     expect(result).toHaveProperty("tenantId");
     createdTenantId = (result as { tenantId: string }).tenantId;

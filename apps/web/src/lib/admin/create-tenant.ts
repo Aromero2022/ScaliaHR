@@ -49,128 +49,132 @@ export async function createTenant(input: CreateTenantInput) {
         `
       );
 
+      const tid = tenant.id;
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.permission_roles (tenant_id, name, description, is_admin_role)
+        VALUES
+          (${tid}::uuid, 'Owner',                   'Tenant owner with full control',                        true),
+          (${tid}::uuid, 'HR Administrator',        'Full access to all HR modules and configuration',      true),
+          (${tid}::uuid, 'Employee (Self-Service)', 'View own profile, goals, feedback and skills',          false),
+          (${tid}::uuid, 'Manager',                 'View and manage direct reports',                        false)
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.permission_groups (tenant_id, name, description)
+        VALUES
+          (${tid}::uuid, 'All Administrators', 'Users with HR admin access'),
+          (${tid}::uuid, 'All Employees',      'Every active employee in the tenant'),
+          (${tid}::uuid, 'All Managers',       'Employees with direct reports')
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
+        SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
+        FROM public.permission_roles pr
+        CROSS JOIN (VALUES
+          ('admin_center.access',    'view'),
+          ('arco.manage',            'view'),
+          ('admin.manage_roles',     'edit'),
+          ('admin.manage_config',    'edit'),
+          ('admin.view_audit_logs',  'view'),
+          ('ec.manage_employees',    'view'),
+          ('ec.manage_employees',    'edit'),
+          ('ec.manage_positions',    'edit'),
+          ('ec.manage_org_structure','edit'),
+          ('pmgm.manage_goal_plans', 'edit'),
+          ('sdm.manage_succession',  'edit'),
+          ('tih.ontology',           'view'),
+          ('tih.ontology',           'edit'),
+          ('tih.job_requirements',   'view'),
+          ('tih.job_requirements',   'edit'),
+          ('tih.employee_skills',    'view'),
+          ('tih.employee_skills',    'edit')
+        ) AS p(key, act)
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name IN ('Owner', 'HR Administrator')
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
+        SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
+        FROM public.permission_roles pr
+        CROSS JOIN (VALUES
+          ('admin.manage_tenant',  'edit'),
+          ('admin.manage_billing', 'edit')
+        ) AS p(key, act)
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Owner'
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
+        SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
+        FROM public.permission_roles pr
+        CROSS JOIN (VALUES
+          ('ec.view_own_profile',  'view'),
+          ('ec.view_org_chart',    'view'),
+          ('pmgm.view_own_goals',  'view'),
+          ('pmgm.view_own_goals',  'edit'),
+          ('pmgm.give_feedback',   'edit'),
+          ('lms.access',           'view'),
+          ('tih.ontology',         'view'),
+          ('tih.employee_skills',  'view'),
+          ('tih.employee_skills',  'edit')
+        ) AS p(key, act)
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Employee (Self-Service)'
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
+        SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
+        FROM public.permission_roles pr
+        CROSS JOIN (VALUES
+          ('ec.view_team_profiles',    'view'),
+          ('pmgm.manage_team_goals',   'edit'),
+          ('pmgm.view_team_feedback',  'view'),
+          ('sdm.nominate_successors',  'edit'),
+          ('tih.ontology',             'view'),
+          ('tih.job_requirements',     'view'),
+          ('tih.employee_skills',      'view'),
+          ('tih.employee_skills',      'edit'),
+          ('tih.manager_assessment',   'edit')
+        ) AS p(key, act)
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Manager'
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
+        SELECT ${tid}::uuid, pr.id, pg.id, 'all'::public.target_population_type
+        FROM public.permission_roles pr, public.permission_groups pg
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name IN ('Owner', 'HR Administrator')
+          AND pg.tenant_id = ${tid}::uuid AND pg.name = 'All Administrators'
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
+        SELECT ${tid}::uuid, pr.id, pg.id, 'self'::public.target_population_type
+        FROM public.permission_roles pr, public.permission_groups pg
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Employee (Self-Service)'
+          AND pg.tenant_id = ${tid}::uuid AND pg.name = 'All Employees'
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
+        SELECT ${tid}::uuid, pr.id, pg.id, 'direct_reports'::public.target_population_type
+        FROM public.permission_roles pr, public.permission_groups pg
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Manager'
+          AND pg.tenant_id = ${tid}::uuid AND pg.name = 'All Managers'
+      `);
+
       const bizUserId = await tx.$queryRaw<{ id: string }[]>(
         Prisma.sql`SELECT id FROM public.users WHERE auth_uid = ${user.id}::uuid LIMIT 1`
       );
 
       if (bizUserId.length > 0) {
         const uid = bizUserId[0].id;
-        const tid = tenant.id;
-
+        // Move user to the new tenant so composite FK (tenant_id, user_id) is satisfied
         await tx.$executeRaw(Prisma.sql`
-          INSERT INTO public.permission_roles (tenant_id, name, description, is_admin_role)
-          VALUES
-            (${tid}::uuid, 'Owner',                   'Tenant owner with full control',                        true),
-            (${tid}::uuid, 'HR Administrator',        'Full access to all HR modules and configuration',      true),
-            (${tid}::uuid, 'Employee (Self-Service)', 'View own profile, goals, feedback and skills',          false),
-            (${tid}::uuid, 'Manager',                 'View and manage direct reports',                        false)
+          UPDATE public.users SET tenant_id = ${tid}::uuid WHERE id = ${uid}::uuid
         `);
-
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO public.permission_groups (tenant_id, name, description)
-          VALUES
-            (${tid}::uuid, 'All Administrators', 'Users with HR admin access'),
-            (${tid}::uuid, 'All Employees',      'Every active employee in the tenant'),
-            (${tid}::uuid, 'All Managers',       'Employees with direct reports')
-        `);
-
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
-          SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
-          FROM public.permission_roles pr
-          CROSS JOIN (VALUES
-            ('admin_center.access',    'view'),
-            ('arco.manage',            'view'),
-            ('admin.manage_roles',     'edit'),
-            ('admin.manage_config',    'edit'),
-            ('admin.view_audit_logs',  'view'),
-            ('ec.manage_employees',    'view'),
-            ('ec.manage_employees',    'edit'),
-            ('ec.manage_positions',    'edit'),
-            ('ec.manage_org_structure','edit'),
-            ('pmgm.manage_goal_plans', 'edit'),
-            ('sdm.manage_succession',  'edit'),
-            ('tih.ontology',           'view'),
-            ('tih.ontology',           'edit'),
-            ('tih.job_requirements',   'view'),
-            ('tih.job_requirements',   'edit'),
-            ('tih.employee_skills',    'view'),
-            ('tih.employee_skills',    'edit')
-          ) AS p(key, act)
-          WHERE pr.tenant_id = ${tid}::uuid AND pr.name IN ('Owner', 'HR Administrator')
-        `);
-
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
-          SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
-          FROM public.permission_roles pr
-          CROSS JOIN (VALUES
-            ('admin.manage_tenant',  'edit'),
-            ('admin.manage_billing', 'edit')
-          ) AS p(key, act)
-          WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Owner'
-        `);
-
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
-          SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
-          FROM public.permission_roles pr
-          CROSS JOIN (VALUES
-            ('ec.view_own_profile',  'view'),
-            ('ec.view_org_chart',    'view'),
-            ('pmgm.view_own_goals',  'view'),
-            ('pmgm.view_own_goals',  'edit'),
-            ('pmgm.give_feedback',   'edit'),
-            ('lms.access',           'view'),
-            ('tih.ontology',         'view'),
-            ('tih.employee_skills',  'view'),
-            ('tih.employee_skills',  'edit')
-          ) AS p(key, act)
-          WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Employee (Self-Service)'
-        `);
-
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
-          SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
-          FROM public.permission_roles pr
-          CROSS JOIN (VALUES
-            ('ec.view_team_profiles',    'view'),
-            ('pmgm.manage_team_goals',   'edit'),
-            ('pmgm.view_team_feedback',  'view'),
-            ('sdm.nominate_successors',  'edit'),
-            ('tih.ontology',             'view'),
-            ('tih.job_requirements',     'view'),
-            ('tih.employee_skills',      'view'),
-            ('tih.employee_skills',      'edit'),
-            ('tih.manager_assessment',   'edit')
-          ) AS p(key, act)
-          WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Manager'
-        `);
-
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
-          SELECT ${tid}::uuid, pr.id, pg.id, 'all'::public.target_population_type
-          FROM public.permission_roles pr, public.permission_groups pg
-          WHERE pr.tenant_id = ${tid}::uuid AND pr.name IN ('Owner', 'HR Administrator')
-            AND pg.tenant_id = ${tid}::uuid AND pg.name = 'All Administrators'
-        `);
-
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
-          SELECT ${tid}::uuid, pr.id, pg.id, 'self'::public.target_population_type
-          FROM public.permission_roles pr, public.permission_groups pg
-          WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Employee (Self-Service)'
-            AND pg.tenant_id = ${tid}::uuid AND pg.name = 'All Employees'
-        `);
-
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
-          SELECT ${tid}::uuid, pr.id, pg.id, 'direct_reports'::public.target_population_type
-          FROM public.permission_roles pr, public.permission_groups pg
-          WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Manager'
-            AND pg.tenant_id = ${tid}::uuid AND pg.name = 'All Managers'
-        `);
-
         await tx.$executeRaw(Prisma.sql`
           INSERT INTO public.group_members (tenant_id, group_id, user_id)
           SELECT ${tid}::uuid, pg.id, ${uid}::uuid
