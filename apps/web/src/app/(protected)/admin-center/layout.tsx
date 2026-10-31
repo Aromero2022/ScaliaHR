@@ -20,7 +20,7 @@ export default async function AdminCenterLayout({
 
   if (!bizUser) redirect("/login");
 
-  const { allowed } = await can(bizUser.id, claims.tenantId, "admin_center.access", "view");
+  const { allowed } = await can(bizUser.id, "admin_center.access", "view");
   if (!allowed) notFound();
 
   return <>{children}</>;

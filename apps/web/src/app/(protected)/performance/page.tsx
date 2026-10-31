@@ -1,5 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/claims";
+import { getModuleFlags } from "@/lib/tenant/get-module-flags";
+import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
+import { can } from "@/lib/authz/can";
 import { redirect } from "next/navigation";
+import AccessDenied from "@/components/access-denied";
 import PerformanceDashboard from "@/components/performance-dashboard";
 
 interface GoalRow {
@@ -30,19 +35,24 @@ interface FeedbackDbRow {
 }
 
 export default async function PerformancePage() {
+  const claims = await requireAuth();
+  if (!claims.tenantId) redirect("/dashboard");
+
+  const flags = await getModuleFlags(claims.tenantId);
+  if (isModuleRouteBlocked("/performance", flags)) redirect("/dashboard");
+
   const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
 
   const { data: bizUser } = await supabase
     .from("users")
     .select("id, tenant_id")
-    .eq("auth_uid", authUser.id)
+    .eq("auth_uid", claims.userId)
     .single();
 
   if (!bizUser) redirect("/login");
+
+  const { allowed } = await can(bizUser.id, "pmgm.view_own_goals", "view");
+  if (!allowed) return <AccessDenied />;
 
   const [goalsRes, feedbackRes, colleaguesRes] = await Promise.all([
     supabase

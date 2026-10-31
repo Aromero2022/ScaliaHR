@@ -214,7 +214,8 @@ describe("module flags", () => {
       [tenant.id],
     );
     const flags = toModuleFlags(rows[0] as Record<string, unknown>);
-    const visible = filterNavByFlags(NAV_ITEMS, flags);
+    const allPerms = new Set(NAV_ITEMS.filter(i => i.permissionKey).map(i => i.permissionKey!));
+    const visible = filterNavByFlags(NAV_ITEMS, flags, allPerms);
     const hrefs = visible.map((i) => i.href);
 
     expect(hrefs).toContain("/lms");

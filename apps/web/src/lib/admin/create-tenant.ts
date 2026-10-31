@@ -22,6 +22,13 @@ export async function createTenant(input: CreateTenantInput) {
 
   try {
     const result = await adminPrisma.$transaction(async (tx) => {
+      const existing = await tx.$queryRaw<{ id: string }[]>(
+        Prisma.sql`SELECT id FROM public.users WHERE auth_uid = ${user.id}::uuid LIMIT 1`
+      );
+      if (existing.length > 0) {
+        throw new Error("__USER_ALREADY_IN_TENANT__");
+      }
+
       const tenant = await tx.tenant.create({
         data: {
           name,
@@ -49,48 +56,135 @@ export async function createTenant(input: CreateTenantInput) {
         `
       );
 
-      const bizUserId = await tx.$queryRaw<{ id: string }[]>(
-        Prisma.sql`SELECT id FROM public.users WHERE auth_uid = ${user.id}::uuid LIMIT 1`
-      );
+      const tid = tenant.id;
 
-      if (bizUserId.length > 0) {
-        await tx.$executeRaw(
-          Prisma.sql`
-            WITH new_group AS (
-              INSERT INTO public.permission_groups (tenant_id, name, description)
-              VALUES (${tenant.id}::uuid, 'Administrators', 'Users with administrative access')
-              RETURNING id
-            ),
-            new_role AS (
-              INSERT INTO public.permission_roles (tenant_id, name, description, is_admin_role)
-              VALUES (${tenant.id}::uuid, 'Owner', 'Tenant owner with full control', true)
-              RETURNING id
-            ),
-            _perms AS (
-              INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
-              SELECT ${tenant.id}::uuid, r.id, p.key, p.act::public.rbp_action
-              FROM new_role r
-              CROSS JOIN (VALUES
-                ('admin_center.access',    'view'),
-                ('arco.manage',            'view'),
-                ('admin.manage_roles',     'edit'),
-                ('admin.manage_config',    'edit'),
-                ('admin.view_audit_logs',  'view'),
-                ('admin.manage_tenant',    'edit'),
-                ('admin.manage_billing',   'edit')
-              ) AS p(key, act)
-            ),
-            _grant AS (
-              INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
-              SELECT ${tenant.id}::uuid, r.id, g.id, 'all'::public.target_population_type
-              FROM new_role r, new_group g
-            )
-            INSERT INTO public.group_members (tenant_id, group_id, user_id)
-            SELECT ${tenant.id}::uuid, g.id, ${bizUserId[0].id}::uuid
-            FROM new_group g
-          `
-        );
-      }
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.permission_roles (tenant_id, name, description, is_admin_role)
+        VALUES
+          (${tid}::uuid, 'Owner',                   'Tenant owner with full control',                        true),
+          (${tid}::uuid, 'HR Administrator',        'Full access to all HR modules and configuration',      true),
+          (${tid}::uuid, 'Employee (Self-Service)', 'View own profile, goals, feedback and skills',          false),
+          (${tid}::uuid, 'Manager',                 'View and manage direct reports',                        false)
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.permission_groups (tenant_id, name, description)
+        VALUES
+          (${tid}::uuid, 'All Administrators', 'Users with HR admin access'),
+          (${tid}::uuid, 'All Employees',      'Every active employee in the tenant'),
+          (${tid}::uuid, 'All Managers',       'Employees with direct reports')
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
+        SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
+        FROM public.permission_roles pr
+        CROSS JOIN (VALUES
+          ('admin_center.access',    'view'),
+          ('arco.manage',            'view'),
+          ('admin.manage_roles',     'edit'),
+          ('admin.manage_config',    'edit'),
+          ('admin.view_audit_logs',  'view'),
+          ('ec.manage_employees',    'view'),
+          ('ec.manage_employees',    'edit'),
+          ('ec.manage_positions',    'edit'),
+          ('ec.manage_org_structure','edit'),
+          ('pmgm.manage_goal_plans', 'edit'),
+          ('sdm.manage_succession',  'edit'),
+          ('tih.ontology',           'view'),
+          ('tih.ontology',           'edit'),
+          ('tih.job_requirements',   'view'),
+          ('tih.job_requirements',   'edit'),
+          ('tih.employee_skills',    'view'),
+          ('tih.employee_skills',    'edit')
+        ) AS p(key, act)
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name IN ('Owner', 'HR Administrator')
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
+        SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
+        FROM public.permission_roles pr
+        CROSS JOIN (VALUES
+          ('admin.manage_tenant',  'edit'),
+          ('admin.manage_billing', 'edit')
+        ) AS p(key, act)
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Owner'
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
+        SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
+        FROM public.permission_roles pr
+        CROSS JOIN (VALUES
+          ('ec.view_own_profile',  'view'),
+          ('ec.view_org_chart',    'view'),
+          ('pmgm.view_own_goals',  'view'),
+          ('pmgm.view_own_goals',  'edit'),
+          ('pmgm.give_feedback',   'edit'),
+          ('lms.access',           'view'),
+          ('tih.ontology',         'view'),
+          ('tih.employee_skills',  'view'),
+          ('tih.employee_skills',  'edit')
+        ) AS p(key, act)
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Employee (Self-Service)'
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
+        SELECT ${tid}::uuid, pr.id, p.key, p.act::public.rbp_action
+        FROM public.permission_roles pr
+        CROSS JOIN (VALUES
+          ('ec.view_team_profiles',    'view'),
+          ('pmgm.manage_team_goals',   'edit'),
+          ('pmgm.view_team_feedback',  'view'),
+          ('sdm.nominate_successors',  'edit'),
+          ('tih.ontology',             'view'),
+          ('tih.job_requirements',     'view'),
+          ('tih.employee_skills',      'view'),
+          ('tih.employee_skills',      'edit'),
+          ('tih.manager_assessment',   'edit')
+        ) AS p(key, act)
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Manager'
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
+        SELECT ${tid}::uuid, pr.id, pg.id, 'all'::public.target_population_type
+        FROM public.permission_roles pr, public.permission_groups pg
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name IN ('Owner', 'HR Administrator')
+          AND pg.tenant_id = ${tid}::uuid AND pg.name = 'All Administrators'
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
+        SELECT ${tid}::uuid, pr.id, pg.id, 'self'::public.target_population_type
+        FROM public.permission_roles pr, public.permission_groups pg
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Employee (Self-Service)'
+          AND pg.tenant_id = ${tid}::uuid AND pg.name = 'All Employees'
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
+        SELECT ${tid}::uuid, pr.id, pg.id, 'direct_reports'::public.target_population_type
+        FROM public.permission_roles pr, public.permission_groups pg
+        WHERE pr.tenant_id = ${tid}::uuid AND pr.name = 'Manager'
+          AND pg.tenant_id = ${tid}::uuid AND pg.name = 'All Managers'
+      `);
+
+      const ownerEmail = user.email ?? `${user.id}@placeholder.local`;
+      const newUser = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+        INSERT INTO public.users (tenant_id, auth_uid, email, first_name, last_name, status)
+        VALUES (${tid}::uuid, ${user.id}::uuid, ${ownerEmail}, '', '', 'ACTIVE')
+        RETURNING id
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.group_members (tenant_id, group_id, user_id)
+        SELECT ${tid}::uuid, pg.id, ${newUser[0].id}::uuid
+        FROM public.permission_groups pg
+        WHERE pg.tenant_id = ${tid}::uuid AND pg.name IN ('All Administrators', 'All Employees')
+      `);
 
       return tenant;
     });
@@ -102,6 +196,10 @@ export async function createTenant(input: CreateTenantInput) {
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Error al crear el tenant";
+
+    if (message === "__USER_ALREADY_IN_TENANT__") {
+      return { error: "El usuario ya pertenece a otra empresa" };
+    }
 
     if (message.includes("unique") || message.includes("duplicate")) {
       return { error: "Ya existe una organización con ese slug" };

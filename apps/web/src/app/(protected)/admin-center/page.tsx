@@ -36,9 +36,9 @@ export default async function AdminCenterPage() {
   if (!bizUser) redirect("/login");
 
   const [configPerm, auditPerm, rolesPerm] = await Promise.all([
-    can(bizUser.id, claims.tenantId, "admin.manage_config", "edit"),
-    can(bizUser.id, claims.tenantId, "admin.view_audit_logs", "view"),
-    can(bizUser.id, claims.tenantId, "admin.manage_roles", "edit"),
+    can(bizUser.id, "admin.manage_config", "edit"),
+    can(bizUser.id, "admin.view_audit_logs", "view"),
+    can(bizUser.id, "admin.manage_roles", "edit"),
   ]);
 
   if (!configPerm.allowed && !auditPerm.allowed && !rolesPerm.allowed) {

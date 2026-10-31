@@ -9,12 +9,12 @@ export interface NavItemConfig {
 
 export const NAV_ITEMS: NavItemConfig[] = [
   { href: "/dashboard", label: "Inicio (BizX)" },
-  { href: "/employees", label: "Empleados (EC)", moduleFlag: "is_ec_active" },
+  { href: "/employees", label: "Empleados (EC)", moduleFlag: "is_ec_active", permissionKey: "ec.view_org_chart" },
   { href: "/profile", label: "Mi Perfil" },
-  { href: "/org-chart", label: "Organigrama (EC)", moduleFlag: "is_ec_active" },
-  { href: "/performance", label: "Desempeño (PMGM)", moduleFlag: "is_pmgm_active" },
-  { href: "/lms", label: "Formación (LMS)", moduleFlag: "is_lms_active" },
-  { href: "/skills-hub", label: "Talent Hub (TIH)", moduleFlag: "is_tih_active" },
+  { href: "/org-chart", label: "Organigrama (EC)", moduleFlag: "is_ec_active", permissionKey: "ec.view_org_chart" },
+  { href: "/performance", label: "Desempeño (PMGM)", moduleFlag: "is_pmgm_active", permissionKey: "pmgm.view_own_goals" },
+  { href: "/lms", label: "Formación (LMS)", moduleFlag: "is_lms_active", permissionKey: "lms.access" },
+  { href: "/skills-hub", label: "Talent Hub (TIH)", moduleFlag: "is_tih_active", permissionKey: "tih.employee_skills" },
   { href: "/admin/arco", label: "Derechos ARCO", permissionKey: "arco.manage" },
   { href: "/admin-center", label: "Admin Center", permissionKey: "admin_center.access" },
 ];

@@ -1,19 +1,21 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/claims";
+import { can } from "@/lib/authz/can";
 
 export default async function DashboardPage() {
+  const claims = await requireAuth();
   const supabase = await createClient();
 
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) redirect("/login");
+  const { data: bizUser } = await supabase
+    .from("users")
+    .select("id")
+    .eq("auth_uid", claims.userId)
+    .single();
 
   const { data: profile } = await supabase
     .from("users")
     .select("*, ec_job_information!ec_job_information_user_id_fkey(job_title, end_date), departments(name)")
-    .eq("auth_uid", authUser.id)
+    .eq("auth_uid", claims.userId)
     .single();
 
   if (!profile) {
@@ -32,14 +34,20 @@ export default async function DashboardPage() {
   ) as { job_title: string } | undefined;
   const dept = Array.isArray(profile.departments) ? profile.departments[0] : profile.departments;
 
-  const { count: totalEmployees } = await supabase
-    .from("users")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "ACTIVE");
+  const canViewTenantKpis = bizUser
+    ? (await can(bizUser.id, "ec.manage_employees", "view")).allowed
+    : false;
 
-  const { count: totalDepts } = await supabase
-    .from("departments")
-    .select("*", { count: "exact", head: true });
+  let totalEmployees: number | null = null;
+  let totalDepts: number | null = null;
+  if (canViewTenantKpis) {
+    const [empRes, deptRes] = await Promise.all([
+      supabase.from("users").select("*", { count: "exact", head: true }).eq("status", "ACTIVE"),
+      supabase.from("departments").select("*", { count: "exact", head: true }),
+    ]);
+    totalEmployees = empRes.count;
+    totalDepts = deptRes.count;
+  }
 
   const { data: recentGoals } = await supabase
     .from("performance_goals")
@@ -62,16 +70,20 @@ export default async function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Empleados Activos"
-          value={totalEmployees ?? 0}
-          accent="indigo"
-        />
-        <KpiCard
-          label="Departamentos"
-          value={totalDepts ?? 0}
-          accent="emerald"
-        />
+        {canViewTenantKpis && (
+          <>
+            <KpiCard
+              label="Empleados Activos"
+              value={totalEmployees ?? 0}
+              accent="indigo"
+            />
+            <KpiCard
+              label="Departamentos"
+              value={totalDepts ?? 0}
+              accent="emerald"
+            />
+          </>
+        )}
         <KpiCard
           label="Performance Score"
           value={profile.performance_score ?? "—"}

@@ -523,63 +523,141 @@ expectation of self-service that the system does not deliver.
 
 ## Known Risk — `can()` Receives `tenantId` as a Parameter
 
-**Status:** Accepted (temporary). Registered 2026-10-30.
+**Status:** RESOLVED. Registered 2026-10-30, resolved 2026-10-31.
 
-**Affected component:** `apps/web/src/lib/authz/can.ts` — the `can()` function
-and all its callers.
-
-**Current state:** `can(userId, tenantId, permissionKey, action, ...)` receives
-`tenantId` as an explicit parameter. Today every caller obtains this value from
-`getClaims()` (the verified JWT `tenant_id` claim), which is correct. However,
-`can()` itself does not verify the origin of the `tenantId` it receives — it
-trusts whatever the caller passes and forwards it to `withTenant()`, which sets
-the RLS context for the queries.
-
-**Risk:** A future caller could inadvertently pass a `tenantId` from an
-unverified source (user input, a database query without RLS, a URL parameter),
-allowing cross-tenant authorization bypass: the user would be evaluated against
-another tenant's permission matrix.
-
-**Planned fix:**
-
-1. Have `can()` read the tenant directly from the session's JWT claim
-   internally, ignoring the parameter, or validate that the passed `tenantId`
-   matches the session claim before proceeding.
-2. Alternatively, replace the `tenantId` parameter with a session/claims
-   object that `can()` extracts the tenant from, making it impossible to pass
-   an arbitrary value.
+**Resolution:** `can()` no longer accepts `tenantId` as a parameter. It reads
+the tenant directly from `getClaims()` (the verified JWT claim) internally.
+The signature is now `can(userId, permissionKey, action, targetUserId?, fieldKey?)`.
+Commit `a21be48` on branch `fix/authz-closure`.
 
 ## Known Risk — `can()` requestCache Is Global and Never Invalidated
 
-**Status:** Accepted (planned fix). Registered 2026-10-30.
+**Status:** RESOLVED. Registered 2026-10-30, resolved 2026-10-31.
 
-**Affected component:** `apps/web/src/lib/authz/can.ts` — the module-level
-`requestCache` (`Map<string, CanResult>`).
+**Resolution:** The module-level `Map` cache was replaced with React `cache()`
+which is scoped to the current request lifecycle. `clearCanCache()` was removed.
+Commit `a21be48` on branch `fix/authz-closure`.
 
-**Current state:** Every call to `can()` stores its result in a `Map` that
-lives at module scope. Because Next.js App Router keeps the Node.js process
-alive across requests, the cache is effectively global to the server process
-and survives across all HTTP requests.
+## Known Risk — Dual Admin Truth (RBP vs. JWT app_role)
 
-`clearCanCache()` is exported but never called anywhere in the application
-code — not after role edits, group-membership changes, or permission-key
-updates.
+**Status:** Accepted (permanent). Registered 2026-10-31.
 
-**Risk:** When an admin changes a user's permissions (adds/removes a role,
-changes group membership, edits a permission key), the change does not take
-effect until the Node.js server process is restarted. In development this is
-nearly invisible because the dev server restarts often; in production with
-long-lived workers the stale cache window can be hours or days.
+**Affected components:**
 
-**Planned fix:**
+- `supabase/migrations/20261030010000_ec_job_info_restrictive_admin.sql` — RESTRICTIVE
+  RLS policies that call `is_tenant_admin()`, which checks RBP (`role_grants` +
+  `permission_roles.is_admin_role` + `group_members`).
+- `insert_effective_record()` (SECURITY DEFINER RPC) — checks `has_app_role('owner')
+  OR has_app_role('hr_admin')`, which reads `app_role` from the JWT claim
+  (`request.jwt.claims`).
 
-1. **Short term — per-request cache:** Replace the module-level `Map` with
-   React's `cache()` (available in Server Components) or Next.js
-   `unstable_cache` scoped to the current request. This ensures the cache
-   lives only for the duration of a single HTTP request and is garbage
-   collected automatically.
-2. **Alternative — TTL-based expiration:** If cross-request caching is
-   desirable for performance, wrap the `Map` with a short TTL (e.g. 30–60
-   seconds) so stale entries expire automatically. Pair with an explicit
-   `clearCanCache()` call in the role/group mutation Server Actions for
-   immediate invalidation.
+**Current state:** There are two independent "is this user an admin?" checks:
+
+1. **RBP-based** (`is_tenant_admin()`): looks up group membership → role grants →
+   `is_admin_role` flag on the permission role. Used by RESTRICTIVE RLS policies.
+2. **JWT-based** (`has_app_role()`): reads the `app_role` string from
+   `user_tenant_memberships` (set at login, baked into the JWT). Used by
+   `insert_effective_record()`.
+
+Both must pass for an INSERT/UPDATE on `ec_job_information` to succeed via the
+RPC: `insert_effective_record()` rejects non-admins before the SQL runs, and
+the RESTRICTIVE policy rejects the row if `is_tenant_admin()` returns false.
+
+**Risk:** If the two sources diverge (a user has the JWT `app_role='owner'`
+but is not in any admin group in RBP, or vice versa), writes will fail even
+though one system considers them authorized. `createTenant()` and `link-owner.sh`
+keep both in sync for new tenants, but manual edits to `group_members` or
+`user_tenant_memberships` without updating the other will break the invariant.
+
+**Mitigation:** Integration test `insert-effective-record-rls.test.ts` verifies
+that the path works end-to-end for owner and is blocked for employee. A future
+unification (making `insert_effective_record()` also check RBP, or replacing
+`app_role` with RBP entirely) would eliminate this risk.
+
+---
+
+## D12 — Licensing by Module Flag
+
+**Decision:** The `is_*_active` boolean columns on `tenants` are **licensing
+attributes** controlled by the platform. No authenticated role — including the
+tenant owner — can change them. Only `service_role` / the admin client can
+toggle module flags.
+
+**Implementation:**
+
+1. **Column-level REVOKE:** Migration `20261031010000_d12_protect_module_flags.sql`
+   revokes `UPDATE` on all 12 `is_*_active` columns from `authenticated`. The
+   owner row-level policy (`tenants_owner_update`) still allows `UPDATE` on
+   `name`, `domain`, and `updated_at`.
+
+2. **`can()` module gate:** Before evaluating RBP grants, `can()` extracts the
+   module prefix from the `permission_key` (e.g., `ec` from `ec.manage_employees`)
+   and looks it up in `PERMISSION_MODULE_MAP`. If the corresponding flag is
+   `false`, the function returns `{ allowed: false, reason: "module_inactive" }`
+   without checking permissions.
+
+3. **Permissions without a module** (`admin`, `admin_center`, `arco`) are not
+   gated by any flag and are always evaluated through the normal RBP path.
+
+**`PERMISSION_MODULE_MAP`:**
+
+| Prefix | Flag |
+|--------|------|
+| `ec` | `is_ec_active` |
+| `pmgm` | `is_pmgm_active` |
+| `tih` | `is_tih_active` |
+| `lms` | `is_lms_active` |
+| `sdm` | `is_sdm_active` |
+| `rcm` | `is_rcm_active` |
+| `onb` | `is_onb_active` |
+| `comp` | `is_comp_active` |
+| `wfa` | `is_wfa_active` |
+| `wfp` | `is_wfp_active` |
+| `tme` | `is_tme_active` |
+| `pos_mgmt` | `is_pos_mgmt_active` |
+
+**Tests:**
+- `tenants-policies.test.ts`: owner cannot UPDATE `is_lms_active` (42501).
+- `authz-matrix.test.ts`: `can()` returns `module_inactive` when the flag is
+  off (TIH, LMS, EC); `admin_center.access` and `arco.manage` remain allowed.
+- `module-flags.test.ts`: route guards and sidebar filtering for disabled modules.
+
+---
+
+## D13 — Modelo de Tenant e Identidad
+
+**Decision:** One tenant = one customer. A corporate group with several legal
+entities is a single tenant with multiple `legal_entities` (future table).
+
+**Identity rules:**
+
+1. Each access account (`auth.users`) and its business profile (`public.users`)
+   belong to exactly one tenant. `users.auth_uid UNIQUE` is global by design.
+   A person who works at two customers has two separate accounts.
+
+2. `createTenant()` only accepts auth users **without** an existing
+   `public.users` row. If the auth user already has a business profile in
+   another tenant, the function returns
+   `{ error: "El usuario ya pertenece a otra empresa" }` and creates nothing.
+   There is no `UPDATE users.tenant_id` — moving a user between tenants is
+   not supported.
+
+3. Provider staff (support, implementation) are **not** employees of the
+   customer. They will access customer tenants through the platform console
+   (Phase 11) with temporary, audited, customer-authorized support access.
+
+4. `switchTenant` and `user_tenant_memberships` with multiple active tenants
+   are reserved for that platform-level support access. They are not used for
+   regular employees.
+
+**Planned login (Phases 10–11):**
+
+- Company identification by subdomain or company code; the customer chooses
+  the identifier (email, employee number, or both).
+- For employee-number login, a technical internal email is created in
+  Supabase Auth; password reset without email is handled by HR.
+
+**Tenant birth:**
+
+- Self-service with a trial period (Phase 11).
+- Assisted onboarding from the platform console (Phase 11).

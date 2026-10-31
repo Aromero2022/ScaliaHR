@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getClaims } from "@/lib/supabase/claims";
 import { revalidatePath } from "next/cache";
+import { can } from "@/lib/authz/can";
 
 export async function createGoal(formData: FormData) {
   const claims = await getClaims();
@@ -16,6 +17,9 @@ export async function createGoal(formData: FormData) {
     .single();
 
   if (!bizUser) return { error: "Usuario no encontrado" };
+
+  const { allowed } = await can(bizUser.id, "pmgm.view_own_goals", "edit");
+  if (!allowed) return { error: "Sin permiso para crear objetivos" };
 
   const title = formData.get("title") as string;
   const description = formData.get("description") as string;
@@ -63,6 +67,9 @@ export async function sendFeedback(formData: FormData) {
     .single();
 
   if (!bizUser) return { error: "Usuario no encontrado" };
+
+  const { allowed } = await can(bizUser.id, "pmgm.give_feedback", "edit");
+  if (!allowed) return { error: "Sin permiso para enviar feedback" };
 
   const subjectId = formData.get("subject_id") as string;
   const content = formData.get("content") as string;

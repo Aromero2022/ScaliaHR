@@ -1,5 +1,7 @@
+import { cache } from "react";
 import { Prisma, withTenant } from "@/lib/db/tenant-client";
 import type { PrismaClient } from "@/lib/db/tenant-client";
+import { getClaims } from "@/lib/supabase/claims";
 
 type RbpAction = "view" | "edit";
 
@@ -8,45 +10,43 @@ type CanResult = {
   reason?: string;
 };
 
-const requestCache = new Map<string, CanResult>();
+export type { RbpAction, CanResult };
 
-function cacheKey(
-  userId: string,
-  tenantId: string,
-  permissionKey: string,
-  action: RbpAction,
-  targetUserId?: string,
-  fieldKey?: string
-): string {
-  return `${userId}:${tenantId}:${permissionKey}:${action}:${targetUserId ?? ""}:${fieldKey ?? ""}`;
-}
+export const PERMISSION_MODULE_MAP: Record<string, string> = {
+  ec: "is_ec_active",
+  pmgm: "is_pmgm_active",
+  tih: "is_tih_active",
+  lms: "is_lms_active",
+  sdm: "is_sdm_active",
+  rcm: "is_rcm_active",
+  onb: "is_onb_active",
+  comp: "is_comp_active",
+  wfa: "is_wfa_active",
+  wfp: "is_wfp_active",
+  tme: "is_tme_active",
+  pos_mgmt: "is_pos_mgmt_active",
+};
 
 export async function can(
   userId: string,
-  tenantId: string,
   permissionKey: string,
   action: RbpAction,
   targetUserId?: string,
   fieldKey?: string
 ): Promise<CanResult> {
-  const key = cacheKey(userId, tenantId, permissionKey, action, targetUserId, fieldKey);
-  const cached = requestCache.get(key);
-  if (cached) return cached;
+  const claims = await getClaims();
+  if (!claims?.tenantId) {
+    return { allowed: false, reason: "no_tenant" };
+  }
 
-  const result = await evaluate(
+  return evaluateCached(
     userId,
-    tenantId,
+    claims.tenantId,
     permissionKey,
     action,
     targetUserId,
-    fieldKey
+    fieldKey,
   );
-  requestCache.set(key, result);
-  return result;
-}
-
-export function clearCanCache() {
-  requestCache.clear();
 }
 
 type GrantRow = {
@@ -75,9 +75,20 @@ async function evaluate(
   permissionKey: string,
   action: RbpAction,
   targetUserId?: string,
-  fieldKey?: string
+  fieldKey?: string,
 ): Promise<CanResult> {
   return withTenant({ tenantId }, async (tx) => {
+    const modulePrefix = permissionKey.split(".")[0];
+    const flagCol = PERMISSION_MODULE_MAP[modulePrefix];
+    if (flagCol) {
+      const rows = await tx.$queryRaw<Record<string, boolean>[]>(
+        Prisma.sql`SELECT ${Prisma.raw(flagCol)} AS flag FROM public.tenants WHERE id = ${tenantId}::uuid`
+      );
+      if (rows.length === 0 || !rows[0].flag) {
+        return { allowed: false, reason: "module_inactive" };
+      }
+    }
+
     const grants = await findUserGrants(tx, userId, tenantId);
 
     if (grants.length === 0) {
@@ -158,3 +169,5 @@ async function evaluate(
     return { allowed: false, reason: "target_population_mismatch" };
   });
 }
+
+const evaluateCached = cache(evaluate);

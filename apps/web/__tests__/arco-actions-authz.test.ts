@@ -22,7 +22,6 @@ vi.mock("@/lib/supabase/claims", () => ({
 const mockCan = vi.fn();
 vi.mock("@/lib/authz/can", () => ({
   can: (...args: unknown[]) => mockCan(...args),
-  clearCanCache: vi.fn(),
 }));
 
 vi.mock("@/lib/audit/log", () => ({
@@ -92,7 +91,7 @@ describe("ARCO Server Actions authorization", () => {
       if (!result.success) {
         expect(result.error).toContain("Sin permiso");
       }
-      expect(mockCan).toHaveBeenCalledWith("user-emp-1", "t1", "arco.manage", "view");
+      expect(mockCan).toHaveBeenCalledWith("user-emp-1", "arco.manage", "view");
     });
   });
 
@@ -107,7 +106,7 @@ describe("ARCO Server Actions authorization", () => {
       if (!result.success) {
         expect(result.error).toContain("Sin permiso");
       }
-      expect(mockCan).toHaveBeenCalledWith("user-emp-1", "t1", "arco.manage", "view");
+      expect(mockCan).toHaveBeenCalledWith("user-emp-1", "arco.manage", "view");
     });
   });
 
@@ -119,7 +118,7 @@ describe("ARCO Server Actions authorization", () => {
       if (!result.success) {
         expect(result.error).toContain("Sin permiso");
       }
-      expect(mockCan).toHaveBeenCalledWith("user-emp-1", "t1", "arco.manage", "view");
+      expect(mockCan).toHaveBeenCalledWith("user-emp-1", "arco.manage", "view");
     });
   });
 });

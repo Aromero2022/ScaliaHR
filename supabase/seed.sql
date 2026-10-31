@@ -314,7 +314,8 @@ FROM (
   CROSS JOIN (VALUES
     ('admin_center.access', 'view'), ('arco.manage', 'view'),
     ('admin.manage_roles', 'edit'), ('admin.manage_config', 'edit'), ('admin.view_audit_logs', 'view'),
-    ('ec.manage_employees', 'edit'), ('ec.manage_positions', 'edit'), ('ec.manage_org_structure', 'edit'),
+    ('ec.manage_employees', 'view'), ('ec.manage_employees', 'edit'),
+    ('ec.manage_positions', 'edit'), ('ec.manage_org_structure', 'edit'),
     ('pmgm.manage_goal_plans', 'edit'), ('sdm.manage_succession', 'edit'),
     ('tih.ontology', 'view'), ('tih.ontology', 'edit'),
     ('tih.job_requirements', 'view'), ('tih.job_requirements', 'edit'),
@@ -327,7 +328,8 @@ FROM (
   SELECT 'bb100000-0000-0000-0000-000000000002', p.permission_key, p.action
   FROM (VALUES
     ('ec.view_own_profile', 'view'), ('ec.view_org_chart', 'view'),
-    ('pmgm.view_own_goals', 'view'), ('pmgm.give_feedback', 'edit'),
+    ('pmgm.view_own_goals', 'view'), ('pmgm.view_own_goals', 'edit'),
+    ('pmgm.give_feedback', 'edit'), ('lms.access', 'view'),
     ('tih.ontology', 'view'), ('tih.employee_skills', 'view'), ('tih.employee_skills', 'edit')
   ) AS p(permission_key, action)
   UNION ALL
@@ -336,7 +338,8 @@ FROM (
     ('ec.view_team_profiles', 'view'), ('pmgm.manage_team_goals', 'edit'),
     ('pmgm.view_team_feedback', 'view'), ('sdm.nominate_successors', 'edit'),
     ('tih.ontology', 'view'), ('tih.job_requirements', 'view'),
-    ('tih.employee_skills', 'view'), ('tih.employee_skills', 'edit')
+    ('tih.employee_skills', 'view'), ('tih.employee_skills', 'edit'),
+    ('tih.manager_assessment', 'edit')
   ) AS p(permission_key, action)
 ) AS v
 ON CONFLICT DO NOTHING;
@@ -350,7 +353,6 @@ FROM (VALUES
   ('bb100000-0000-0000-0000-000000000010', 'cc100000-0000-0000-0000-000000000001', 'all'),
   ('bb100000-0000-0000-0000-000000000001', 'cc100000-0000-0000-0000-000000000001', 'all'),
   ('bb100000-0000-0000-0000-000000000003', 'cc100000-0000-0000-0000-000000000003', 'direct_reports'),
-  ('bb100000-0000-0000-0000-000000000003', 'cc100000-0000-0000-0000-000000000003', 'same_department'),
   ('bb100000-0000-0000-0000-000000000002', 'cc100000-0000-0000-0000-000000000002', 'self')
 ) AS v(role_id, group_id, population)
 ON CONFLICT DO NOTHING;
