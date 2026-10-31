@@ -20,7 +20,7 @@
 | `job_roles` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | FK compuesto a job_family |
 | `job_classifications` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | FK compuesto a job_role |
 | `positions` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | FKs a department, classification, parent_position |
-| `ec_job_information` | ENABLE+FORCE | SELECT/INSERT/UPDATE tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | Effective-dated con EXCLUDE btree_gist |
+| `ec_job_information` | ENABLE+FORCE | SELECT/INSERT/UPDATE tenant isolation; RESTRICTIVE `no_hard_delete_authenticated`; RESTRICTIVE admin-only INSERT/UPDATE (`is_tenant_admin()`) | Effective-dated con EXCLUDE btree_gist |
 | `ec_compensation` | ENABLE+FORCE | SELECT (own+manager+admin), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | Effective-dated; PII policy RESTRICTIVE |
 | `ec_personal_information` | ENABLE+FORCE | SELECT (own+manager+admin), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | Effective-dated; PII policy RESTRICTIVE |
 | `object_definitions` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | Metadata de objetos |
