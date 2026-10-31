@@ -7,6 +7,7 @@ import { TestWorld } from "./helpers/world";
 const env = integrationEnv();
 
 process.env.DATABASE_URL = env.prismaDbUrl;
+process.env.ADMIN_DATABASE_URL = env.dbUrl;
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
