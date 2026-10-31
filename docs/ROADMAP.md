@@ -1,6 +1,11 @@
 # Scalia HR — Roadmap
 
 > Fases planificadas a partir del estado actual (Fases 1–8 completadas).
+>
+> **Nota:** El cierre de autorización (D12 — licenciamiento por módulo, `can()`
+> en todas las rutas y acciones, caché por request, guards de flag de módulo y
+> permisos completos en create-tenant) se ejecuta antes de la Fase 9 como
+> prerrequisito de seguridad para todas las fases siguientes.
 
 ---
 
@@ -10,15 +15,16 @@
 |------|--------|---------|
 | 9 | Workflows y Notificaciones | Motor de workflows configurable, notificaciones push/email/in-app, eventos de ciclo de vida del empleado. |
 | 10 | Admin Center base | CRUD de RBP (roles, grupos y asignaciones), DPCS (aviso de privacidad versionado, aceptación al iniciar sesión y Set DPCS Statement Status), Picklist Center, Import Employee Data, configuración de empresa (logo, tema, idioma, política de contraseña y MFA) y reporte de auditoría. |
-| 11 | JPB + realineación de TIH | Job Profile Builder: biblioteca de atributos, escalas, tags, Growth Portfolio. Realineación de TIH como capa de skills. |
-| 12 | PMGM v2 | Plantillas de formulario, rating scales, route maps, metas de desempeño. |
-| 13 | 360 Multi-Rater | Evaluaciones multi-evaluador con formularios configurables y anonimato parcial. |
-| 14a | Calibración y Sucesión | Calibración, performance vs. potencial, 9-box, talent pools, sucesión y organigrama de sucesión. |
-| 14b | Career Development | Metas de desarrollo, Career Worksheet, rol objetivo, mentoring. |
-| 15 | CPM y Feedback Continuo | Continuous Performance Management: check-ins periódicos y feedback continuo. |
-| 16 | Retención y Bloqueo (DRTM) | Data Retention & Transparency Module, incluido el autoservicio ARCO. |
-| 17 | Time Tracking | Registro de tiempo, aprobaciones, integración con nómina. |
-| 18 | RCM | Recruiting Management: requisiciones, candidatos, pipeline y ofertas. |
+| 11 | Consola de plataforma y suscripciones | Catálogo de planes y módulos, alta de clientes, periodos de prueba, activación y suspensión por pago, facturación. Consola del proveedor separada del Admin Center del cliente. |
+| 12 | JPB + realineación de TIH | Job Profile Builder: biblioteca de atributos, escalas, tags, Growth Portfolio. Realineación de TIH como capa de skills. |
+| 13 | PMGM v2 | Plantillas de formulario, rating scales, route maps, metas de desempeño. |
+| 14 | 360 Multi-Rater | Evaluaciones multi-evaluador con formularios configurables y anonimato parcial. |
+| 15a | Calibración y Sucesión | Calibración, performance vs. potencial, 9-box, talent pools, sucesión y organigrama de sucesión. |
+| 15b | Career Development | Metas de desarrollo, Career Worksheet, rol objetivo, mentoring. |
+| 16 | CPM y Feedback Continuo | Continuous Performance Management: check-ins periódicos y feedback continuo. |
+| 17 | Retención y Bloqueo (DRTM) | Data Retention & Transparency Module, incluido el autoservicio ARCO. |
+| 18 | Time Tracking | Registro de tiempo, aprobaciones, integración con nómina. |
+| 19 | RCM | Recruiting Management: requisiciones, candidatos, pipeline y ofertas. |
 
 ---
 
