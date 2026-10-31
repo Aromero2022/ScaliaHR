@@ -22,6 +22,13 @@ export async function createTenant(input: CreateTenantInput) {
 
   try {
     const result = await adminPrisma.$transaction(async (tx) => {
+      const existing = await tx.$queryRaw<{ id: string }[]>(
+        Prisma.sql`SELECT id FROM public.users WHERE auth_uid = ${user.id}::uuid LIMIT 1`
+      );
+      if (existing.length > 0) {
+        throw new Error("__USER_ALREADY_IN_TENANT__");
+      }
+
       const tenant = await tx.tenant.create({
         data: {
           name,
@@ -165,23 +172,19 @@ export async function createTenant(input: CreateTenantInput) {
           AND pg.tenant_id = ${tid}::uuid AND pg.name = 'All Managers'
       `);
 
-      const bizUserId = await tx.$queryRaw<{ id: string }[]>(
-        Prisma.sql`SELECT id FROM public.users WHERE auth_uid = ${user.id}::uuid LIMIT 1`
-      );
+      const ownerEmail = user.email ?? `${user.id}@placeholder.local`;
+      const newUser = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+        INSERT INTO public.users (tenant_id, auth_uid, email, first_name, last_name, status)
+        VALUES (${tid}::uuid, ${user.id}::uuid, ${ownerEmail}, '', '', 'ACTIVE')
+        RETURNING id
+      `);
 
-      if (bizUserId.length > 0) {
-        const uid = bizUserId[0].id;
-        // Move user to the new tenant so composite FK (tenant_id, user_id) is satisfied
-        await tx.$executeRaw(Prisma.sql`
-          UPDATE public.users SET tenant_id = ${tid}::uuid WHERE id = ${uid}::uuid
-        `);
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO public.group_members (tenant_id, group_id, user_id)
-          SELECT ${tid}::uuid, pg.id, ${uid}::uuid
-          FROM public.permission_groups pg
-          WHERE pg.tenant_id = ${tid}::uuid AND pg.name IN ('All Administrators', 'All Employees')
-        `);
-      }
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.group_members (tenant_id, group_id, user_id)
+        SELECT ${tid}::uuid, pg.id, ${newUser[0].id}::uuid
+        FROM public.permission_groups pg
+        WHERE pg.tenant_id = ${tid}::uuid AND pg.name IN ('All Administrators', 'All Employees')
+      `);
 
       return tenant;
     });
@@ -193,6 +196,10 @@ export async function createTenant(input: CreateTenantInput) {
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Error al crear el tenant";
+
+    if (message === "__USER_ALREADY_IN_TENANT__") {
+      return { error: "El usuario ya pertenece a otra empresa" };
+    }
 
     if (message.includes("unique") || message.includes("duplicate")) {
       return { error: "Ya existe una organización con ese slug" };

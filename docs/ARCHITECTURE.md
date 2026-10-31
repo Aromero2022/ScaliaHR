@@ -573,3 +573,43 @@ keep both in sync for new tenants, but manual edits to `group_members` or
 that the path works end-to-end for owner and is blocked for employee. A future
 unification (making `insert_effective_record()` also check RBP, or replacing
 `app_role` with RBP entirely) would eliminate this risk.
+
+---
+
+## D13 — Modelo de Tenant e Identidad
+
+**Decision:** One tenant = one customer. A corporate group with several legal
+entities is a single tenant with multiple `legal_entities` (future table).
+
+**Identity rules:**
+
+1. Each access account (`auth.users`) and its business profile (`public.users`)
+   belong to exactly one tenant. `users.auth_uid UNIQUE` is global by design.
+   A person who works at two customers has two separate accounts.
+
+2. `createTenant()` only accepts auth users **without** an existing
+   `public.users` row. If the auth user already has a business profile in
+   another tenant, the function returns
+   `{ error: "El usuario ya pertenece a otra empresa" }` and creates nothing.
+   There is no `UPDATE users.tenant_id` — moving a user between tenants is
+   not supported.
+
+3. Provider staff (support, implementation) are **not** employees of the
+   customer. They will access customer tenants through the platform console
+   (Phase 11) with temporary, audited, customer-authorized support access.
+
+4. `switchTenant` and `user_tenant_memberships` with multiple active tenants
+   are reserved for that platform-level support access. They are not used for
+   regular employees.
+
+**Planned login (Phases 10–11):**
+
+- Company identification by subdomain or company code; the customer chooses
+  the identifier (email, employee number, or both).
+- For employee-number login, a technical internal email is created in
+  Supabase Auth; password reset without email is handled by HR.
+
+**Tenant birth:**
+
+- Self-service with a trial period (Phase 11).
+- Assisted onboarding from the platform console (Phase 11).

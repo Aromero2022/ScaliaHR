@@ -14,8 +14,8 @@
 | Fase | Nombre | Alcance |
 |------|--------|---------|
 | 9 | Workflows y Notificaciones | Motor de workflows configurable, notificaciones push/email/in-app, eventos de ciclo de vida del empleado. |
-| 10 | Admin Center base | CRUD de RBP (roles, grupos y asignaciones), DPCS (aviso de privacidad versionado, aceptación al iniciar sesión y Set DPCS Statement Status), Picklist Center, Import Employee Data, configuración de empresa (logo, tema, idioma, política de contraseña y MFA) y reporte de auditoría. |
-| 11 | Consola de plataforma y suscripciones | Catálogo de planes y módulos, alta de clientes, periodos de prueba, activación y suspensión por pago, facturación. Consola del proveedor separada del Admin Center del cliente. |
+| 10 | Admin Center base | CRUD de RBP (roles, grupos y asignaciones), DPCS (aviso de privacidad versionado, aceptación al iniciar sesión y Set DPCS Statement Status), Picklist Center, Import Employee Data, configuración de empresa (logo, tema, idioma, política de contraseña y MFA), reporte de auditoría, política de login por cliente (correo, número de empleado o ambos) y reseteo de contraseña por RH. |
+| 11 | Consola de plataforma y suscripciones | Catálogo de planes y módulos, alta de clientes por autoservicio con periodo de prueba y alta asistida, activación y suspensión por pago, facturación. Consola del proveedor separada del Admin Center del cliente. Subdominio o código de empresa por tenant. Acceso de soporte del proveedor (temporal, auditado, autorizado por el cliente). |
 | 12 | JPB + realineación de TIH | Job Profile Builder: biblioteca de atributos, escalas, tags, Growth Portfolio. Realineación de TIH como capa de skills. |
 | 13 | PMGM v2 | Plantillas de formulario, rating scales, route maps, metas de desempeño. |
 | 14 | 360 Multi-Rater | Evaluaciones multi-evaluador con formularios configurables y anonimato parcial. |

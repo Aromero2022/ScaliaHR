@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { integrationEnv } from "./helpers/env";
@@ -32,25 +32,28 @@ const world = new TestWorld(env, db);
 
 let authUser: { authId: string; email: string };
 let createdTenantId: string | null = null;
-let setupTenantId: string;
+
+let existingAuthUser: { authId: string; email: string };
+let existingTenantId: string;
 
 beforeAll(async () => {
   authUser = await world.createAuthUser();
-  const userId = authUser.authId;
+  mockGetUser.mockResolvedValue({
+    data: { user: { id: authUser.authId, email: authUser.email } },
+    error: null,
+  });
 
-  setupTenantId = randomUUID();
+  existingAuthUser = await world.createAuthUser();
+  existingTenantId = randomUUID();
   await db.query(
-    `INSERT INTO public.tenants (id, name, slug) VALUES ($1, 'CT Bootstrap', $2)`,
-    [setupTenantId, `ct-boot-${setupTenantId.slice(0, 8)}`],
+    `INSERT INTO public.tenants (id, name, slug) VALUES ($1, 'Existing Co', $2)`,
+    [existingTenantId, `existing-${existingTenantId.slice(0, 8)}`],
   );
-
   await db.query(
-    `INSERT INTO public.users (auth_uid, tenant_id, email, first_name, last_name, status, hire_date, employee_id)
-     VALUES ($1::uuid, $2, $3, 'Test', 'Owner', 'ACTIVE', NOW(), 'CT-0001')
-     ON CONFLICT (auth_uid) DO NOTHING`,
-    [userId, setupTenantId, authUser.email],
+    `INSERT INTO public.users (auth_uid, tenant_id, email, first_name, last_name, status)
+     VALUES ($1::uuid, $2, $3, 'Existing', 'User', 'ACTIVE')`,
+    [existingAuthUser.authId, existingTenantId, existingAuthUser.email],
   );
-  mockGetUser.mockResolvedValue({ data: { user: { id: userId } }, error: null });
 }, 15_000);
 
 afterAll(async () => {
@@ -65,10 +68,11 @@ afterAll(async () => {
         await db.query(`DELETE FROM public."${t}" WHERE tenant_id = $1`, [createdTenantId]);
       }
       await db.query(`DELETE FROM public.user_settings WHERE active_tenant_id = $1`, [createdTenantId]);
+      await db.query("DELETE FROM public.users WHERE auth_uid = $1::uuid", [authUser.authId]);
       await db.query("DELETE FROM public.tenants WHERE id = $1", [createdTenantId]);
     }
-    await db.query("DELETE FROM public.users WHERE auth_uid = $1::uuid", [authUser.authId]);
-    await db.query("DELETE FROM public.tenants WHERE id = $1", [setupTenantId]);
+    await db.query("DELETE FROM public.users WHERE auth_uid = $1::uuid", [existingAuthUser.authId]);
+    await db.query("DELETE FROM public.tenants WHERE id = $1", [existingTenantId]);
     await world.cleanup();
   } finally {
     await db.end();
@@ -239,5 +243,27 @@ describe("createTenant() produces same structure as seed.sql demo tenant", () =>
     expect(memberships.map((m) => m.group_name).sort()).toEqual([
       "All Administrators", "All Employees",
     ]);
+  });
+
+  it("rejects if auth user already belongs to another tenant", async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: existingAuthUser.authId, email: existingAuthUser.email } },
+      error: null,
+    });
+
+    const result = await createTenant({
+      name: "Should Fail",
+      slug: `ct-fail-${Date.now()}`,
+      rfc: "",
+      modules: {
+        employee_central: true,
+        recruiting: false,
+        performance: true,
+        lms: true,
+      },
+    });
+
+    expect(result).toHaveProperty("error", "El usuario ya pertenece a otra empresa");
+    expect(result).not.toHaveProperty("success");
   });
 });
