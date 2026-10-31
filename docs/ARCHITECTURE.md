@@ -523,63 +523,53 @@ expectation of self-service that the system does not deliver.
 
 ## Known Risk — `can()` Receives `tenantId` as a Parameter
 
-**Status:** Accepted (temporary). Registered 2026-10-30.
+**Status:** RESOLVED. Registered 2026-10-30, resolved 2026-10-31.
 
-**Affected component:** `apps/web/src/lib/authz/can.ts` — the `can()` function
-and all its callers.
-
-**Current state:** `can(userId, tenantId, permissionKey, action, ...)` receives
-`tenantId` as an explicit parameter. Today every caller obtains this value from
-`getClaims()` (the verified JWT `tenant_id` claim), which is correct. However,
-`can()` itself does not verify the origin of the `tenantId` it receives — it
-trusts whatever the caller passes and forwards it to `withTenant()`, which sets
-the RLS context for the queries.
-
-**Risk:** A future caller could inadvertently pass a `tenantId` from an
-unverified source (user input, a database query without RLS, a URL parameter),
-allowing cross-tenant authorization bypass: the user would be evaluated against
-another tenant's permission matrix.
-
-**Planned fix:**
-
-1. Have `can()` read the tenant directly from the session's JWT claim
-   internally, ignoring the parameter, or validate that the passed `tenantId`
-   matches the session claim before proceeding.
-2. Alternatively, replace the `tenantId` parameter with a session/claims
-   object that `can()` extracts the tenant from, making it impossible to pass
-   an arbitrary value.
+**Resolution:** `can()` no longer accepts `tenantId` as a parameter. It reads
+the tenant directly from `getClaims()` (the verified JWT claim) internally.
+The signature is now `can(userId, permissionKey, action, targetUserId?, fieldKey?)`.
+Commit `a21be48` on branch `fix/authz-closure`.
 
 ## Known Risk — `can()` requestCache Is Global and Never Invalidated
 
-**Status:** Accepted (planned fix). Registered 2026-10-30.
+**Status:** RESOLVED. Registered 2026-10-30, resolved 2026-10-31.
 
-**Affected component:** `apps/web/src/lib/authz/can.ts` — the module-level
-`requestCache` (`Map<string, CanResult>`).
+**Resolution:** The module-level `Map` cache was replaced with React `cache()`
+which is scoped to the current request lifecycle. `clearCanCache()` was removed.
+Commit `a21be48` on branch `fix/authz-closure`.
 
-**Current state:** Every call to `can()` stores its result in a `Map` that
-lives at module scope. Because Next.js App Router keeps the Node.js process
-alive across requests, the cache is effectively global to the server process
-and survives across all HTTP requests.
+## Known Risk — Dual Admin Truth (RBP vs. JWT app_role)
 
-`clearCanCache()` is exported but never called anywhere in the application
-code — not after role edits, group-membership changes, or permission-key
-updates.
+**Status:** Accepted (permanent). Registered 2026-10-31.
 
-**Risk:** When an admin changes a user's permissions (adds/removes a role,
-changes group membership, edits a permission key), the change does not take
-effect until the Node.js server process is restarted. In development this is
-nearly invisible because the dev server restarts often; in production with
-long-lived workers the stale cache window can be hours or days.
+**Affected components:**
 
-**Planned fix:**
+- `supabase/migrations/20261030010000_ec_job_info_restrictive_admin.sql` — RESTRICTIVE
+  RLS policies that call `is_tenant_admin()`, which checks RBP (`role_grants` +
+  `permission_roles.is_admin_role` + `group_members`).
+- `insert_effective_record()` (SECURITY DEFINER RPC) — checks `has_app_role('owner')
+  OR has_app_role('hr_admin')`, which reads `app_role` from the JWT claim
+  (`request.jwt.claims`).
 
-1. **Short term — per-request cache:** Replace the module-level `Map` with
-   React's `cache()` (available in Server Components) or Next.js
-   `unstable_cache` scoped to the current request. This ensures the cache
-   lives only for the duration of a single HTTP request and is garbage
-   collected automatically.
-2. **Alternative — TTL-based expiration:** If cross-request caching is
-   desirable for performance, wrap the `Map` with a short TTL (e.g. 30–60
-   seconds) so stale entries expire automatically. Pair with an explicit
-   `clearCanCache()` call in the role/group mutation Server Actions for
-   immediate invalidation.
+**Current state:** There are two independent "is this user an admin?" checks:
+
+1. **RBP-based** (`is_tenant_admin()`): looks up group membership → role grants →
+   `is_admin_role` flag on the permission role. Used by RESTRICTIVE RLS policies.
+2. **JWT-based** (`has_app_role()`): reads the `app_role` string from
+   `user_tenant_memberships` (set at login, baked into the JWT). Used by
+   `insert_effective_record()`.
+
+Both must pass for an INSERT/UPDATE on `ec_job_information` to succeed via the
+RPC: `insert_effective_record()` rejects non-admins before the SQL runs, and
+the RESTRICTIVE policy rejects the row if `is_tenant_admin()` returns false.
+
+**Risk:** If the two sources diverge (a user has the JWT `app_role='owner'`
+but is not in any admin group in RBP, or vice versa), writes will fail even
+though one system considers them authorized. `createTenant()` and `link-owner.sh`
+keep both in sync for new tenants, but manual edits to `group_members` or
+`user_tenant_memberships` without updating the other will break the invariant.
+
+**Mitigation:** Integration test `insert-effective-record-rls.test.ts` verifies
+that the path works end-to-end for owner and is blocked for employee. A future
+unification (making `insert_effective_record()` also check RBP, or replacing
+`app_role` with RBP entirely) would eliminate this risk.
