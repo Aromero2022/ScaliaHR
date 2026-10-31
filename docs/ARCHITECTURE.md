@@ -576,6 +576,54 @@ unification (making `insert_effective_record()` also check RBP, or replacing
 
 ---
 
+## D12 — Licensing by Module Flag
+
+**Decision:** The `is_*_active` boolean columns on `tenants` are **licensing
+attributes** controlled by the platform. No authenticated role — including the
+tenant owner — can change them. Only `service_role` / the admin client can
+toggle module flags.
+
+**Implementation:**
+
+1. **Column-level REVOKE:** Migration `20261031010000_d12_protect_module_flags.sql`
+   revokes `UPDATE` on all 12 `is_*_active` columns from `authenticated`. The
+   owner row-level policy (`tenants_owner_update`) still allows `UPDATE` on
+   `name`, `domain`, and `updated_at`.
+
+2. **`can()` module gate:** Before evaluating RBP grants, `can()` extracts the
+   module prefix from the `permission_key` (e.g., `ec` from `ec.manage_employees`)
+   and looks it up in `PERMISSION_MODULE_MAP`. If the corresponding flag is
+   `false`, the function returns `{ allowed: false, reason: "module_inactive" }`
+   without checking permissions.
+
+3. **Permissions without a module** (`admin`, `admin_center`, `arco`) are not
+   gated by any flag and are always evaluated through the normal RBP path.
+
+**`PERMISSION_MODULE_MAP`:**
+
+| Prefix | Flag |
+|--------|------|
+| `ec` | `is_ec_active` |
+| `pmgm` | `is_pmgm_active` |
+| `tih` | `is_tih_active` |
+| `lms` | `is_lms_active` |
+| `sdm` | `is_sdm_active` |
+| `rcm` | `is_rcm_active` |
+| `onb` | `is_onb_active` |
+| `comp` | `is_comp_active` |
+| `wfa` | `is_wfa_active` |
+| `wfp` | `is_wfp_active` |
+| `tme` | `is_tme_active` |
+| `pos_mgmt` | `is_pos_mgmt_active` |
+
+**Tests:**
+- `tenants-policies.test.ts`: owner cannot UPDATE `is_lms_active` (42501).
+- `authz-matrix.test.ts`: `can()` returns `module_inactive` when the flag is
+  off (TIH, LMS, EC); `admin_center.access` and `arco.manage` remain allowed.
+- `module-flags.test.ts`: route guards and sidebar filtering for disabled modules.
+
+---
+
 ## D13 — Modelo de Tenant e Identidad
 
 **Decision:** One tenant = one customer. A corporate group with several legal

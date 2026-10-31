@@ -337,3 +337,71 @@ describe("Employee — self-service only", () => {
     expect(result.allowed).toBe(false);
   });
 });
+
+describe("Module flag → can() returns module_inactive (D12)", () => {
+  it("admin DENIED tih.ontology:view when is_tih_active is false", async () => {
+    await db.query("UPDATE public.tenants SET is_tih_active = false WHERE id = $1", [tenant.id]);
+    try {
+      const result = await can(tenant.admin.userId, "tih.ontology", "view");
+      expect(result).toEqual({ allowed: false, reason: "module_inactive" });
+    } finally {
+      await db.query("UPDATE public.tenants SET is_tih_active = true WHERE id = $1", [tenant.id]);
+    }
+  });
+
+  it("employee DENIED lms.access:view when is_lms_active is false", async () => {
+    await db.query("UPDATE public.tenants SET is_lms_active = false WHERE id = $1", [tenant.id]);
+    try {
+      const result = await can(tenant.employee.userId, "lms.access", "view");
+      expect(result).toEqual({ allowed: false, reason: "module_inactive" });
+    } finally {
+      await db.query("UPDATE public.tenants SET is_lms_active = true WHERE id = $1", [tenant.id]);
+    }
+  });
+
+  it("manager DENIED ec.view_team_profiles:view when is_ec_active is false", async () => {
+    await db.query("UPDATE public.tenants SET is_ec_active = false WHERE id = $1", [tenant.id]);
+    try {
+      const result = await can(tenant.manager.userId, "ec.view_team_profiles", "view", tenant.employee.userId);
+      expect(result).toEqual({ allowed: false, reason: "module_inactive" });
+    } finally {
+      await db.query("UPDATE public.tenants SET is_ec_active = true WHERE id = $1", [tenant.id]);
+    }
+  });
+
+  it("admin_center.access:view is allowed even with all module flags off", async () => {
+    await db.query(
+      `UPDATE public.tenants SET is_ec_active = false, is_pmgm_active = false,
+       is_tih_active = false, is_lms_active = false WHERE id = $1`,
+      [tenant.id],
+    );
+    try {
+      const result = await can(tenant.admin.userId, "admin_center.access", "view");
+      expect(result).toEqual({ allowed: true });
+    } finally {
+      await db.query(
+        `UPDATE public.tenants SET is_ec_active = true, is_pmgm_active = true,
+         is_tih_active = true, is_lms_active = true WHERE id = $1`,
+        [tenant.id],
+      );
+    }
+  });
+
+  it("arco.manage:view is allowed even with all module flags off", async () => {
+    await db.query(
+      `UPDATE public.tenants SET is_ec_active = false, is_pmgm_active = false,
+       is_tih_active = false, is_lms_active = false WHERE id = $1`,
+      [tenant.id],
+    );
+    try {
+      const result = await can(tenant.admin.userId, "arco.manage", "view");
+      expect(result).toEqual({ allowed: true });
+    } finally {
+      await db.query(
+        `UPDATE public.tenants SET is_ec_active = true, is_pmgm_active = true,
+         is_tih_active = true, is_lms_active = true WHERE id = $1`,
+        [tenant.id],
+      );
+    }
+  });
+});
