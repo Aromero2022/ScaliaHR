@@ -90,6 +90,9 @@ describe("createTenant() produces same structure as seed.sql demo tenant", () =>
       },
     });
 
+    if ("error" in result) {
+      console.error("createTenant returned error:", result.error);
+    }
     expect(result).toHaveProperty("success", true);
     expect(result).toHaveProperty("tenantId");
     createdTenantId = (result as { tenantId: string }).tenantId;
