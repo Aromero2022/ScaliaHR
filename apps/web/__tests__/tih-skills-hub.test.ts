@@ -144,12 +144,14 @@ describe("setManagerAssessment", () => {
 
   it("succeeds when the SQL function authorizes the call", async () => {
     mockSupabase({ rpcResult: { data: null, error: null } });
+    mockCan.mockResolvedValue({ allowed: true });
     const res = await setManagerAssessment(validInput);
     expect(res).toEqual({ success: true });
   });
 
   it("calls set_manager_assessment RPC with correct params", async () => {
     const { rpcFn } = mockSupabase({ rpcResult: { data: null, error: null } });
+    mockCan.mockResolvedValue({ allowed: true });
     await setManagerAssessment(validInput);
     expect(rpcFn).toHaveBeenCalledWith("set_manager_assessment", {
       p_user_id: validInput.userId,
@@ -158,10 +160,19 @@ describe("setManagerAssessment", () => {
     });
   });
 
-  it("returns error when caller is not a manager or admin", async () => {
+  it("returns error when can() denies permission", async () => {
+    mockSupabase();
+    mockCan.mockResolvedValue({ allowed: false, reason: "no_permission" });
+    const res = await setManagerAssessment(validInput);
+    expect(res).toEqual({ error: "Sin permiso para evaluar como manager" });
+    expect(mockCan).toHaveBeenCalledWith("user-1", "tih.manager_assessment", "edit", validInput.userId);
+  });
+
+  it("returns error when caller is not a manager or admin (RPC level)", async () => {
     mockSupabase({
       rpcResult: { data: null, error: { message: "Not authorized: not a direct manager or admin" } },
     });
+    mockCan.mockResolvedValue({ allowed: true });
     const res = await setManagerAssessment(validInput);
     expect(res).toEqual({ error: "Not authorized: not a direct manager or admin" });
   });
@@ -170,6 +181,7 @@ describe("setManagerAssessment", () => {
     mockSupabase({
       rpcResult: { data: null, error: { message: "Employee skill record not found" } },
     });
+    mockCan.mockResolvedValue({ allowed: true });
     const res = await setManagerAssessment(validInput);
     expect(res).toEqual({ error: "Employee skill record not found" });
   });
@@ -215,7 +227,7 @@ describe("createSkill — permission gating", () => {
     mockCan.mockResolvedValue({ allowed: false, reason: "no_permission" });
     const res = await createSkill(validSkill);
     expect(res).toEqual({ error: "Sin permiso para gestionar ontología" });
-    expect(mockCan).toHaveBeenCalledWith("user-1", "tenant-1", "tih.ontology", "edit");
+    expect(mockCan).toHaveBeenCalledWith("user-1", "tih.ontology", "edit");
   });
 
   it("succeeds when user has admin permission", async () => {

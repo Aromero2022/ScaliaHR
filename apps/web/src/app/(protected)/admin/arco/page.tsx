@@ -17,7 +17,7 @@ export default async function ArcoPage() {
 
   if (!currentUser) redirect("/login");
 
-  const { allowed } = await can(currentUser.id, claims.tenantId, "arco.manage", "view");
+  const { allowed } = await can(currentUser.id, "arco.manage", "view");
   if (!allowed) {
     return (
       <div className="mx-auto max-w-md py-12 text-center">

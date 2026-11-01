@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { writeAuditLog } from "@/lib/audit/log";
+import { can } from "@/lib/authz/can";
 
 const uuidSchema = z.string().uuid();
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD requerido");
@@ -55,6 +56,9 @@ export async function createJobChange(
 
   const ctx = await getActorContext();
   if (!ctx) return { success: false, error: "No autenticado" };
+
+  const { allowed } = await can(ctx.actorId, "ec.manage_employees", "edit", parsed.data.userId);
+  if (!allowed) return { success: false, error: "Sin permiso para gestionar empleados" };
 
   const { userId, startDate, eventReason, jobTitle, ...optionalFields } = parsed.data;
 
@@ -113,6 +117,9 @@ export async function createCompensationChange(
 
   const ctx = await getActorContext();
   if (!ctx) return { success: false, error: "No autenticado" };
+
+  const { allowed } = await can(ctx.actorId, "ec.manage_employees", "edit", parsed.data.userId);
+  if (!allowed) return { success: false, error: "Sin permiso para gestionar empleados" };
 
   const { userId, startDate, baseSalary, currency, payFrequency, bonusTargetPct, payGroup, eventReason } = parsed.data;
 
@@ -187,6 +194,9 @@ export async function createPersonalInfoChange(
 
   const ctx = await getActorContext();
   if (!ctx) return { success: false, error: "No autenticado" };
+
+  const { allowed } = await can(ctx.actorId, "ec.manage_employees", "edit", parsed.data.userId);
+  if (!allowed) return { success: false, error: "Sin permiso para gestionar empleados" };
 
   const { userId, startDate, eventReason, ...fields } = parsed.data;
 

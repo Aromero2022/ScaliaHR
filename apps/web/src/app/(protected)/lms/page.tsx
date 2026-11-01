@@ -1,20 +1,30 @@
+import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/supabase/claims";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
+import { can } from "@/lib/authz/can";
 import { redirect } from "next/navigation";
+import AccessDenied from "@/components/access-denied";
 import Link from "next/link";
 
 export default async function LmsPage() {
   const claims = await requireAuth();
-
-  if (!claims.tenantId) {
-    redirect("/dashboard");
-  }
+  if (!claims.tenantId) redirect("/dashboard");
 
   const flags = await getModuleFlags(claims.tenantId);
-  if (isModuleRouteBlocked("/lms", flags)) {
-    redirect("/dashboard");
-  }
+  if (isModuleRouteBlocked("/lms", flags)) redirect("/dashboard");
+
+  const supabase = await createClient();
+  const { data: bizUser } = await supabase
+    .from("users")
+    .select("id")
+    .eq("auth_uid", claims.userId)
+    .single();
+
+  if (!bizUser) redirect("/login");
+
+  const { allowed } = await can(bizUser.id, "lms.access", "view");
+  if (!allowed) return <AccessDenied />;
 
   return (
     <div className="space-y-6">

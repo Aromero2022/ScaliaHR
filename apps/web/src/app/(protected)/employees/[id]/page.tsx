@@ -1,5 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/claims";
+import { getModuleFlags } from "@/lib/tenant/get-module-flags";
+import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
 import { redirect, notFound } from "next/navigation";
+import { can } from "@/lib/authz/can";
+import AccessDenied from "@/components/access-denied";
 import EmployeeHistory from "@/components/employee-history";
 import ActionMenu from "./action-menu";
 
@@ -34,14 +39,31 @@ export default async function EmployeeDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const claims = await requireAuth();
+  if (!claims.tenantId) redirect("/dashboard");
+
+  const flags = await getModuleFlags(claims.tenantId);
+  if (isModuleRouteBlocked("/employees", flags)) redirect("/dashboard");
+
   const supabase = await createClient();
+  const { data: currentUser } = await supabase
+    .from("users")
+    .select("id")
+    .eq("auth_uid", claims.userId)
+    .single();
 
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
+  if (!currentUser) redirect("/login");
 
-  // ── Load employee base record ──────────────────────────────────
+  const [ownProfile, teamView, adminView] = await Promise.all([
+    can(currentUser.id, "ec.view_own_profile", "view", id),
+    can(currentUser.id, "ec.view_team_profiles", "view", id),
+    can(currentUser.id, "ec.manage_employees", "view", id),
+  ]);
+
+  if (!ownProfile.allowed && !teamView.allowed && !adminView.allowed) {
+    return <AccessDenied />;
+  }
+
   const { data: employee } = await supabase
     .from("users")
     .select("*, departments(name)")
@@ -50,14 +72,6 @@ export default async function EmployeeDetailPage({
 
   if (!employee) notFound();
 
-  // ── Load current user for permission checks ────────────────────
-  const { data: currentUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", authUser.id)
-    .single();
-
-  // ── Load effective-dated records in parallel ───────────────────
   const [
     { data: personalCurrent },
     { data: personalHistory },
@@ -105,7 +119,6 @@ export default async function EmployeeDetailPage({
       .order("start_date", { ascending: false }),
   ]);
 
-  // ── Resolve manager name from job info ─────────────────────────
   let managerName = "—";
   if (jobCurrent?.manager_id) {
     const { data: mgr } = await supabase
@@ -116,30 +129,14 @@ export default async function EmployeeDetailPage({
     if (mgr) managerName = `${mgr.first_name} ${mgr.last_name}`;
   }
 
-  // ── Compensation visibility check ──────────────────────────────
-  // Visible if current user is in the HR admins group OR is this employee's direct manager
-  let canViewComp = false;
-  if (currentUser) {
-    const isDirectManager = jobCurrent?.manager_id === currentUser.id;
+  const canViewComp = adminView.allowed || teamView.allowed;
 
-    const { data: adminMembership } = await supabase
-      .from("group_members")
-      .select("id")
-      .eq("user_id", currentUser.id)
-      .eq("group_id", "cc100000-0000-0000-0000-000000000001")
-      .limit(1);
-
-    canViewComp = isDirectManager || (adminMembership?.length ?? 0) > 0;
-  }
-
-  // ── Helper: unwrap single relations ────────────────────────────
   function rel(obj: unknown): Record<string, string> | null {
     if (!obj) return null;
     if (Array.isArray(obj)) return (obj[0] as Record<string, string>) ?? null;
     return obj as Record<string, string>;
   }
 
-  // ── Build history records for each section ─────────────────────
   const personalHistoryRecords = (personalHistory ?? []).map((r) => ({
     id: r.id as string,
     start_date: r.start_date as string,
@@ -185,7 +182,6 @@ export default async function EmployeeDetailPage({
     ],
   }));
 
-  // ── Initials for avatar ────────────────────────────────────────
   const initials = `${(employee.first_name as string)?.[0] ?? ""}${(employee.last_name as string)?.[0] ?? ""}`.toUpperCase();
 
   const statusColors: Record<string, { bg: string; text: string }> = {
@@ -198,7 +194,6 @@ export default async function EmployeeDetailPage({
 
   return (
     <div className="space-y-6">
-      {/* ── Header ────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600/20 text-lg font-bold text-indigo-400">
@@ -219,10 +214,9 @@ export default async function EmployeeDetailPage({
             {employee.status}
           </span>
         </div>
-        <ActionMenu employeeId={id} />
+        {adminView.allowed && <ActionMenu employeeId={id} />}
       </div>
 
-      {/* ── Información Personal ──────────────────────────────────── */}
       <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
         <h2 className="mb-4 text-lg font-semibold text-white">
           Información Personal
@@ -281,7 +275,6 @@ export default async function EmployeeDetailPage({
         )}
       </section>
 
-      {/* ── Información Laboral ───────────────────────────────────── */}
       <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
         <h2 className="mb-4 text-lg font-semibold text-white">
           Información Laboral
@@ -319,7 +312,6 @@ export default async function EmployeeDetailPage({
         )}
       </section>
 
-      {/* ── Compensación ──────────────────────────────────────────── */}
       {canViewComp && (
         <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
           <h2 className="mb-4 text-lg font-semibold text-white">

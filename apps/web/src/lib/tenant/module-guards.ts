@@ -4,6 +4,9 @@ export const MODULE_ROUTE_GUARDS: ReadonlyArray<{
   route: string;
   flag: ModuleFlagKey;
 }> = [
+  { route: "/employees", flag: "is_ec_active" },
+  { route: "/org-chart", flag: "is_ec_active" },
+  { route: "/performance", flag: "is_pmgm_active" },
   { route: "/skills-hub", flag: "is_tih_active" },
   { route: "/lms", flag: "is_lms_active" },
 ];

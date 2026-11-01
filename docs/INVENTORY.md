@@ -20,7 +20,7 @@
 | `job_roles` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | FK compuesto a job_family |
 | `job_classifications` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | FK compuesto a job_role |
 | `positions` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | FKs a department, classification, parent_position |
-| `ec_job_information` | ENABLE+FORCE | SELECT/INSERT/UPDATE tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | Effective-dated con EXCLUDE btree_gist |
+| `ec_job_information` | ENABLE+FORCE | SELECT/INSERT/UPDATE tenant isolation; RESTRICTIVE `no_hard_delete_authenticated`; RESTRICTIVE admin-only INSERT/UPDATE (`is_tenant_admin()`) | Effective-dated con EXCLUDE btree_gist |
 | `ec_compensation` | ENABLE+FORCE | SELECT (own+manager+admin), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | Effective-dated; PII policy RESTRICTIVE |
 | `ec_personal_information` | ENABLE+FORCE | SELECT (own+manager+admin), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | Effective-dated; PII policy RESTRICTIVE |
 | `object_definitions` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | Metadata de objetos |
@@ -30,27 +30,27 @@
 
 | Ruta | Proteccion auth | `can()` | Module flag |
 |------|----------------|---------|-------------|
-| `/employees` | `requireAuth()` | **NINGUNA** | Ninguno (`is_ec_active` no se aplica) |
-| `/employees/[id]` | `requireAuth()` | **NINGUNA** | Ninguno |
+| `/employees` | `requireAuth()` | `ec.view_org_chart:view` + per-row "Ver perfil" filtering | `is_ec_active` |
+| `/employees/[id]` | `requireAuth()` | `ec.view_own_profile:view` (self) / `ec.view_team_profiles:view` (direct reports) / `ec.manage_employees:view` (admin) | `is_ec_active` |
 
 ### Server Actions (`employees/[id]/actions.ts`)
 
 | Action | `can()` | Notas |
 |--------|---------|-------|
-| `createJobChange` | **NO** | Solo auth + Zod + audit |
-| `createCompensationChange` | **NO** | Solo auth + Zod + audit |
-| `createPersonalInfoChange` | **NO** | Solo auth + Zod + audit |
+| `createJobChange` | `ec.manage_employees:edit` | Con targetUserId |
+| `createCompensationChange` | `ec.manage_employees:edit` | Con targetUserId |
+| `createPersonalInfoChange` | `ec.manage_employees:edit` | Con targetUserId |
 
 ### Permisos RBP (seeded)
 
 | permission_key | Uso en codigo |
 |----------------|---------------|
-| `ec.manage_employees` | No se usa en `can()` aun |
-| `ec.manage_org_structure` | No se usa en `can()` aun |
-| `ec.manage_positions` | No se usa en `can()` aun |
-| `ec.view_org_chart` | No se usa en `can()` aun |
-| `ec.view_own_profile` | No se usa en `can()` aun |
-| `ec.view_team_profiles` | No se usa en `can()` aun |
+| `ec.manage_employees` | `can()` en employees/[id], actions, dashboard (KPIs) |
+| `ec.manage_org_structure` | Seeded, sin uso directo en `can()` |
+| `ec.manage_positions` | Seeded, sin uso directo en `can()` |
+| `ec.view_org_chart` | `can()` en employees/page, org-chart/page, sidebar |
+| `ec.view_own_profile` | `can()` en employees/[id] (self) |
+| `ec.view_team_profiles` | `can()` en employees/[id] (direct reports) |
 
 ### Tests
 
@@ -58,6 +58,9 @@
 |------|------|---------|
 | EC effective dating | Unit | `__tests__/ec-effective-dating.test.ts` |
 | Audit + effective records | Integration | `__tests__/integration/audit-and-effective-records.test.ts` |
+| Authz matrix (EC perms) | Integration | `__tests__/integration/authz-matrix.test.ts` |
+| RESTRICTIVE RLS ec_job_info | Integration | `__tests__/integration/insert-effective-record-rls.test.ts` |
+| createTenant() parity | Integration | `__tests__/integration/create-tenant.test.ts` |
 
 ---
 
@@ -71,11 +74,11 @@ No tiene tablas propias. Consume `departments` (jerarquia `parent_id`), `positio
 
 | Ruta | Proteccion auth | `can()` | Module flag |
 |------|----------------|---------|-------------|
-| `/org-chart` | `requireAuth()` | **NINGUNA** | Ninguno |
+| `/org-chart` | `requireAuth()` | `ec.view_org_chart:view` | `is_ec_active` |
 
 ### Tests
 
-Sin tests dedicados.
+Sin tests dedicados (cubierto por authz-matrix.test.ts).
 
 ---
 
@@ -121,6 +124,9 @@ Layout de admin-center verifica `admin_center.access:view`.
 | can() function | Unit | `__tests__/authz/can.test.ts` |
 | can RBP chain | Integration | `__tests__/integration/can-rbp-chain.test.ts` |
 | can real function | Integration | `__tests__/integration/can-real-function.test.ts` |
+| can() coverage (static) | Static | `__tests__/authz/can-coverage.test.ts` |
+| authz coverage (static) | Static | `__tests__/static/authz-coverage.test.ts` |
+| Authz matrix (full) | Integration | `__tests__/integration/authz-matrix.test.ts` |
 | RLS isolation | Integration | `__tests__/integration/rls-isolation.test.ts` |
 | Tenants policies | Integration | `__tests__/integration/tenants-policies.test.ts` |
 | Module flags | Unit + Integration | `__tests__/tenant-module-flags.test.ts`, `__tests__/integration/module-flags.test.ts` |
@@ -140,28 +146,30 @@ Layout de admin-center verifica `admin_center.access:view`.
 
 | Ruta | Proteccion auth | `can()` | Module flag |
 |------|----------------|---------|-------------|
-| `/performance` | `requireAuth()` | **NINGUNA** | Ninguno (`is_pmgm_active` no se aplica) |
+| `/performance` | `requireAuth()` | `pmgm.view_own_goals:view` | `is_pmgm_active` |
 
 ### Server Actions (`performance/actions.ts`)
 
 | Action | `can()` | Notas |
 |--------|---------|-------|
-| `createGoal` | **NO** | Solo auth check |
-| `sendFeedback` | **NO** | Solo auth check |
+| `createGoal` | `pmgm.view_own_goals:edit` | Solo propio (own-only) |
+| `sendFeedback` | `pmgm.give_feedback:edit` | |
 
 ### Permisos RBP (seeded)
 
 | permission_key | Uso en codigo |
 |----------------|---------------|
-| `pmgm.give_feedback` | No se usa en `can()` aun |
-| `pmgm.manage_goal_plans` | No se usa en `can()` aun |
-| `pmgm.manage_team_goals` | No se usa en `can()` aun |
-| `pmgm.view_own_goals` | No se usa en `can()` aun |
-| `pmgm.view_team_feedback` | No se usa en `can()` aun |
+| `pmgm.give_feedback` | `can()` en performance/actions (sendFeedback) |
+| `pmgm.manage_goal_plans` | Seeded, sin uso directo en `can()` |
+| `pmgm.manage_team_goals` | Seeded, sin uso directo en `can()` |
+| `pmgm.view_own_goals` | `can()` en performance/page + actions (createGoal) + sidebar |
+| `pmgm.view_team_feedback` | Seeded, sin uso directo en `can()` |
 
 ### Tests
 
-Sin tests dedicados para PMGM.
+| Test | Tipo | Archivo |
+|------|------|---------|
+| Authz matrix (PMGM perms) | Integration | `__tests__/integration/authz-matrix.test.ts` |
 
 ---
 
@@ -186,7 +194,7 @@ Sin tests dedicados para PMGM.
 | Action | `can()` | Notas |
 |--------|---------|-------|
 | `updateSelfAssessment` | `tih.employee_skills:edit` | |
-| `setManagerAssessment` | **NO** | Solo auth; deberia usar `tih.manager_assessment:edit` |
+| `setManagerAssessment` | `tih.manager_assessment:edit` | Con targetUserId |
 | `createSkill` | `tih.ontology:edit` | |
 | `updateSkill` | `tih.ontology:edit` | |
 | `updateJobRoleSkill` | `tih.job_requirements:edit` | |
@@ -195,11 +203,18 @@ Sin tests dedicados para PMGM.
 
 | permission_key | Uso en codigo | Seeded |
 |----------------|---------------|--------|
-| `tih.employee_skills` | `can()` en page + actions | **NO** (falta en migraciones) |
-| `tih.ontology` | `can()` en actions | **NO** (falta en migraciones) |
-| `tih.job_requirements` | `can()` en actions | **NO** (falta en migraciones) |
-| `tih.manager_assessment` | No se usa en codigo | Si |
+| `tih.employee_skills` | `can()` en page + actions + sidebar | Si (seed.sql, v2 format) |
+| `tih.ontology` | `can()` en actions | Si (seed.sql, v2 format) |
+| `tih.job_requirements` | `can()` en actions | Si (seed.sql, v2 format) |
+| `tih.manager_assessment` | `can()` en skills-hub/actions (setManagerAssessment) | Si |
 | `tih.self_assessment` | No se usa en codigo | Si |
+
+> **Nota (v1 legacy):** Las migraciones `20261023070000_tih_skills_hardening.sql` y
+> `20261023090000_rbp_tih_seeds.sql` contienen permisos TIH en formato v1
+> (`tih.employee_skills.view`, `tih.ontology.view`, `tih.job_requirements.view` — tres
+> segmentos con la accion incrustada en la clave). El codigo actual usa formato v2
+> (`tih.employee_skills` + columna `action = 'view'`). Los registros v1 quedan como
+> datos inertes en `role_permissions`; `seed.sql` y `createTenant()` usan solo v2.
 
 ### Tests
 
@@ -223,11 +238,13 @@ Sin tests dedicados para PMGM.
 
 | Ruta | Proteccion auth | `can()` | Module flag |
 |------|----------------|---------|-------------|
-| `/lms` | `requireAuth()` | **NINGUNA** | `is_lms_active` |
+| `/lms` | `requireAuth()` | `lms.access:view` | `is_lms_active` |
 
 ### Permisos RBP
 
-Sin permission_keys seeded para LMS.
+| permission_key | Uso en codigo | Seeded |
+|----------------|---------------|--------|
+| `lms.access` | `can()` en lms/page + sidebar | Si (seed.sql, Employee role) |
 
 ### Tests
 
@@ -324,7 +341,7 @@ Sin tests dedicados.
 |------|----------------|---------|-------------|
 | `/` | Publica | N/A | N/A |
 | `/login` | Publica | N/A | N/A |
-| `/dashboard` | `requireAuth()` | **NINGUNA** | Ninguno |
+| `/dashboard` | `requireAuth()` | `ec.manage_employees:view` (KPIs opcionales) | Ninguno |
 | `/profile` | `requireAuth()` | **NINGUNA** | Ninguno |
 | `/mfa/enroll` | `requireAuth()` | N/A (flujo auth) | N/A |
 | `/mfa/verify` | `requireAuth()` | N/A (flujo auth) | N/A |
@@ -347,8 +364,8 @@ Sin tests dedicados.
 
 | Flag | Modulo | Usado en route guard |
 |------|--------|---------------------|
-| `is_ec_active` | Employee Central | **NO** |
-| `is_pmgm_active` | Performance & Goals | **NO** |
+| `is_ec_active` | Employee Central | Si (`/employees`, `/employees/[id]`, `/org-chart`) |
+| `is_pmgm_active` | Performance & Goals | Si (`/performance`) |
 | `is_sdm_active` | Succession & Development | **NO** |
 | `is_rcm_active` | Recruiting | **NO** |
 | `is_lms_active` | Learning Management | Si (`/lms`) |
@@ -393,58 +410,60 @@ Sin tests dedicados.
 
 ### Rutas Sin Proteccion de Permisos RBP
 
-Estas rutas estan dentro de `(protected)` (requieren auth) pero **no verifican `can()`**:
+> **Actualizacion (FASE B, 2026-10-31):** Las rutas previamente listadas aqui
+> ahora tienen guardias `can()` + module flags. Ver secciones de cada modulo.
+
+Las siguientes rutas estan dentro de `(protected)` pero no verifican `can()`:
 
 | Ruta | Riesgo |
 |------|--------|
-| `/dashboard` | Cualquier usuario autenticado ve KPIs de todo el tenant |
-| `/employees` | Cualquier usuario autenticado lista todos los empleados activos |
-| `/employees/[id]` | Cualquier usuario autenticado ve perfil completo, historial laboral y compensacion de cualquier empleado |
-| `/org-chart` | Cualquier usuario autenticado ve el organigrama completo |
-| `/performance` | Cualquier usuario autenticado ve metas y feedback |
-| `/lms` | Detras de module flag pero sin RBP |
+| `/profile` | Sin restriccion (self-service, aceptado) |
+| `/mfa/enroll` | Sin restriccion (flujo auth, aceptado) |
+| `/mfa/verify` | Sin restriccion (flujo auth, aceptado) |
 
 ### Server Actions Sin `can()`
 
-| Action | Archivo | Riesgo |
-|--------|---------|--------|
-| `createJobChange` | `employees/[id]/actions.ts` | Cualquier autenticado puede crear cambios de puesto |
-| `createCompensationChange` | `employees/[id]/actions.ts` | Cualquier autenticado puede crear cambios de compensacion |
-| `createPersonalInfoChange` | `employees/[id]/actions.ts` | Cualquier autenticado puede editar info personal de otros |
-| `createGoal` | `performance/actions.ts` | Sin verificacion de permiso PMGM |
-| `sendFeedback` | `performance/actions.ts` | Sin verificacion de permiso PMGM |
-| `setManagerAssessment` | `skills-hub/actions.ts` | Falta `can()` para `tih.manager_assessment` |
+> **Actualizacion (FASE B, 2026-10-31):** Todos los Server Actions previamente
+> listados ahora incluyen guardias `can()`. Ver secciones EC, PMGM, TIH.
 
-### Permisos Seeded Pero Sin Uso en Codigo
+No quedan Server Actions sin `can()` en rutas protegidas (excepto las de
+allowlist: profile, MFA).
 
-| permission_key | Modulo |
-|----------------|--------|
-| `ec.manage_employees` | EC |
-| `ec.manage_org_structure` | EC |
-| `ec.manage_positions` | EC |
-| `ec.view_org_chart` | EC |
-| `ec.view_own_profile` | EC |
-| `ec.view_team_profiles` | EC |
-| `pmgm.give_feedback` | PMGM |
-| `pmgm.manage_goal_plans` | PMGM |
-| `pmgm.manage_team_goals` | PMGM |
-| `pmgm.view_own_goals` | PMGM |
-| `pmgm.view_team_feedback` | PMGM |
-| `sdm.manage_succession` | SDM |
-| `sdm.nominate_successors` | SDM |
-| `admin.manage_billing` | Admin |
-| `admin.manage_tenant` | Admin |
-| `arco.anonymize` | ARCO |
-| `tih.manager_assessment` | TIH |
-| `tih.self_assessment` | TIH |
+### Permisos Seeded Pero Sin Uso Directo en Codigo
 
-### Permisos Usados en `can()` Pero No Seeded en Migraciones
+> **Actualizacion (FASE B, 2026-10-31):** La mayoria de permisos EC/PMGM/TIH
+> ahora se verifican con `can()`. Los que quedan sin uso directo son:
 
-| permission_key | Modulo |
-|----------------|--------|
-| `tih.employee_skills` | TIH |
-| `tih.ontology` | TIH |
-| `tih.job_requirements` | TIH |
+| permission_key | Modulo | Nota |
+|----------------|--------|------|
+| `ec.manage_org_structure` | EC | Seeded, sin ruta que lo consuma |
+| `ec.manage_positions` | EC | Seeded, sin ruta que lo consuma |
+| `pmgm.manage_goal_plans` | PMGM | Seeded, sin UI de admin goals |
+| `pmgm.manage_team_goals` | PMGM | Seeded, sin UI de team goals |
+| `pmgm.view_team_feedback` | PMGM | Seeded, sin UI de team feedback |
+| `sdm.manage_succession` | SDM | Seeded, sin rutas SDM |
+| `sdm.nominate_successors` | SDM | Seeded, sin rutas SDM |
+| `admin.manage_billing` | Admin | Seeded, sin UI billing |
+| `admin.manage_tenant` | Admin | Seeded, sin UI tenant config |
+| `arco.anonymize` | ARCO | Seeded, sin uso en `can()` |
+| `tih.self_assessment` | TIH | Seeded, sin uso en `can()` |
+
+### Permisos v1 Legacy en Migraciones (Inertes)
+
+Las siguientes claves existen en `role_permissions` como datos insertados por
+migraciones v1 (`20261023070000_tih_skills_hardening.sql` y
+`20261023090000_rbp_tih_seeds.sql`). Usan el formato de 3 segmentos
+(`module.resource.action`) que el codigo ya no consume — `can()` busca
+`permission_key` de 2 segmentos (`module.resource`) + columna `action`:
+
+| permission_key (v1) | Equivalente v2 |
+|---------------------|----------------|
+| `tih.employee_skills.view` | `tih.employee_skills` + action `view` |
+| `tih.ontology.view` | `tih.ontology` + action `view` |
+| `tih.job_requirements.view` | `tih.job_requirements` + action `view` |
+
+Estos registros no causan conflicto (claves distintas). El seed.sql y
+createTenant() solo usan formato v2.
 
 ### Datos Demo en Migraciones (deberian estar en seed.sql)
 
@@ -468,10 +487,11 @@ Estas rutas estan dentro de `(protected)` (requieren auth) pero **no verifican `
 
 ### Module Flags Sin Route Guard
 
+> **Actualizacion (FASE B, 2026-10-31):** `is_ec_active` y `is_pmgm_active`
+> ahora tienen route guards. Solo quedan flags sin guard para modulos sin UI:
+
 | Flag | Ruta que deberia proteger |
 |------|--------------------------|
-| `is_ec_active` | `/employees`, `/employees/[id]` |
-| `is_pmgm_active` | `/performance` |
 | `is_pos_mgmt_active` | Rutas de posiciones (cuando existan en UI) |
 
 ---
@@ -484,16 +504,18 @@ Estas rutas estan dentro de `(protected)` (requieren auth) pero **no verifican `
 | Tablas legacy | 1 (`job_informations`) |
 | Tablas con ENABLE+FORCE RLS | 29/29 |
 | Tablas con RESTRICTIVE no_hard_delete | 22 |
+| Tablas con RESTRICTIVE admin-only INSERT/UPDATE | 3 (`ec_personal_information`, `ec_compensation`, `ec_job_information`) |
 | Funciones SECURITY DEFINER | 17 |
 | Rutas protegidas | 13 |
-| Rutas con `can()` | 5 de 13 |
+| Rutas con `can()` | 10 de 13 (excepto profile, mfa/enroll, mfa/verify) |
 | Server Actions | 11 |
-| Server Actions con `can()` | 5 de 11 |
-| Permission keys seeded | 24 |
-| Permission keys usados en codigo | 9 |
+| Server Actions con `can()` | 11 de 11 |
+| Permission keys seeded (v2) | 28 |
+| Permission keys usados en codigo | 17 |
 | Module flags definidos | 12 |
-| Module flags en route guards | 2 de 12 |
+| Module flags en route guards | 4 de 12 (ec, pmgm, lms, tih) |
 | Tests unitarios | 19 |
-| Tests de integracion | 15 |
+| Tests estaticos (can coverage) | 2 |
+| Tests de integracion | 17 |
 | Tests E2E | 1 |
 | Migraciones con datos demo | 15 |

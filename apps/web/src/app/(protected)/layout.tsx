@@ -3,7 +3,14 @@ import { requireAuth } from "@/lib/supabase/claims";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import type { ModuleFlags } from "@/lib/tenant/module-flags";
 import { can } from "@/lib/authz/can";
+import { NAV_ITEMS } from "@/lib/navigation/nav-config";
 import Sidebar from "@/components/sidebar";
+
+const SIDEBAR_PERMISSION_KEYS = [
+  ...new Set(
+    NAV_ITEMS.map((i) => i.permissionKey).filter(Boolean) as string[],
+  ),
+];
 
 export default async function ProtectedLayout({
   children,
@@ -28,12 +35,12 @@ export default async function ProtectedLayout({
       .single();
 
     if (bizUser) {
-      const [adminPerm, arcoPerm] = await Promise.all([
-        can(bizUser.id, claims.tenantId!, "admin_center.access", "view"),
-        can(bizUser.id, claims.tenantId!, "arco.manage", "view"),
-      ]);
-      if (adminPerm.allowed) grantedPermissions.push("admin_center.access");
-      if (arcoPerm.allowed) grantedPermissions.push("arco.manage");
+      const results = await Promise.all(
+        SIDEBAR_PERMISSION_KEYS.map((key) => can(bizUser.id, key, "view")),
+      );
+      SIDEBAR_PERMISSION_KEYS.forEach((key, i) => {
+        if (results[i].allowed) grantedPermissions.push(key);
+      });
     }
   }
 

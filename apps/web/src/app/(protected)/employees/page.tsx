@@ -1,7 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/claims";
+import { getModuleFlags } from "@/lib/tenant/get-module-flags";
+import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import SearchInput from "@/components/search-input";
+import AccessDenied from "@/components/access-denied";
+import { can } from "@/lib/authz/can";
 import { Suspense } from "react";
 
 const PAGE_SIZE = 20;
@@ -12,13 +17,23 @@ export default async function EmployeesPage({
   searchParams: Promise<{ q?: string; page?: string }>;
 }) {
   const params = await searchParams;
+  const claims = await requireAuth();
+  if (!claims.tenantId) redirect("/dashboard");
+
+  const flags = await getModuleFlags(claims.tenantId);
+  if (isModuleRouteBlocked("/employees", flags)) redirect("/dashboard");
+
   const supabase = await createClient();
+  const { data: bizUser } = await supabase
+    .from("users")
+    .select("id")
+    .eq("auth_uid", claims.userId)
+    .single();
 
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  if (!bizUser) redirect("/login");
 
-  if (!authUser) redirect("/login");
+  const { allowed } = await can(bizUser.id, "ec.view_org_chart", "view");
+  if (!allowed) return <AccessDenied />;
 
   const search = params.q?.trim() ?? "";
   const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
@@ -63,6 +78,26 @@ export default async function EmployeesPage({
   const total = count ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+  const isAdmin = (await can(bizUser.id, "ec.manage_employees", "view")).allowed;
+
+  let viewableIds: Set<string> | null = null;
+  if (!isAdmin) {
+    const ids = new Set<string>();
+    ids.add(bizUser.id);
+
+    const { data: reports } = await supabase
+      .from("ec_job_information")
+      .select("user_id")
+      .eq("manager_id", bizUser.id)
+      .is("end_date", null);
+
+    if (reports) {
+      for (const r of reports) ids.add(r.user_id as string);
+    }
+
+    viewableIds = ids;
+  }
+
   const rows = (employees ?? []).map((emp) => {
     const dept = Array.isArray(emp.departments)
       ? emp.departments[0]
@@ -77,6 +112,8 @@ export default async function EmployeesPage({
         )
       : emp.ec_job_information;
 
+    const canView = viewableIds === null || viewableIds.has(emp.id as string);
+
     return {
       id: emp.id as string,
       firstName: emp.first_name as string,
@@ -87,6 +124,7 @@ export default async function EmployeesPage({
       department: (dept as { name: string } | null)?.name ?? null,
       positionTitle: (pos as { title: string } | null)?.title ?? null,
       jobTitle: (currentJob as { job_title: string } | null)?.job_title ?? null,
+      canView,
     };
   });
 
@@ -168,12 +206,14 @@ export default async function EmployeesPage({
                       <StatusBadge status={emp.status} />
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link
-                        href={`/employees/${emp.id}`}
-                        className="text-sm font-medium text-indigo-400 transition hover:text-indigo-300"
-                      >
-                        Ver perfil →
-                      </Link>
+                      {emp.canView ? (
+                        <Link
+                          href={`/employees/${emp.id}`}
+                          className="text-sm font-medium text-indigo-400 transition hover:text-indigo-300"
+                        >
+                          Ver perfil →
+                        </Link>
+                      ) : null}
                     </td>
                   </tr>
                 ))

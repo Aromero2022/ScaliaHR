@@ -6,7 +6,8 @@ import { claimsOf, TestWorld, type TestTenant, type TestUser } from "./helpers/w
 
 /**
  * tenants: members read their own tenant; only the owner updates it, and only
- * descriptive fields and module flags; nobody authenticated inserts or deletes.
+ * descriptive fields (name, domain); module flags are platform-controlled and
+ * not writable by any authenticated role; nobody inserts or deletes.
  */
 
 const env = integrationEnv();
@@ -67,24 +68,33 @@ describe("tenants — update", () => {
     expect(claimsOf(owner.token).app_role).toBe("owner");
   });
 
-  it("the owner updates the name and module flags of their tenant", async () => {
-    const before = await tenantRow(tenant.id);
+  it("the owner updates the name of their tenant", async () => {
     const { error } = await owner.client
       .from("tenants")
-      .update({ name: "Renamed by owner", is_lms_active: !before.is_lms_active })
+      .update({ name: "Renamed by owner" })
       .eq("id", tenant.id);
     expect(error).toBeNull();
     const after = await tenantRow(tenant.id);
     expect(after.name).toBe("Renamed by owner");
-    expect(after.is_lms_active).toBe(!before.is_lms_active);
   });
 
-  it("members and RBP admins cannot change the tenant or its module flags", async () => {
+  it("the owner cannot change module flags (licensing is platform-controlled)", async () => {
+    const before = await tenantRow(tenant.id);
+    const { error } = await owner.client
+      .from("tenants")
+      .update({ is_lms_active: !before.is_lms_active })
+      .eq("id", tenant.id);
+    expect(error?.code).toBe("42501");
+    const after = await tenantRow(tenant.id);
+    expect(after.is_lms_active).toBe(before.is_lms_active);
+  });
+
+  it("members and RBP admins cannot change the tenant name", async () => {
     const before = await tenantRow(tenant.id);
     for (const user of [tenant.employee, tenant.manager, rbpAdmin]) {
       const { error } = await user.client
         .from("tenants")
-        .update({ name: "Hijacked", is_lms_active: !before.is_lms_active })
+        .update({ name: "Hijacked" })
         .eq("id", tenant.id);
       if (error) expect(error.code).toBe("42501");
     }
