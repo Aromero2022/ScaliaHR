@@ -152,7 +152,7 @@ describe("direct INSERT on ec_job_information (RESTRICTIVE policy, no RPC)", () 
     const client = world.clientFor(ownerToken);
     const { error } = await client.from("ec_job_information").insert({
       tenant_id: tid,
-      user_id: employeeUserId,
+      user_id: ownerUserId,
       start_date: "2026-09-01",
       sequence: 1,
       job_title: "Direct by Admin",
