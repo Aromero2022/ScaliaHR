@@ -108,7 +108,7 @@ describe("insert_effective_record with RESTRICTIVE admin policy", () => {
     expect(data).toBeTruthy();
   });
 
-  it("employee (app_role='employee', NOT is_tenant_admin) is blocked", async () => {
+  it("employee (app_role='employee', NOT is_tenant_admin) is blocked via RPC", async () => {
     const client = world.clientFor(employeeToken);
     const { data, error } = await client.rpc("insert_effective_record", {
       p_table: "ec_job_information",
@@ -130,5 +130,49 @@ describe("insert_effective_record with RESTRICTIVE admin policy", () => {
     });
     expect(error).toBeNull();
     expect(data).toBeTruthy();
+  });
+});
+
+describe("direct INSERT on ec_job_information (RESTRICTIVE policy, no RPC)", () => {
+  it("employee direct INSERT is blocked by RESTRICTIVE RLS", async () => {
+    const client = world.clientFor(employeeToken);
+    const { error } = await client.from("ec_job_information").insert({
+      tenant_id: tid,
+      user_id: employeeUserId,
+      start_date: "2026-08-01",
+      sequence: 1,
+      job_title: "Direct Hack",
+      event_reason: "Should be blocked by RESTRICTIVE policy",
+    });
+    expect(error).toBeTruthy();
+    expect(error!.code).toBe("42501");
+  });
+
+  it("owner direct INSERT passes RESTRICTIVE RLS", async () => {
+    const client = world.clientFor(ownerToken);
+    const { error } = await client.from("ec_job_information").insert({
+      tenant_id: tid,
+      user_id: employeeUserId,
+      start_date: "2026-09-01",
+      sequence: 1,
+      job_title: "Direct by Admin",
+      event_reason: "Admin direct insert",
+    });
+    expect(error).toBeNull();
+  });
+
+  it("employee direct INSERT on ec_compensation is also blocked", async () => {
+    const client = world.clientFor(employeeToken);
+    const { error } = await client.from("ec_compensation").insert({
+      tenant_id: tid,
+      user_id: employeeUserId,
+      start_date: "2026-08-01",
+      sequence: 1,
+      base_salary: 99999,
+      currency: "MXN",
+      frequency: "monthly",
+      event_reason: "Should be blocked",
+    });
+    expect(error).toBeTruthy();
   });
 });

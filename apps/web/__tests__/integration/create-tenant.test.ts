@@ -245,6 +245,48 @@ describe("createTenant() produces same structure as seed.sql demo tenant", () =>
     ]);
   });
 
+  it("permission set matches seed.sql demo tenant exactly", async () => {
+    if (!createdTenantId) throw new Error("createTenant did not produce a tenant");
+    const demoTid = "a0000000-0000-0000-0000-000000000001";
+
+    const permQuery = `
+      SELECT pr.name AS role_name, rp.permission_key, rp.action::text
+      FROM public.role_permissions rp
+      JOIN public.permission_roles pr ON pr.id = rp.role_id
+      WHERE rp.tenant_id = $1
+      ORDER BY pr.name, rp.permission_key, rp.action
+    `;
+
+    const grantQuery = `
+      SELECT pr.name AS role_name, pg.name AS group_name, rg.target_population::text
+      FROM public.role_grants rg
+      JOIN public.permission_roles pr ON pr.id = rg.role_id
+      JOIN public.permission_groups pg ON pg.id = rg.granted_group_id
+      WHERE rg.tenant_id = $1
+      ORDER BY pr.name, pg.name
+    `;
+
+    const [ctPerms, seedPerms] = await Promise.all([
+      db.query<{ role_name: string; permission_key: string; action: string }>(permQuery, [createdTenantId]),
+      db.query<{ role_name: string; permission_key: string; action: string }>(permQuery, [demoTid]),
+    ]);
+
+    const toSet = (rows: { role_name: string; permission_key: string; action: string }[]) =>
+      rows.map((r) => `${r.role_name}|${r.permission_key}|${r.action}`).sort();
+
+    expect(toSet(ctPerms.rows)).toEqual(toSet(seedPerms.rows));
+
+    const [ctGrants, seedGrants] = await Promise.all([
+      db.query<{ role_name: string; group_name: string; target_population: string }>(grantQuery, [createdTenantId]),
+      db.query<{ role_name: string; group_name: string; target_population: string }>(grantQuery, [demoTid]),
+    ]);
+
+    const grantSet = (rows: { role_name: string; group_name: string; target_population: string }[]) =>
+      rows.map((r) => `${r.role_name}|${r.group_name}|${r.target_population}`).sort();
+
+    expect(grantSet(ctGrants.rows)).toEqual(grantSet(seedGrants.rows));
+  });
+
   it("rejects if auth user already belongs to another tenant", async () => {
     mockGetUser.mockResolvedValueOnce({
       data: { user: { id: existingAuthUser.authId, email: existingAuthUser.email } },

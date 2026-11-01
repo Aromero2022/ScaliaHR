@@ -11,8 +11,6 @@ const ALLOWLIST = new Set([
   "mfa/verify/page.tsx",
   // Own profile: all authenticated users
   "profile/page.tsx",
-  // Dashboard home: all authenticated (optional can() for KPI visibility)
-  "dashboard/page.tsx",
 ]);
 
 function relPath(abs: string): string {
