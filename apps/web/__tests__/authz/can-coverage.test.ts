@@ -9,6 +9,7 @@ const ALLOWLIST = new Set([
   // MFA flow: available to all authenticated users
   "mfa/enroll/page.tsx",
   "mfa/verify/page.tsx",
+  "mfa/actions.ts",
   // Own profile: all authenticated users
   "profile/page.tsx",
 ]);
