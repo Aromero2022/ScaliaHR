@@ -86,3 +86,40 @@ describe("can() pool exhaustion (layout pattern)", () => {
     }
   }, 10_000);
 });
+
+describe("canMany()", () => {
+  it("returns a Map with results for every requested key", async () => {
+    const { canMany } = await import("@/lib/authz/can");
+    const results = await canMany(tenant.admin.userId, SIDEBAR_KEYS, "view");
+    expect(results).toBeInstanceOf(Map);
+    expect(results.size).toBe(SIDEBAR_KEYS.length);
+    for (const key of SIDEBAR_KEYS) {
+      expect(results.has(key)).toBe(true);
+      expect(results.get(key)).toHaveProperty("allowed");
+    }
+  }, 10_000);
+});
+
+describe("permission context does not leak between requests", () => {
+  it("revoking a permission is reflected in the next can() call", async () => {
+    const key = "admin_center.access";
+    const r1 = await can(tenant.admin.userId, key, "view");
+    expect(r1.allowed).toBe(true);
+
+    await db.query(
+      `DELETE FROM public.role_permissions
+       WHERE tenant_id = $1 AND permission_key = $2`,
+      [tenant.id, key],
+    );
+
+    const r2 = await can(tenant.admin.userId, key, "view");
+    expect(r2.allowed).toBe(false);
+    expect(r2.reason).toBe("no_permission");
+
+    await db.query(
+      `INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
+       VALUES ($1, $2, $3, 'view')`,
+      [tenant.id, tenant.adminRoleId, key],
+    );
+  }, 10_000);
+});
