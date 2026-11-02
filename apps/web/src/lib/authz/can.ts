@@ -27,19 +27,210 @@ export const PERMISSION_MODULE_MAP: Record<string, string> = {
   pos_mgmt: "is_pos_mgmt_active",
 };
 
+// --- Permission context: loaded once per request via React.cache() ---
+
+type GrantRow = {
+  role_id: string;
+  target_population: string;
+};
+
+type PermissionRow = {
+  role_id: string;
+  permission_key: string;
+  action: string;
+  field_key: string | null;
+};
+
+type PermissionContext = {
+  tenantId: string;
+  moduleFlags: Record<string, boolean>;
+  grants: GrantRow[];
+  permissions: PermissionRow[];
+};
+
+async function loadPermissionContext(
+  userId: string,
+  tenantId: string,
+): Promise<PermissionContext> {
+  return withTenant({ tenantId }, async (tx) => {
+    const [flagRows, grants, permissions] = await Promise.all([
+      tx.$queryRaw<Record<string, boolean>[]>(Prisma.sql`
+        SELECT * FROM public.tenants WHERE id = ${tenantId}::uuid
+      `),
+      tx.$queryRaw<GrantRow[]>(Prisma.sql`
+        SELECT rg.role_id, rg.target_population::text
+        FROM public.role_grants rg
+        JOIN public.group_members gm ON gm.group_id = rg.granted_group_id
+                                     AND gm.tenant_id = rg.tenant_id
+        WHERE gm.user_id = ${userId}::uuid
+          AND rg.tenant_id = ${tenantId}::uuid
+      `),
+      tx.$queryRaw<PermissionRow[]>(Prisma.sql`
+        SELECT rp.role_id, rp.permission_key, rp.action::text, rp.field_key
+        FROM public.role_permissions rp
+        WHERE rp.tenant_id = ${tenantId}::uuid
+          AND rp.role_id IN (
+            SELECT rg.role_id
+            FROM public.role_grants rg
+            JOIN public.group_members gm ON gm.group_id = rg.granted_group_id
+                                         AND gm.tenant_id = rg.tenant_id
+            WHERE gm.user_id = ${userId}::uuid
+              AND rg.tenant_id = ${tenantId}::uuid
+          )
+      `),
+    ]);
+
+    const tenantRow = flagRows[0] ?? {};
+    const moduleFlags: Record<string, boolean> = {};
+    for (const [prefix, col] of Object.entries(PERMISSION_MODULE_MAP)) {
+      moduleFlags[prefix] = (tenantRow as Record<string, unknown>)[col] === true;
+    }
+
+    return { tenantId, moduleFlags, grants, permissions };
+  });
+}
+
+const loadPermissionContextCached = cache(loadPermissionContext);
+
+// --- Evaluation against preloaded context ---
+
+function evaluateFromContext(
+  ctx: PermissionContext,
+  userId: string,
+  permissionKey: string,
+  action: RbpAction,
+  fieldKey?: string,
+): CanResult {
+  const modulePrefix = permissionKey.split(".")[0];
+  if (PERMISSION_MODULE_MAP[modulePrefix] && !ctx.moduleFlags[modulePrefix]) {
+    return { allowed: false, reason: "module_inactive" };
+  }
+
+  if (ctx.grants.length === 0) {
+    return { allowed: false, reason: "no_group_membership" };
+  }
+
+  const matchingPerms = ctx.permissions.filter(
+    (p) =>
+      p.permission_key === permissionKey &&
+      p.action === action &&
+      (fieldKey ? p.field_key === fieldKey : true),
+  );
+
+  if (matchingPerms.length === 0) {
+    return { allowed: false, reason: "no_permission" };
+  }
+
+  const permittedRoleIds = new Set(matchingPerms.map((p) => p.role_id));
+  const hasAny = ctx.grants.some((g) => permittedRoleIds.has(g.role_id));
+  return hasAny
+    ? { allowed: true }
+    : { allowed: false, reason: "no_matching_grant" };
+}
+
+async function evaluateTargetPopulation(
+  ctx: PermissionContext,
+  userId: string,
+  tenantId: string,
+  permissionKey: string,
+  action: RbpAction,
+  targetUserId: string,
+  fieldKey?: string,
+): Promise<CanResult> {
+  const modulePrefix = permissionKey.split(".")[0];
+  if (PERMISSION_MODULE_MAP[modulePrefix] && !ctx.moduleFlags[modulePrefix]) {
+    return { allowed: false, reason: "module_inactive" };
+  }
+
+  if (ctx.grants.length === 0) {
+    return { allowed: false, reason: "no_group_membership" };
+  }
+
+  const matchingPerms = ctx.permissions.filter(
+    (p) =>
+      p.permission_key === permissionKey &&
+      p.action === action &&
+      (fieldKey ? p.field_key === fieldKey : true),
+  );
+
+  if (matchingPerms.length === 0) {
+    return { allowed: false, reason: "no_permission" };
+  }
+
+  const permittedRoleIds = new Set(matchingPerms.map((p) => p.role_id));
+
+  for (const grant of ctx.grants) {
+    if (!permittedRoleIds.has(grant.role_id)) continue;
+
+    switch (grant.target_population) {
+      case "all":
+        return { allowed: true };
+
+      case "self":
+        if (targetUserId === userId) return { allowed: true };
+        break;
+
+      case "same_department":
+      case "direct_reports":
+        // These require a DB query; use a single withTenant call
+        return withTenant({ tenantId }, async (tx) => {
+          for (const g of ctx.grants) {
+            if (!permittedRoleIds.has(g.role_id)) continue;
+
+            if (g.target_population === "same_department") {
+              const rows = await tx.$queryRaw<{ match: boolean }[]>(Prisma.sql`
+                SELECT (a.department_id IS NOT NULL AND a.department_id = t.department_id) AS match
+                FROM public.users a, public.users t
+                WHERE a.id = ${userId}::uuid AND t.id = ${targetUserId}::uuid
+              `);
+              if (rows.length > 0 && rows[0].match) return { allowed: true };
+            }
+
+            if (g.target_population === "direct_reports") {
+              const rows = await tx.$queryRaw<{ manager_id: string | null }[]>(
+                Prisma.sql`
+                  SELECT manager_id FROM public.ec_job_information
+                  WHERE user_id = ${targetUserId}::uuid
+                    AND end_date IS NULL
+                  ORDER BY start_date DESC, sequence DESC
+                  LIMIT 1
+                `
+              );
+              if (rows.length > 0 && rows[0].manager_id === userId) {
+                return { allowed: true };
+              }
+            }
+          }
+          return { allowed: false, reason: "target_population_mismatch" };
+        });
+    }
+  }
+
+  return { allowed: false, reason: "target_population_mismatch" };
+}
+
+// --- Public API ---
+
 export async function can(
   userId: string,
   permissionKey: string,
   action: RbpAction,
   targetUserId?: string,
-  fieldKey?: string
+  fieldKey?: string,
 ): Promise<CanResult> {
   const claims = await getClaims();
   if (!claims?.tenantId) {
     return { allowed: false, reason: "no_tenant" };
   }
 
-  return evaluateCached(
+  const ctx = await loadPermissionContextCached(userId, claims.tenantId);
+
+  if (!targetUserId || targetUserId === userId) {
+    return evaluateFromContext(ctx, userId, permissionKey, action, fieldKey);
+  }
+
+  return evaluateTargetPopulation(
+    ctx,
     userId,
     claims.tenantId,
     permissionKey,
@@ -49,125 +240,26 @@ export async function can(
   );
 }
 
-type GrantRow = {
-  role_id: string;
-  target_population: string;
-};
-
-async function findUserGrants(
-  tx: PrismaClient,
+export async function canMany(
   userId: string,
-  tenantId: string,
-): Promise<GrantRow[]> {
-  return tx.$queryRaw<GrantRow[]>(Prisma.sql`
-    SELECT rg.role_id, rg.target_population::text
-    FROM public.role_grants rg
-    JOIN public.group_members gm ON gm.group_id = rg.granted_group_id
-                                 AND gm.tenant_id = rg.tenant_id
-    WHERE gm.user_id = ${userId}::uuid
-      AND rg.tenant_id = ${tenantId}::uuid
-  `);
-}
-
-async function evaluate(
-  userId: string,
-  tenantId: string,
-  permissionKey: string,
+  keys: string[],
   action: RbpAction,
-  targetUserId?: string,
-  fieldKey?: string,
-): Promise<CanResult> {
-  return withTenant({ tenantId }, async (tx) => {
-    const modulePrefix = permissionKey.split(".")[0];
-    const flagCol = PERMISSION_MODULE_MAP[modulePrefix];
-    if (flagCol) {
-      const rows = await tx.$queryRaw<Record<string, boolean>[]>(
-        Prisma.sql`SELECT ${Prisma.raw(flagCol)} AS flag FROM public.tenants WHERE id = ${tenantId}::uuid`
-      );
-      if (rows.length === 0 || !rows[0].flag) {
-        return { allowed: false, reason: "module_inactive" };
-      }
+): Promise<Map<string, CanResult>> {
+  const claims = await getClaims();
+  const results = new Map<string, CanResult>();
+
+  if (!claims?.tenantId) {
+    for (const key of keys) {
+      results.set(key, { allowed: false, reason: "no_tenant" });
     }
+    return results;
+  }
 
-    const grants = await findUserGrants(tx, userId, tenantId);
+  const ctx = await loadPermissionContextCached(userId, claims.tenantId);
 
-    if (grants.length === 0) {
-      return { allowed: false, reason: "no_group_membership" };
-    }
+  for (const key of keys) {
+    results.set(key, evaluateFromContext(ctx, userId, key, action));
+  }
 
-    const roleIds = grants.map((g) => g.role_id);
-
-    const permissions = await tx.$queryRaw<{ role_id: string }[]>(
-      fieldKey
-        ? Prisma.sql`
-            SELECT role_id FROM public.role_permissions
-            WHERE role_id = ANY(${roleIds}::uuid[])
-              AND permission_key = ${permissionKey}
-              AND action = ${action}::"rbp_action"
-              AND field_key = ${fieldKey}
-          `
-        : Prisma.sql`
-            SELECT role_id FROM public.role_permissions
-            WHERE role_id = ANY(${roleIds}::uuid[])
-              AND permission_key = ${permissionKey}
-              AND action = ${action}::"rbp_action"
-          `
-    );
-
-    if (permissions.length === 0) {
-      return { allowed: false, reason: "no_permission" };
-    }
-
-    const permittedRoleIds = new Set(permissions.map((p) => p.role_id));
-
-    if (!targetUserId || targetUserId === userId) {
-      const hasAny = grants.some((g) => permittedRoleIds.has(g.role_id));
-      return hasAny
-        ? { allowed: true }
-        : { allowed: false, reason: "no_matching_grant" };
-    }
-
-    for (const grant of grants) {
-      if (!permittedRoleIds.has(grant.role_id)) continue;
-
-      switch (grant.target_population) {
-        case "all":
-          return { allowed: true };
-
-        case "self":
-          if (targetUserId === userId) return { allowed: true };
-          break;
-
-        case "same_department": {
-          const rows = await tx.$queryRaw<{ match: boolean }[]>(Prisma.sql`
-            SELECT (a.department_id IS NOT NULL AND a.department_id = t.department_id) AS match
-            FROM public.users a, public.users t
-            WHERE a.id = ${userId}::uuid AND t.id = ${targetUserId}::uuid
-          `);
-          if (rows.length > 0 && rows[0].match) return { allowed: true };
-          break;
-        }
-
-        case "direct_reports": {
-          const rows = await tx.$queryRaw<{ manager_id: string | null }[]>(
-            Prisma.sql`
-              SELECT manager_id FROM public.ec_job_information
-              WHERE user_id = ${targetUserId}::uuid
-                AND end_date IS NULL
-              ORDER BY start_date DESC, sequence DESC
-              LIMIT 1
-            `
-          );
-          if (rows.length > 0 && rows[0].manager_id === userId) {
-            return { allowed: true };
-          }
-          break;
-        }
-      }
-    }
-
-    return { allowed: false, reason: "target_population_mismatch" };
-  });
+  return results;
 }
-
-const evaluateCached = cache(evaluate);

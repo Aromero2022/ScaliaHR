@@ -30,8 +30,6 @@ vi.mock("@/lib/supabase/claims", () => ({
   }),
 }));
 
-const TENANT = "tenant-1";
-
 vi.mock("react", async () => {
   const actual = await vi.importActual<typeof import("react")>("react");
   return { ...actual, cache: (fn: (...a: unknown[]) => unknown) => fn };
@@ -45,6 +43,9 @@ const ROLE_1 = "role-1";
 
 let queryCallIndex = 0;
 
+// loadPermissionContext issues 3 queries in Promise.all:
+//   [0] tenant flags, [1] grants, [2] permissions
+// evaluateTargetPopulation may add a 4th query for org-structure checks.
 function setupQuerySequence(...responses: unknown[][]) {
   queryCallIndex = 0;
   mockQueryRaw.mockImplementation(() => {
@@ -54,6 +55,8 @@ function setupQuerySequence(...responses: unknown[][]) {
   });
 }
 
+const PERM = { permission_key: "employee.view", action: "view", field_key: null };
+
 describe("can()", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,7 +64,11 @@ describe("can()", () => {
   });
 
   it("denies when user has no group membership", async () => {
-    setupQuerySequence([]);
+    setupQuerySequence(
+      [{}],   // tenant flags
+      [],     // grants (empty → no_group_membership)
+      [],     // permissions
+    );
     const result = await can(USER_A, "employee.view", "view");
     expect(result.allowed).toBe(false);
     expect(result.reason).toBe("no_group_membership");
@@ -69,8 +76,9 @@ describe("can()", () => {
 
   it("denies when no matching permissions exist", async () => {
     setupQuerySequence(
+      [{}],
       [{ role_id: ROLE_1, target_population: "all" }],
-      [],
+      [],     // permissions empty → no_permission
     );
     const result = await can(USER_A, "employee.view", "view");
     expect(result.allowed).toBe(false);
@@ -94,8 +102,9 @@ describe("can()", () => {
   describe("target_population: all", () => {
     it("allows access to any target user", async () => {
       setupQuerySequence(
+        [{}],
         [{ role_id: ROLE_1, target_population: "all" }],
-        [{ role_id: ROLE_1 }],
+        [{ role_id: ROLE_1, ...PERM }],
       );
       const result = await can(USER_A, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(true);
@@ -103,8 +112,9 @@ describe("can()", () => {
 
     it("allows access when no target is specified", async () => {
       setupQuerySequence(
+        [{}],
         [{ role_id: ROLE_1, target_population: "all" }],
-        [{ role_id: ROLE_1 }],
+        [{ role_id: ROLE_1, ...PERM }],
       );
       const result = await can(USER_A, "employee.view", "view");
       expect(result.allowed).toBe(true);
@@ -114,8 +124,9 @@ describe("can()", () => {
   describe("target_population: self", () => {
     it("allows when target is the actor", async () => {
       setupQuerySequence(
+        [{}],
         [{ role_id: ROLE_1, target_population: "self" }],
-        [{ role_id: ROLE_1 }],
+        [{ role_id: ROLE_1, ...PERM }],
       );
       const result = await can(USER_A, "employee.view", "view", USER_A);
       expect(result.allowed).toBe(true);
@@ -123,8 +134,9 @@ describe("can()", () => {
 
     it("denies when target is a different user", async () => {
       setupQuerySequence(
+        [{}],
         [{ role_id: ROLE_1, target_population: "self" }],
-        [{ role_id: ROLE_1 }],
+        [{ role_id: ROLE_1, ...PERM }],
       );
       const result = await can(USER_A, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(false);
@@ -135,8 +147,9 @@ describe("can()", () => {
   describe("target_population: same_department", () => {
     it("allows when actor and target share a department", async () => {
       setupQuerySequence(
+        [{}],
         [{ role_id: ROLE_1, target_population: "same_department" }],
-        [{ role_id: ROLE_1 }],
+        [{ role_id: ROLE_1, ...PERM }],
         [{ match: true }],
       );
       const result = await can(USER_A, "employee.view", "view", USER_B);
@@ -145,8 +158,9 @@ describe("can()", () => {
 
     it("denies when actor and target are in different departments", async () => {
       setupQuerySequence(
+        [{}],
         [{ role_id: ROLE_1, target_population: "same_department" }],
-        [{ role_id: ROLE_1 }],
+        [{ role_id: ROLE_1, ...PERM }],
         [{ match: false }],
       );
       const result = await can(USER_A, "employee.view", "view", USER_B);
@@ -156,8 +170,9 @@ describe("can()", () => {
 
     it("denies when either user has no department", async () => {
       setupQuerySequence(
+        [{}],
         [{ role_id: ROLE_1, target_population: "same_department" }],
-        [{ role_id: ROLE_1 }],
+        [{ role_id: ROLE_1, ...PERM }],
         [],
       );
       const result = await can(USER_A, "employee.view", "view", USER_B);
@@ -168,8 +183,9 @@ describe("can()", () => {
   describe("target_population: direct_reports", () => {
     it("allows when target's manager_id matches actor", async () => {
       setupQuerySequence(
+        [{}],
         [{ role_id: ROLE_1, target_population: "direct_reports" }],
-        [{ role_id: ROLE_1 }],
+        [{ role_id: ROLE_1, ...PERM }],
         [{ manager_id: USER_A }],
       );
       const result = await can(USER_A, "employee.view", "view", USER_B);
@@ -178,8 +194,9 @@ describe("can()", () => {
 
     it("denies when target's manager is someone else", async () => {
       setupQuerySequence(
+        [{}],
         [{ role_id: ROLE_1, target_population: "direct_reports" }],
-        [{ role_id: ROLE_1 }],
+        [{ role_id: ROLE_1, ...PERM }],
         [{ manager_id: "other-manager" }],
       );
       const result = await can(USER_A, "employee.view", "view", USER_B);
@@ -189,8 +206,9 @@ describe("can()", () => {
 
     it("denies when target has no manager", async () => {
       setupQuerySequence(
+        [{}],
         [{ role_id: ROLE_1, target_population: "direct_reports" }],
-        [{ role_id: ROLE_1 }],
+        [{ role_id: ROLE_1, ...PERM }],
         [{ manager_id: null }],
       );
       const result = await can(USER_A, "employee.view", "view", USER_B);

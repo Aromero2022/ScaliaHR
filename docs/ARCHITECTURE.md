@@ -624,6 +624,48 @@ toggle module flags.
 
 ---
 
+## D14 — Per-Request Permission Context (Pool Exhaustion Fix)
+
+**Decision:** `can()` loads all permission data (grants, role_permissions,
+module flags) in a **single** `withTenant` transaction per request, memoized
+with `React.cache()`. Subsequent `can()` calls within the same RSC render
+evaluate against the preloaded context without opening additional transactions.
+
+**Problem:** `layout.tsx` called `Promise.all(keys.map(k => can(..., k, ...)))`,
+opening one `withTenant` transaction per key. With 6+ sidebar keys and a
+connection pool limit of 5 (PgBouncer transaction mode), every request
+exhausted the pool: `Unable to start a transaction in the given time`.
+
+**Architecture:**
+
+1. `loadPermissionContext(userId, tenantId)` — ONE `withTenant` call that
+   fetches tenant flags, user grants, and role permissions with `Promise.all`
+   inside the transaction (one connection, three queries).
+2. `loadPermissionContextCached = cache(loadPermissionContext)` — React
+   `cache()` ensures this runs at most once per RSC request. It is **not**
+   cached between requests: each incoming HTTP request gets a fresh context.
+3. `evaluateFromContext(ctx, ...)` — pure synchronous evaluation: module
+   gate, grant check, permission match. No DB calls.
+4. `evaluateTargetPopulation(ctx, ...)` — for `same_department` and
+   `direct_reports`, opens ONE additional `withTenant` to check the
+   org-structure condition.
+5. `canMany(userId, keys, action)` — batch evaluation for layout and lists.
+   Loads context once, loops through keys synchronously. Returns
+   `Map<string, CanResult>`.
+
+**Why not cached between requests:**
+- `React.cache()` is scoped to one React Server Component render. The cache
+  is discarded at the end of the request.
+- A permission revoked between requests takes effect immediately on the
+  next render — there is no stale window.
+- No global `Map`, no TTL, no manual invalidation needed.
+
+**Transaction timeouts:** `withTenant` now accepts explicit `maxWait` and
+`timeout` parameters via environment variables (`PRISMA_TX_MAX_WAIT`,
+`PRISMA_TX_TIMEOUT`), defaulting to 5s and 10s respectively.
+
+---
+
 ## D13 — Modelo de Tenant e Identidad
 
 **Decision:** One tenant = one customer. A corporate group with several legal

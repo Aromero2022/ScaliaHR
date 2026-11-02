@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/supabase/claims";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import type { ModuleFlags } from "@/lib/tenant/module-flags";
-import { can } from "@/lib/authz/can";
+import { canMany } from "@/lib/authz/can";
 import { NAV_ITEMS } from "@/lib/navigation/nav-config";
 import Sidebar from "@/components/sidebar";
 
@@ -35,12 +35,10 @@ export default async function ProtectedLayout({
       .single();
 
     if (bizUser) {
-      const results = await Promise.all(
-        SIDEBAR_PERMISSION_KEYS.map((key) => can(bizUser.id, key, "view")),
-      );
-      SIDEBAR_PERMISSION_KEYS.forEach((key, i) => {
-        if (results[i].allowed) grantedPermissions.push(key);
-      });
+      const results = await canMany(bizUser.id, SIDEBAR_PERMISSION_KEYS, "view");
+      for (const [key, result] of results) {
+        if (result.allowed) grantedPermissions.push(key);
+      }
     }
   }
 
