@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeNextPath } from "@/lib/auth/mfa-policy";
+import { logMfaEnroll } from "../actions";
 
 export default function MfaEnrollPage() {
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -73,6 +74,7 @@ export default function MfaEnrollPage() {
       return;
     }
 
+    await logMfaEnroll().catch(() => {});
     router.push(safeNextPath(searchParams.get("next")));
     router.refresh();
   }

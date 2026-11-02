@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { logLoginEvent } from "./actions";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -26,6 +27,7 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
+      await logLoginEvent().catch(() => {});
       router.push("/dashboard");
       router.refresh();
     }

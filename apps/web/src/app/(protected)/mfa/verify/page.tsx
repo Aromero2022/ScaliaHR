@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeNextPath } from "@/lib/auth/mfa-policy";
+import { logMfaVerify } from "../actions";
 
 export default function MfaVerifyPage() {
   const [factorId, setFactorId] = useState<string | null>(null);
@@ -53,6 +54,7 @@ export default function MfaVerifyPage() {
       return;
     }
 
+    await logMfaVerify().catch(() => {});
     router.push(safeNextPath(searchParams.get("next")));
     router.refresh();
   }
