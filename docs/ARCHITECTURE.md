@@ -311,7 +311,7 @@ irreversible suppression step** of an ARCO cancellation, not its first step.
 - Kept: `users.id`, `auth_uid`, `employee_id`, `ec_job_information` (reporting
   line), all other ids and audit rows.
 
-**Pendiente — Fase 10:** bloqueo previo a la supresión según la LFPDPPP 2025 y
+**Pendiente — Fase 20 (DRTM):** bloqueo previo a la supresión según la LFPDPPP 2025 y
 plazos de conservación de LFT art. 804, LSS art. 15 y CFF. Validar plazos con
 asesoría jurídica antes de operar con clientes reales. Mientras tanto, la
 cancelación ARCO no debe ejecutarse en tenants productivos.
@@ -686,13 +686,13 @@ entities is a single tenant with multiple `legal_entities` (future table).
 
 3. Provider staff (support, implementation) are **not** employees of the
    customer. They will access customer tenants through the platform console
-   (Phase 11) with temporary, audited, customer-authorized support access.
+   (Phase 12) with temporary, audited, customer-authorized support access.
 
 4. `switchTenant` and `user_tenant_memberships` with multiple active tenants
    are reserved for that platform-level support access. They are not used for
    regular employees.
 
-**Planned login (Phases 10–11):**
+**Planned login (Phases 11–12):**
 
 - Company identification by subdomain or company code; the customer chooses
   the identifier (email, employee number, or both).
@@ -701,5 +701,123 @@ entities is a single tenant with multiple `legal_entities` (future table).
 
 **Tenant birth:**
 
-- Self-service with a trial period (Phase 11).
-- Assisted onboarding from the platform console (Phase 11).
+- Self-service with a trial period (Phase 12).
+- Assisted onboarding from the platform console (Phase 12).
+
+---
+
+## D15 — Ambientes, Despliegue y Releases
+
+**Decision:** Two Supabase projects (staging and production) and two Railway
+environments (staging and production) form the deployment pipeline. Migrations
+are validated in staging and promoted to production via `db-remote-sync` in a
+production mode that only applies migrations; reset mode is blocked for
+production (consistent with D7). Migrations must be backward-compatible
+(expand/contract pattern).
+
+**Deployment:**
+- `main` deploys to staging; a tag or release deploys to production. CI green
+  is a prerequisite.
+- Dockerfile: multi-stage, output "standalone", Node 22 LTS, non-root user,
+  `turbo prune @scaliahr/web`.
+- Health check at `/api/health` validates the app and its database connection.
+- Rollback procedure documented in a runbook.
+
+**Preview environments:** one per Pull Request, running against Supabase staging.
+
+**Worker:** a separate Railway service handles emails, workflows, scheduled jobs,
+per-tenant exports, and integrations. Backed by a persistent Postgres queue
+(pg-boss or equivalent) with retries, backoff, and a dead-letter queue.
+
+**Domains:** `app.scaliahr.com` with per-tenant subdomains
+(`<customer>.scaliahr.com`) and a wildcard SSL certificate. Middleware resolves
+the tenant by subdomain or company code.
+
+**Backup policy:**
+- Daily backup from the Pro plan as soon as the production project exists.
+- Point-in-Time Recovery (PITR): deferred — contracted when the first billable
+  customer is onboarded (not before). Covers the entire production project.
+- Logical per-tenant export: executed by the worker, daily, only for tenants
+  with an active license (enabled when a demo converts to a paying customer).
+  Restorable without affecting other tenants.
+- Demo/trial tenants: no committed RPO; their terms of service state this.
+- RPO and RTO commitments for licensed tenants are written into the contract.
+- Monthly restore drill documented (full and per-tenant).
+
+**Release channels (Phase 12):** universal flags, opt-in flags, per-module
+flags (D12), and preview customers.
+
+---
+
+## D16 — Correo Transaccional (Resend)
+
+**Decision:** Resend is the transactional email provider. Each environment
+(staging and production) uses its own API key and sending domain.
+
+**Sending domain:** verified with SPF, DKIM, and DMARC.
+
+**Supabase Auth integration:** Resend is configured as the custom SMTP provider
+in Supabase Auth for invitations, account confirmation, and password reset
+emails.
+
+**Email module (`lib/email`):**
+- React Email templates, multi-language, branded per tenant.
+- Webhooks from Resend feed a per-tenant delivery log (sent, delivered,
+  bounced, complained).
+- Staging keys only send to test email addresses.
+
+---
+
+## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
+
+**Status:** Accepted (temporary). Registered 2026-11-02.
+
+**Affected component:** `insert_effective_record()` (SECURITY DEFINER RPC in
+`supabase/migrations/`).
+
+**Current state:** The function checks `has_app_role('owner') OR
+has_app_role('hr_admin')` to authorize the caller. This reads the `app_role`
+string from `user_tenant_memberships` (baked into the JWT at login). It does
+**not** check RBP permissions (`role_grants` → `role_permissions`).
+
+**Risk:** When Admin Center (Phase 11) enables custom roles with
+`ec.manage_employees`, a user granted that RBP permission but without the
+`owner` or `hr_admin` app_role will be rejected by the function. Conversely,
+a user with the `hr_admin` app_role whose RBP permissions have been narrowed
+will still pass. The function's authorization does not follow the RBP model.
+
+**Planned fix (Phase 11 — Admin Center with custom roles):**
+
+1. Replace the `has_app_role()` checks in `insert_effective_record()` with an
+   RBP permission check (either calling the planned `can()` SECURITY DEFINER
+   function or querying `role_grants`/`role_permissions` directly).
+2. Apply the same change to any other database function that currently
+   authorizes by `app_role` instead of RBP.
+3. Add integration tests verifying that a custom role with `ec.manage_employees`
+   can call the function, and that a role without it is rejected.
+
+## Known Risk — Audit Log Empty in Admin Center
+
+**Status:** Accepted (temporary). Registered 2026-11-02.
+
+**Affected component:** Admin Center audit report page
+(`apps/web/src/app/(protected)/admin-center/page.tsx`).
+
+**Current state:** Admin Center displays "Sin entradas de auditoría" even
+though login, MFA enrollment, and permission changes were expected to be
+logged since Phase 3 (`write_audit_log` RPC exists since the S1 hardening
+loop).
+
+**Risk:** Either the audit events are not being written (callers do not invoke
+`write_audit_log`) or they are written but the Admin Center view does not
+read them correctly. In either case, the platform lacks a functioning audit
+trail, which is a compliance requirement for production tenants.
+
+**Planned fix (before first customer — see Roadmap):**
+
+1. Trace the `write_audit_log` call sites: confirm whether login, MFA, and
+   permission-change flows actually call it.
+2. If calls are missing, add them. If calls exist but the view query is wrong,
+   fix the query.
+3. Add an integration test that performs a login, verifies that an audit row
+   appears, and that the Admin Center page renders it.
