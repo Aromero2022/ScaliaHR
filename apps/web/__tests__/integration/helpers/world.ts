@@ -81,13 +81,15 @@ export class TestWorld {
 
     // Mirror production: log the authentication event (silently ignored for
     // users without a tenant, where requesting_tenant_id() is NULL).
-    const authed = this.clientFor(token);
-    await authed.rpc("write_audit_log", {
-      p_tenant_id: "00000000-0000-0000-0000-000000000000",
-      p_actor_id: "00000000-0000-0000-0000-000000000000",
-      p_action: "AUTH_LOGIN",
-      p_entity: "session",
-    }).catch(() => {});
+    try {
+      const authed = this.clientFor(token);
+      await authed.rpc("write_audit_log", {
+        p_tenant_id: "00000000-0000-0000-0000-000000000000",
+        p_actor_id: "00000000-0000-0000-0000-000000000000",
+        p_action: "AUTH_LOGIN",
+        p_entity: "session",
+      });
+    } catch { /* tenantless users */ }
 
     return token;
   }
