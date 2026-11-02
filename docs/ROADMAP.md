@@ -2,7 +2,7 @@
 
 > **Nota:** El cierre de autorización (D12 — licenciamiento por módulo, `can()`
 > en todas las rutas y acciones, caché por request, guards de flag de módulo y
-> permisos completos en create-tenant) se ejecuta antes de la Fase 9 como
+> permisos completos en create-tenant) se ejecuta antes de la Fase 9a como
 > prerrequisito de seguridad para todas las fases siguientes.
 
 ---
