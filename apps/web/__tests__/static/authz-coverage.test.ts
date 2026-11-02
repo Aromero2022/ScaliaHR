@@ -14,6 +14,7 @@ import * as path from "path";
 const ALLOWLIST = new Set([
   "mfa/enroll/page.tsx",
   "mfa/verify/page.tsx",
+  "mfa/actions.ts",
   "profile/page.tsx",
 ]);
 
