@@ -148,6 +148,7 @@ Motor de workflows configurable, notificaciones push/email/in-app, eventos de ci
 CRUD de RBP (roles, grupos y asignaciones), DPCS (aviso de privacidad versionado, aceptación al iniciar sesión y Set DPCS Statement Status), Picklist Center, Import Employee Data, configuración de empresa (logo, tema, idioma, política de contraseña y MFA), reporte de auditoría, política de login por cliente (correo, número de empleado o ambos) y reseteo de contraseña por RH.
 
 - Al habilitar roles personalizados, `insert_effective_record` (y cualquier función de la base que hoy autorice por `app_role`) debe validar el permiso RBP en lugar del rol fijo.
+- Cada Server Action del CRUD de RBP debe llamar `writeAuditLog()` con la acción correspondiente: `ROLE_CREATED`, `ROLE_UPDATED`, `ROLE_DELETED`, `PERMISSION_GRANTED`, `PERMISSION_REVOKED`, `GROUP_MEMBER_ADDED`, `GROUP_MEMBER_REMOVED`. Las entradas deben incluir `entity_id` (UUID del recurso) y `diff` (campos modificados) para trazabilidad completa.
 
 ---
 
@@ -207,7 +208,7 @@ Depende de: Workflows (10), Admin Center (11), worker y Resend (9a), API (13). N
 - Cambiar el factor MFA del owner.
 - Sacar los datos demo de las migraciones a seed.sql.
 - `can()` como función SECURITY DEFINER en la base.
-- Verificar la bitácora de auditoría: hoy Admin Center muestra "Sin entradas de auditoría" aunque login, MFA y cambios de permisos debían registrarse desde la Fase 3. Confirmar si no se escriben o si la vista no las lee, y corregirlo con test.
+- Verificar la bitácora de auditoría: **parcialmente resuelto** (PR #42). Login (`AUTH_LOGIN`), MFA (`MFA_ENROLL`, `MFA_VERIFY`, `MFA_ENROLL_FAILED`, `MFA_VERIFY_FAILED`) ya se registran y Admin Center los muestra con `entity`, `entity_id` y `diff`. Pendiente: cambios de permisos (Fase 11 CRUD de RBP) y logins fallidos/directos (Known Risk "Login Audit Depends on the Client" en ARCHITECTURE.md, fix planeado junto con rate limiting de Fase 9b).
 - Cerrar los Known Risks de ARCHITECTURE.md.
 - Completar las Fases 9a y 9b.
 - Al dar de alta el primer cliente facturable: contratar PITR y encender su export por tenant.

@@ -798,29 +798,92 @@ will still pass. The function's authorization does not follow the RBP model.
 
 ## Known Risk — Audit Log Empty in Admin Center
 
-**Status:** Accepted (temporary). Registered 2026-11-02.
+**Status:** Partially resolved. Registered 2026-11-02, auth events fixed
+2026-11-02 (PR #42).
 
 **Affected component:** Admin Center audit report page
 (`apps/web/src/app/(protected)/admin-center/page.tsx`).
 
-**Current state:** Admin Center displays "Sin entradas de auditoría" even
-though login, MFA enrollment, and permission changes were expected to be
-logged since Phase 3 (`write_audit_log` RPC exists since the S1 hardening
-loop).
+**Original state:** Admin Center displayed "Sin entradas de auditoría" because
+login, MFA enrollment, and MFA verification flows never called
+`write_audit_log`. The Admin Center query also omitted v2 columns (`entity_id`,
+`diff`).
 
-**Risk:** Either the audit events are not being written (callers do not invoke
-`write_audit_log`) or they are written but the Admin Center view does not
-read them correctly. In either case, the platform lacks a functioning audit
-trail, which is a compliance requirement for production tenants.
+**What was fixed (PR #42):**
 
-**Planned fix (before first customer — see Roadmap):**
+1. Login (`AUTH_LOGIN`), MFA enrollment (`MFA_ENROLL` / `MFA_ENROLL_FAILED`),
+   and MFA verification (`MFA_VERIFY` / `MFA_VERIFY_FAILED`) now write audit
+   entries via Server Actions that invoke `writeAuditLog()`.
+2. The Admin Center query now selects `entity`, `entity_id`, and `diff`
+   alongside the legacy `details_json` column and renders them all.
+3. Integration tests verify write, read (RLS), and RBP permission coverage.
 
-1. Trace the `write_audit_log` call sites: confirm whether login, MFA, and
-   permission-change flows actually call it.
-2. If calls are missing, add them. If calls exist but the view query is wrong,
-   fix the query.
-3. Add an integration test that performs a login, verifies that an audit row
-   appears, and that the Admin Center page renders it.
+**What remains (Phase 11):**
+
+Permission changes (role CRUD, grant assignments, group membership) are not yet
+logged because the Admin Center CRUD UI does not exist. Each Server Action in
+the Phase 11 RBP CRUD must call `writeAuditLog()` with the appropriate action
+(`ROLE_CREATED`, `ROLE_UPDATED`, `PERMISSION_GRANTED`, `PERMISSION_REVOKED`,
+`GROUP_MEMBER_ADDED`, `GROUP_MEMBER_REMOVED`).
+
+## Known Risk — Login Audit Depends on the Client
+
+**Status:** Accepted (temporary). Registered 2026-11-03.
+
+**Affected component:** Login page (`apps/web/src/app/login/page.tsx`),
+MFA pages (`apps/web/src/app/(protected)/mfa/enroll/page.tsx`,
+`apps/web/src/app/(protected)/mfa/verify/page.tsx`) and their Server Actions
+(`apps/web/src/app/login/actions.ts`, `apps/web/src/app/(protected)/mfa/actions.ts`).
+
+**Current state:** `signInWithPassword` and the MFA `challenge`/`verify` calls
+run in the browser. After each operation, the client calls a Server Action
+(`logLoginEvent`, `logMfaEnroll`, `logMfaVerify`, `logMfaEnrollFailed`,
+`logMfaVerifyFailed`) which writes the audit entry. This has three gaps:
+
+1. **Failed logins are not recorded.** A failed `signInWithPassword` has no JWT
+   (no tenant, no user), so `write_audit_log()` cannot identify the actor or
+   tenant. No audit trail exists for brute-force attempts.
+2. **Direct API calls bypass the audit.** A client that authenticates or
+   completes MFA directly against the Supabase Auth API (e.g. via
+   `supabase.auth.signInWithPassword` or `supabase.auth.mfa.verify` outside the
+   web app) produces a valid session with no audit entry.
+3. **MFA failure events depend on the client.** `MFA_ENROLL_FAILED` and
+   `MFA_VERIFY_FAILED` are logged only because the browser calls the Server
+   Action after receiving an error from `mfa.verify()`. A direct API caller that
+   skips the web app leaves no trace of failed MFA attempts.
+
+**Risk:** Compliance frameworks (SOC 2, ISO 27001) typically require logging of
+both successful and failed authentication attempts. The current approach leaves
+a gap that could mask credential-stuffing and MFA brute-force attacks.
+
+**Test coverage gap:** The integration tests validate that the `write_audit_log`
+RPC writes and that RLS returns the entries to admin users, but they do not
+verify that the login and MFA pages actually invoke their Server Actions. This
+will be covered by a Playwright e2e test when the fix below is implemented.
+
+**Complementary source — `auth.audit_log_entries`:** Supabase's built-in auth
+audit log (in the `auth` schema) records every GoTrueAuth event (sign-in,
+sign-up, token refresh, MFA challenge) with IP metadata. It could serve as a
+cross-reference for events the app misses, but it lives in the `auth` schema
+(not accessible via PostgREST/RLS), so reading it requires `service_role` or a
+SECURITY DEFINER view, and its retention is controlled by Supabase, not the
+application. Useful as a secondary check, not a primary audit trail.
+
+**Planned fix (separate PR, alongside Phase 9b rate-limiting):**
+
+1. Move `signInWithPassword` and MFA `challenge`/`verify` into Server Actions so
+   the server controls both the auth call and the audit write. On success, write
+   `AUTH_LOGIN` / `MFA_VERIFY` / `MFA_ENROLL`; on failure, write
+   `AUTH_LOGIN_FAILED` / `MFA_VERIFY_FAILED` / `MFA_ENROLL_FAILED` to a
+   dedicated `auth_events` table using `service_role` from the server, recording
+   email (for login) or user id (for MFA), IP and user-agent without requiring
+   the client to initiate the audit call.
+2. Do not grant `EXECUTE` on `write_audit_log` to `anon`. The `auth_events`
+   table uses a separate, tightly-scoped insertion path via `service_role`.
+3. Evaluate exposing `auth.audit_log_entries` via a read-only SECURITY DEFINER
+   view for admin users, as a complementary data source for forensics.
+4. Add Playwright e2e tests that exercise the login and MFA flows end-to-end and
+   verify that the expected audit entries appear in the database.
 
 ## Known Risk — Supabase CLI Version Pinned in CI
 

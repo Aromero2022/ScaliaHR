@@ -19,6 +19,9 @@ interface ConfigRow {
 interface AuditRow {
   action: string;
   created_at: string;
+  entity: string | null;
+  entity_id: string | null;
+  diff: Record<string, unknown> | null;
   details_json: Record<string, unknown> | null;
   user: { first_name: string; last_name: string }[] | { first_name: string; last_name: string } | null;
 }
@@ -65,7 +68,7 @@ export default async function AdminCenterPage() {
       auditPerm.allowed
         ? supabase
             .from("audit_logs")
-            .select("action, created_at, details_json, user:users(first_name, last_name)")
+            .select("action, created_at, entity, entity_id, diff, details_json, user:users(first_name, last_name)")
             .order("created_at", { ascending: false })
             .limit(5)
         : Promise.resolve({ data: [], error: null }),
@@ -204,12 +207,19 @@ export default async function AdminCenterPage() {
                       {usr
                         ? `${(usr as Record<string, string>).first_name} ${(usr as Record<string, string>).last_name}`
                         : "Sistema"}
+                      {a.entity ? ` — ${a.entity}` : ""}
+                      {a.entity_id ? ` (${a.entity_id})` : ""}
                       {a.details_json &&
                       typeof a.details_json === "object" &&
                       "description" in a.details_json
                         ? ` — ${a.details_json.description}`
                         : ""}
                     </p>
+                    {a.diff && Object.keys(a.diff).length > 0 && (
+                      <pre className="mt-1 max-h-24 overflow-auto rounded bg-slate-900/50 px-2 py-1 text-xs text-slate-500">
+                        {JSON.stringify(a.diff, null, 2)}
+                      </pre>
+                    )}
                   </div>
                 );
               })}
