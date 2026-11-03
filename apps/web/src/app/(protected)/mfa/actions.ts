@@ -45,3 +45,45 @@ export async function logMfaVerify(): Promise<void> {
     entity: "mfa_factor",
   });
 }
+
+export async function logMfaEnrollFailed(): Promise<void> {
+  const claims = await getClaims();
+  if (!claims?.tenantId) return;
+
+  const sb = await createClient();
+  const { data: bizUser } = await sb
+    .from("users")
+    .select("id")
+    .eq("auth_uid", claims.userId)
+    .single();
+
+  if (!bizUser) return;
+
+  await writeAuditLog({
+    tenantId: claims.tenantId,
+    actorId: bizUser.id,
+    action: "MFA_ENROLL_FAILED",
+    entity: "mfa_factor",
+  });
+}
+
+export async function logMfaVerifyFailed(): Promise<void> {
+  const claims = await getClaims();
+  if (!claims?.tenantId) return;
+
+  const sb = await createClient();
+  const { data: bizUser } = await sb
+    .from("users")
+    .select("id")
+    .eq("auth_uid", claims.userId)
+    .single();
+
+  if (!bizUser) return;
+
+  await writeAuditLog({
+    tenantId: claims.tenantId,
+    actorId: bizUser.id,
+    action: "MFA_VERIFY_FAILED",
+    entity: "mfa_factor",
+  });
+}

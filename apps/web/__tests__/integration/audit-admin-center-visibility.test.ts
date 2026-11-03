@@ -76,6 +76,70 @@ describe("audit-admin-center-visibility", () => {
     });
   });
 
+  describe("write: MFA failure events are recorded", () => {
+    it("MFA_VERIFY_FAILED can be written and read by admin", async () => {
+      const { error: wErr } = await tenant.admin.client.rpc("write_audit_log", {
+        p_tenant_id: tenant.id,
+        p_actor_id: tenant.id,
+        p_action: "MFA_VERIFY_FAILED",
+        p_entity: "mfa_factor",
+      });
+      expect(wErr).toBeNull();
+
+      const { data, error } = await tenant.admin.client
+        .from("audit_logs")
+        .select("action, entity")
+        .eq("action", "MFA_VERIFY_FAILED");
+
+      expect(error).toBeNull();
+      expect(data!.length).toBeGreaterThan(0);
+      expect(data![0].entity).toBe("mfa_factor");
+    });
+
+    it("MFA_ENROLL_FAILED can be written and read by admin", async () => {
+      const { error: wErr } = await tenant.admin.client.rpc("write_audit_log", {
+        p_tenant_id: tenant.id,
+        p_actor_id: tenant.id,
+        p_action: "MFA_ENROLL_FAILED",
+        p_entity: "mfa_factor",
+      });
+      expect(wErr).toBeNull();
+
+      const { data, error } = await tenant.admin.client
+        .from("audit_logs")
+        .select("action, entity")
+        .eq("action", "MFA_ENROLL_FAILED");
+
+      expect(error).toBeNull();
+      expect(data!.length).toBeGreaterThan(0);
+      expect(data![0].entity).toBe("mfa_factor");
+    });
+
+    it("employee cannot read MFA failure entries", async () => {
+      const { data } = await tenant.employee.client
+        .from("audit_logs")
+        .select("id")
+        .eq("action", "MFA_VERIFY_FAILED");
+      expect(data ?? []).toEqual([]);
+    });
+  });
+
+  describe("read: admin-center query returns entity_id and diff columns", () => {
+    it("entity_id and diff are selectable through PostgREST", async () => {
+      const { data, error } = await tenant.admin.client
+        .from("audit_logs")
+        .select("action, entity, entity_id, diff")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      expect(error).toBeNull();
+      expect(data!.length).toBeGreaterThan(0);
+      const row = data![0];
+      expect(row).toHaveProperty("entity_id");
+      expect(row).toHaveProperty("diff");
+    });
+  });
+
   describe("RBP: admin.view_audit_logs permission is granted to tenant admin role", () => {
     it("admin role includes admin.view_audit_logs:view", async () => {
       const { rows } = await db.query(

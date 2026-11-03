@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeNextPath } from "@/lib/auth/mfa-policy";
-import { logMfaVerify } from "../actions";
+import { logMfaVerify, logMfaVerifyFailed } from "../actions";
 
 export default function MfaVerifyPage() {
   const [factorId, setFactorId] = useState<string | null>(null);
@@ -49,6 +49,7 @@ export default function MfaVerifyPage() {
     });
 
     if (vErr) {
+      await logMfaVerifyFailed().catch(() => {});
       setError(vErr.message);
       setLoading(false);
       return;
