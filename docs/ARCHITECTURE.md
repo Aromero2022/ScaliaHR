@@ -715,6 +715,16 @@ production mode that only applies migrations; reset mode is blocked for
 production (consistent with D7). Migrations must be backward-compatible
 (expand/contract pattern).
 
+**Procurement (Phase 23):** the decision stands, but none of its paid services
+(Supabase Pro for staging and production, Railway, the domain, Cloudflare,
+per-PR previews) is contracted before Phase 23 — Roadmap, Principle 8: nothing
+paid until phases 9a–22 are complete and fully tested locally. Until then the
+same topology runs locally (Phase 9a): the Dockerfile and the worker in
+docker-compose, Supabase local, tenants on `*.localhost`, and the
+`db-remote-sync` production mode with reset blocked, tested without touching
+any remote project. PITR and per-tenant exports are still enabled only when the
+first billable customer is onboarded.
+
 **Deployment:**
 - `main` deploys to staging; a tag or release deploys to production. CI green
   is a prerequisite.
@@ -753,6 +763,14 @@ flags (D12), and preview customers.
 
 **Decision:** Resend is the transactional email provider. Each environment
 (staging and production) uses its own API key and sending domain.
+
+**Procurement (Phase 23):** the decision stands, but Resend is contracted only
+in Phase 23 (Roadmap, Principle 8). Until then `lib/email` sends through an
+adapter whose local implementation delivers to the Mailpit server bundled with
+Supabase local, where every template is tested; Supabase Auth emails also land
+in that Mailpit. Phase 23 connects Resend to the same adapter and adds the
+sending domain (SPF, DKIM, DMARC), the Supabase Auth SMTP configuration and the
+delivery-log webhooks.
 
 **Sending domain:** verified with SPF, DKIM, and DMARC.
 
