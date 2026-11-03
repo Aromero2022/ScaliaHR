@@ -830,23 +830,36 @@ the Phase 11 RBP CRUD must call `writeAuditLog()` with the appropriate action
 
 **Status:** Accepted (temporary). Registered 2026-11-03.
 
-**Affected component:** Login page (`apps/web/src/app/login/page.tsx`) and
-Server Action (`apps/web/src/app/login/actions.ts`).
+**Affected component:** Login page (`apps/web/src/app/login/page.tsx`),
+MFA pages (`apps/web/src/app/(protected)/mfa/enroll/page.tsx`,
+`apps/web/src/app/(protected)/mfa/verify/page.tsx`) and their Server Actions
+(`apps/web/src/app/login/actions.ts`, `apps/web/src/app/(protected)/mfa/actions.ts`).
 
-**Current state:** `signInWithPassword` runs in the browser. After a successful
-sign-in, the client calls the Server Action `logLoginEvent()` which writes the
-`AUTH_LOGIN` entry. This has two gaps:
+**Current state:** `signInWithPassword` and the MFA `challenge`/`verify` calls
+run in the browser. After each operation, the client calls a Server Action
+(`logLoginEvent`, `logMfaEnroll`, `logMfaVerify`, `logMfaEnrollFailed`,
+`logMfaVerifyFailed`) which writes the audit entry. This has three gaps:
 
 1. **Failed logins are not recorded.** A failed `signInWithPassword` has no JWT
    (no tenant, no user), so `write_audit_log()` cannot identify the actor or
    tenant. No audit trail exists for brute-force attempts.
-2. **Direct API logins bypass the audit.** A client that authenticates directly
-   against the Supabase Auth API (e.g. via `supabase.auth.signInWithPassword`
-   outside the web app) produces a valid session with no audit entry.
+2. **Direct API calls bypass the audit.** A client that authenticates or
+   completes MFA directly against the Supabase Auth API (e.g. via
+   `supabase.auth.signInWithPassword` or `supabase.auth.mfa.verify` outside the
+   web app) produces a valid session with no audit entry.
+3. **MFA failure events depend on the client.** `MFA_ENROLL_FAILED` and
+   `MFA_VERIFY_FAILED` are logged only because the browser calls the Server
+   Action after receiving an error from `mfa.verify()`. A direct API caller that
+   skips the web app leaves no trace of failed MFA attempts.
 
 **Risk:** Compliance frameworks (SOC 2, ISO 27001) typically require logging of
 both successful and failed authentication attempts. The current approach leaves
-a gap that could mask credential-stuffing attacks.
+a gap that could mask credential-stuffing and MFA brute-force attacks.
+
+**Test coverage gap:** The integration tests validate that the `write_audit_log`
+RPC writes and that RLS returns the entries to admin users, but they do not
+verify that the login and MFA pages actually invoke their Server Actions. This
+will be covered by a Playwright e2e test when the fix below is implemented.
 
 **Complementary source — `auth.audit_log_entries`:** Supabase's built-in auth
 audit log (in the `auth` schema) records every GoTrueAuth event (sign-in,
@@ -858,12 +871,16 @@ application. Useful as a secondary check, not a primary audit trail.
 
 **Planned fix (separate PR, alongside Phase 9b rate-limiting):**
 
-1. Move `signInWithPassword` into a Server Action so the server controls both
-   the authentication call and the audit write. On success, write `AUTH_LOGIN`;
-   on failure, write `AUTH_LOGIN_FAILED` to a dedicated `auth_events` table
-   using `service_role` from the server, recording email, IP and user-agent
-   without requiring a JWT session.
+1. Move `signInWithPassword` and MFA `challenge`/`verify` into Server Actions so
+   the server controls both the auth call and the audit write. On success, write
+   `AUTH_LOGIN` / `MFA_VERIFY` / `MFA_ENROLL`; on failure, write
+   `AUTH_LOGIN_FAILED` / `MFA_VERIFY_FAILED` / `MFA_ENROLL_FAILED` to a
+   dedicated `auth_events` table using `service_role` from the server, recording
+   email (for login) or user id (for MFA), IP and user-agent without requiring
+   the client to initiate the audit call.
 2. Do not grant `EXECUTE` on `write_audit_log` to `anon`. The `auth_events`
    table uses a separate, tightly-scoped insertion path via `service_role`.
 3. Evaluate exposing `auth.audit_log_entries` via a read-only SECURITY DEFINER
    view for admin users, as a complementary data source for forensics.
+4. Add Playwright e2e tests that exercise the login and MFA flows end-to-end and
+   verify that the expected audit entries appear in the database.
