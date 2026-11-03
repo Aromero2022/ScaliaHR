@@ -884,3 +884,29 @@ application. Useful as a secondary check, not a primary audit trail.
    view for admin users, as a complementary data source for forensics.
 4. Add Playwright e2e tests that exercise the login and MFA flows end-to-end and
    verify that the expected audit entries appear in the database.
+
+## Known Risk — Supabase CLI Version Pinned in CI
+
+**Status:** Accepted (permanent). Registered 2026-11-03.
+
+**Affected component:** `.github/workflows/ci.yml` — all jobs that use
+`supabase/setup-cli@v3`.
+
+**Current state:** The Supabase CLI is pinned at v2.122.1. On 2026-11-03
+`version: latest` pulled v3.0.0, which changed how the shadow database
+used by `supabase db diff` initializes grants on the `public` schema.
+This caused the "DB reset sync test" job to report 7 unexpected GRANT/
+REVOKE/COMMENT statements on the public schema that were not in
+`supabase/drift-allowlist.txt`.
+
+**Risk:** The pinned version will fall behind. Security patches and new
+features in the Supabase CLI will not be picked up automatically.
+
+**Before upgrading the CLI version:**
+
+1. Run `supabase db diff` locally with the new version against a clean
+   `db reset` and compare against the drift allowlist.
+2. If new public-schema grant statements appear, update either
+   `db-reset-sync.sh` Step 2 (the `CREATE SCHEMA public` + GRANTs block)
+   or `supabase/drift-allowlist.txt` to match the new shadow DB behavior.
+3. Verify all three CI jobs pass before merging the version bump.
