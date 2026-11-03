@@ -68,7 +68,7 @@ jobs:
 
       - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: 2.122.1
 
       - name: Start Supabase
         run: supabase start -x realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,studio
@@ -115,7 +115,7 @@ jobs:
 
       - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: 2.122.1
 
       - name: Start Supabase
         run: supabase start -x realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,studio
