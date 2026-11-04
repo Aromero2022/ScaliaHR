@@ -45,6 +45,14 @@ jobs:
       - name: Unit tests
         run: npx vitest run
 
+      - name: Email package lint, typecheck, unit tests and build
+        run: |
+          npx eslint .
+          npx tsc --noEmit
+          npx vitest run
+          npm run build
+        working-directory: packages/email
+
       - name: Worker lint
         run: npx eslint .
         working-directory: apps/worker
@@ -109,6 +117,7 @@ jobs:
 
       - name: Run worker integration tests
         run: |
+          npm run build -w @scaliahr/email
           source scripts/supabase-test-env.sh
           npm -w @scaliahr/worker run test:integration
 
@@ -223,7 +232,7 @@ jobs:
 
       - name: Container logs (on failure)
         if: failure()
-        run: SUPABASE_NETWORK=unused docker compose --env-file .env.docker logs --no-color --tail 200 web worker || true
+        run: SUPABASE_NETWORK=unused MAILPIT_HOST=unused docker compose --env-file .env.docker logs --no-color --tail 200 web worker || true
 
       - name: Stop the local stack
         if: always()

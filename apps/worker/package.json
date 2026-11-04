@@ -16,6 +16,7 @@
     "pgboss:sql": "node scripts/pgboss-sql.mjs"
   },
   "dependencies": {
+    "@scaliahr/email": "*",
     "pg-boss": "12.38.0",
     "zod": "^4.6.7"
   },

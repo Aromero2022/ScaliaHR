@@ -22,6 +22,9 @@ export SUPABASE_ANON_KEY="$(_status_value ANON_KEY)"
 export SUPABASE_SERVICE_ROLE_KEY="$(_status_value SERVICE_ROLE_KEY)"
 export SUPABASE_JWT_SECRET="$(_status_value JWT_SECRET)"
 export SUPABASE_TEST_DB_URL="$(_status_value DB_URL)"
+export MAILPIT_URL="$(_status_value MAILPIT_URL)"
+# [local_smtp] smtp_port in supabase/config.toml (D20).
+export MAILPIT_SMTP_PORT=54325
 
 # Create a non-BYPASSRLS role for Prisma integration tests so RLS is enforced.
 _db_url="$SUPABASE_TEST_DB_URL"
@@ -48,11 +51,15 @@ ROLE_SQL
   # worker_app is created by migration D17 without a password; give it a test one.
   psql "$_db_url" -v ON_ERROR_STOP=1 -q -c "ALTER ROLE worker_app WITH PASSWORD 'worker_test_pw'"
   export WORKER_TEST_DB_URL="${_db_url/postgres:postgres/worker_app:worker_test_pw}"
+
+  # email_enqueuer (migration D20) gets a test password the same way.
+  psql "$_db_url" -v ON_ERROR_STOP=1 -q -c "ALTER ROLE email_enqueuer WITH PASSWORD 'enqueuer_test_pw'"
+  export EMAIL_ENQUEUER_TEST_DB_URL="${_db_url/postgres:postgres/email_enqueuer:enqueuer_test_pw}"
 fi
 unset _db_url
 
 _missing=""
-for _var in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_JWT_SECRET SUPABASE_TEST_DB_URL; do
+for _var in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_JWT_SECRET SUPABASE_TEST_DB_URL MAILPIT_URL; do
   if [ -z "${!_var}" ]; then
     _missing="$_missing $_var"
   fi

@@ -94,6 +94,16 @@ export class TestWorld {
     return token;
   }
 
+  /** Access and refresh tokens of a fresh sign-in, for code that needs a full session (cookies). */
+  async session(email: string): Promise<{ access_token: string; refresh_token: string }> {
+    const client = createClient(this.env.supabaseUrl, this.env.anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await client.auth.signInWithPassword({ email, password: this.password });
+    if (error || !data.session) throw new Error(`signInWithPassword failed for ${email}: ${error?.message}`);
+    return { access_token: data.session.access_token, refresh_token: data.session.refresh_token };
+  }
+
   async userWithoutTenant(): Promise<Omit<TestUser, "userId">> {
     const { authId, email } = await this.createAuthUser();
     const token = await this.signIn(email);

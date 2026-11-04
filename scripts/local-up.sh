@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # One command for the whole local stack (Phase 9a, D17):
 #   1. Supabase local via the Supabase CLI
-#   2. local-only passwords for prisma_app and worker_app
+#   2. local-only passwords for prisma_app, worker_app and email_enqueuer
 #   3. web and worker containers (docker-compose.yml)
-#   4. smoke checks: /api/health and one system.ping job
+#   4. smoke checks: /api/health, one system.ping job and one email in Mailpit
 # Never touches a remote project: it aborts unless the database is on this machine.
 set -euo pipefail
 
@@ -39,6 +39,7 @@ status_value() {
 }
 DB_URL="$(status_value DB_URL)"
 ANON_KEY="$(status_value ANON_KEY)"
+MAILPIT_URL="$(status_value MAILPIT_URL)"
 
 require_local_db_url "$DB_URL" || exit 1
 
@@ -46,8 +47,16 @@ if [ ! -f "$ENV_FILE" ]; then
   cp .env.docker.example "$ENV_FILE"
   log "Created $ENV_FILE from .env.docker.example"
 fi
+# An $ENV_FILE from an earlier version lacks newer variables: add them.
+while IFS= read -r line; do
+  case "$line" in '' | '#'*) continue ;; esac
+  if ! grep -q "^${line%%=*}=" "$ENV_FILE"; then
+    printf '%s\n' "$line" >> "$ENV_FILE"
+    log "Added ${line%%=*} to $ENV_FILE from .env.docker.example"
+  fi
+done < .env.docker.example
 
-log "Setting local-only passwords for prisma_app and worker_app"
+log "Setting local-only passwords for prisma_app, worker_app and email_enqueuer"
 node --env-file="$ENV_FILE" scripts/set-local-role-passwords.mjs "$DB_URL"
 
 DB_PORT="$(printf '%s' "$DB_URL" | sed -E 's#^.*@[^:/]+:([0-9]+)/.*$#\1#')"
@@ -57,6 +66,11 @@ SUPABASE_NETWORK="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Net
 [ -n "$SUPABASE_NETWORK" ] || die "Could not find the Supabase Docker network of ${DB_CONTAINER}."
 export SUPABASE_NETWORK
 export NEXT_PUBLIC_SUPABASE_ANON_KEY="$ANON_KEY"
+
+MAILPIT_PORT="$(printf '%s' "$MAILPIT_URL" | sed -E 's#^.*:([0-9]+)/?$#\1#')"
+MAILPIT_HOST="$(docker ps --filter "publish=${MAILPIT_PORT}" --format '{{.Names}}' | head -1)"
+[ -n "$MAILPIT_HOST" ] || die "Could not find the Mailpit container of Supabase local on port ${MAILPIT_PORT}."
+export MAILPIT_HOST
 
 log "Building and starting web and worker (network ${SUPABASE_NETWORK})"
 docker compose --env-file "$ENV_FILE" up --build --detach --wait --wait-timeout 300
@@ -69,13 +83,21 @@ echo
 log "Checking that the worker consumes system.ping"
 docker compose --env-file "$ENV_FILE" exec -T worker node dist/smoke.js
 
+SMOKE_TO="smoke-$(date +%s)@scaliahr.localhost"
+log "Checking that the worker delivers email to Mailpit (${SMOKE_TO})"
+docker compose --env-file "$ENV_FILE" exec -T worker node dist/smoke.js email "$SMOKE_TO"
+curl -fsS "${MAILPIT_URL}/api/v1/search?query=to:${SMOKE_TO}" | grep -q '"messages_count":1' \
+  || die "The smoke email to ${SMOKE_TO} did not reach Mailpit (is the demo tenant from supabase/seed.sql present?)."
+echo "[smoke] email delivered to Mailpit"
+
 cat <<EOF
 
 Local stack is up.
   App:      http://localhost:${WEB_ADDRESS##*:}
   Health:   http://localhost:${WEB_ADDRESS##*:}/api/health
   Studio:   http://127.0.0.1:54323
-  Mailpit:  http://127.0.0.1:54324
+  Mailpit:  ${MAILPIT_URL}
+  Tenants:  http://<slug>.localhost:${WEB_ADDRESS##*:}  (demo: http://acme-corp.localhost:${WEB_ADDRESS##*:})
 Logs: docker logs -f scaliahr-web-1   |   docker logs -f scaliahr-worker-1
 Stop: npm run local:down   (add -- --all to stop Supabase too)
 EOF

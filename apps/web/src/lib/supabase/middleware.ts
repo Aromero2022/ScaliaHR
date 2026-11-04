@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { appRoleFromClaims, aalFromClaims, mfaStepFor, requiresAal2 } from "@/lib/auth/mfa-policy";
+import { COMPANY_CODE_COOKIE, requestedTenant, tenantAccessAllowed, tenantNotFound } from "@/lib/tenant/host";
 import { supabaseServerTarget } from "./server-url";
 
 const PUBLIC_PATHS = ["/login", "/auth", "/signup"];
@@ -50,6 +51,23 @@ export async function updateSession(request: NextRequest) {
   if (user) {
     const { data } = await supabase.auth.getClaims();
     const claims = data?.claims ?? null;
+
+    // D21: the tenant of the subdomain or company code must be the token's
+    // tenant and active; every refusal gets the same 404. Anonymous visitors
+    // are never told whether a tenant exists: they all get the login redirect.
+    if (!isPublic) {
+      const requested = requestedTenant(
+        request.headers.get("host"),
+        request.cookies.get(COMPANY_CODE_COOKIE)?.value,
+      );
+      const tokenTenant = typeof claims?.tenant_id === "string" ? claims.tenant_id : "";
+      if (!(await tenantAccessAllowed(supabase, requested, tokenTenant))) {
+        const refused = tenantNotFound();
+        // Keep a refreshed session: dropping its cookies would reuse a rotated refresh token.
+        supabaseResponse.cookies.getAll().forEach((cookie) => refused.cookies.set(cookie));
+        return refused;
+      }
+    }
 
     if (claims && requiresAal2(pathname, appRoleFromClaims(claims)) && aalFromClaims(claims) !== "aal2") {
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();

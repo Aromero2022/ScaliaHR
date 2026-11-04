@@ -1,5 +1,6 @@
-// Gives the migration-created roles prisma_app and worker_app the passwords from
-// .env.docker, in the LOCAL database only (D17). Called by scripts/local-up.sh:
+// Gives the migration-created roles prisma_app, worker_app (D17) and
+// email_enqueuer (D20) the passwords from .env.docker, in the LOCAL database
+// only. Called by scripts/local-up.sh:
 //   node --env-file=.env.docker scripts/set-local-role-passwords.mjs <db-url>
 import { pathToFileURL } from "node:url";
 import pg from "pg";
@@ -8,6 +9,7 @@ const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost"]);
 const ROLE_PASSWORD_VARS = {
   prisma_app: "PRISMA_APP_PASSWORD",
   worker_app: "WORKER_APP_PASSWORD",
+  email_enqueuer: "EMAIL_ENQUEUER_PASSWORD",
 };
 
 export function assertLocalDbUrl(raw) {

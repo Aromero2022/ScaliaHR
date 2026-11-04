@@ -38,3 +38,11 @@ verify_enabled = true
 [auth.email]
 enable_signup = true
 enable_confirmations = false
+
+# Mailpit receives every email locally (D20). smtp_port exposes its SMTP server
+# on the host for the worker integration tests; the containers use port 1025 on
+# the Supabase network.
+[local_smtp]
+enabled = true
+port = 54324
+smtp_port = 54325

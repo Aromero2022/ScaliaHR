@@ -54,7 +54,11 @@ describe("worker against the local queue (D17)", () => {
   it("processes system.ping while maintenance runs with worker_app's privileges", async () => {
     const errors: string[] = [];
     const worker = await startWorker(
-      { databaseUrl: url },
+      {
+        databaseUrl: url,
+        // Unused here: system.ping never sends email.
+        email: { smtp: { host: "127.0.0.1", port: 1 }, from: "no-reply@scaliahr.localhost", appBaseUrl: "http://localhost:3000" },
+      },
       { superviseIntervalSeconds: 1, maintenanceIntervalSeconds: 1, monitorIntervalSeconds: 1 },
     );
     opened.push(worker);

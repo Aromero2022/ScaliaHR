@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@scaliahr/email": "*",
     "@scaliahr/shared": "*",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.49.0",
@@ -22,6 +23,7 @@
     "autoprefixer": "^10.6.1",
     "clsx": "^2.1.1",
     "next": "^15.3.0",
+    "pg-boss": "12.38.0",
     "postcss": "^8.5.31",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
