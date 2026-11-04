@@ -87,7 +87,7 @@ describe("production mode: scripts/db-migrate-sync.sh (D22)", () => {
     const workdir = workdirWith("20200101000000", "CREATE TABLE public.d22_old_probe (id int);");
     const result = run("scripts/db-migrate-sync.sh", [env.dbUrl, "local"], workdir);
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("DbPushMissingRemoteError");
+    expect(result.output).toContain("Found local migration files to be inserted before the last migration");
     const { rows } = await db.query("SELECT to_regclass('public.d22_old_probe') IS NULL AS absent");
     expect(rows[0].absent).toBe(true);
     expect(await state()).toEqual(before);
@@ -99,7 +99,7 @@ describe("production mode: scripts/db-migrate-sync.sh (D22)", () => {
     try {
       const result = run("scripts/db-migrate-sync.sh", [env.dbUrl, "local"]);
       expect(result.status).not.toBe(0);
-      expect(result.output).toContain("DbPushMissingLocalError");
+      expect(result.output).toContain("Remote migration versions not found in local migrations directory");
       expect(await state()).toEqual({ ...before, history: before.history + 1 });
       const { rows } = await db.query(
         "SELECT count(*)::int AS n FROM supabase_migrations.schema_migrations WHERE version = '20000101000000'",

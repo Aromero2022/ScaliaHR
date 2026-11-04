@@ -1181,8 +1181,8 @@ sync; until then only the target check protects it.
 - `__tests__/integration/db-sync-modes.test.ts` runs against Supabase local:
   - production mode is a no-op when up to date;
   - it applies exactly one pending migration without touching data;
-  - it refuses an out-of-order migration (`DbPushMissingRemoteError`) and a
-    divergent history (`DbPushMissingLocalError`) without repairing it;
+  - it refuses an out-of-order migration and a divergent history without
+    repairing it;
   - reset is refused for target production;
   - once a production-mode sync has marked the database, a reset with target
     `local` is refused and the database is unchanged.
