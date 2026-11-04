@@ -35,6 +35,7 @@ const base = { sub: "u1", tenant_id: "t1", app_role: "employee", aal: "aal1" };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://localhost:54321");
 });
 
 describe("middleware MFA policy", () => {

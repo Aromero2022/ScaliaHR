@@ -1,16 +1,19 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { appRoleFromClaims, aalFromClaims, mfaStepFor, requiresAal2 } from "@/lib/auth/mfa-policy";
+import { supabaseServerTarget } from "./server-url";
 
 const PUBLIC_PATHS = ["/login", "/auth", "/signup"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
+  const target = supabaseServerTarget();
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    target.url,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: { name: target.cookieName },
       cookies: {
         getAll() {
           return request.cookies.getAll();
