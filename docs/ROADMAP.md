@@ -21,7 +21,7 @@
 | 6 | RBP + Admin Center | Completada |
 | 7 | PMGM (Desempeño y Metas) | Completada |
 | 8 | TIH (Talent Intelligence Hub) | Completada |
-| 9a | Infraestructura local | Completada (PR #45, #48, #49 y PR4_NUMBER; criterio de cierre verificado abajo) |
+| 9a | Infraestructura local | Completada (PR #45, #48, #49 y #50; criterio de cierre verificado abajo) |
 
 ---
 
@@ -86,7 +86,7 @@ Todo corre gratis en local (Docker + Supabase local). En esta fase no se crea ni
 
 **Criterio de cierre:** web y worker arrancan en Docker contra Supabase local, /api/health responde, cada plantilla de correo llega a Mailpit, `<cliente>.localhost` resuelve su tenant, el modo reset de db-remote-sync queda bloqueado para producción y una restauración local probada (completa y por tenant).
 
-**Estado: completada** (PR #45, #48, #49 y PR4_NUMBER). Cada punto del criterio se prueba en CI en cada PR:
+**Estado: completada** (PR #45, #48, #49 y #50). Cada punto del criterio se prueba en CI en cada PR:
 
 | Punto del criterio | Evidencia |
 |--------------------|-----------|
