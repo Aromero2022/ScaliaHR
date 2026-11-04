@@ -28,10 +28,7 @@ COPY --from=pruner /repo/tsconfig.base.json ./tsconfig.base.json
 
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
-# The lockfile lists only the Linux @next/swc binaries, which is what this image
-# needs; skip Next's attempt to "patch" it for every other platform.
-ENV NEXT_TELEMETRY_DISABLED=1 \
-    NEXT_IGNORE_INCORRECT_LOCKFILE=1
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN test -n "$NEXT_PUBLIC_SUPABASE_URL" && test -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
   || (echo "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY build args are required" && exit 1)
 RUN cd apps/web && npx prisma generate --no-hints && npx next build
