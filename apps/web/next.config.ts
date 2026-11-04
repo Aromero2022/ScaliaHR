@@ -27,7 +27,11 @@ const cspDirectives = [
 const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
-  transpilePackages: ["@scaliahr/shared"],
+  transpilePackages: ["@scaliahr/shared", "@scaliahr/email"],
+  // pg-boss stays a plain Node dependency of the server (lib/email, D20).
+  serverExternalPackages: ["pg-boss"],
+  // `next dev` on tenant subdomains such as acme-corp.localhost:3000 (D21).
+  allowedDevOrigins: ["*.localhost"],
 
   async headers() {
     return [

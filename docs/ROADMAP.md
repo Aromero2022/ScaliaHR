@@ -370,16 +370,16 @@ Contratar PITR y encender su export por tenant:
 
 ## Tabla de cumplimiento
 
-> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, y revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1). Cada fase, al cerrarse, actualiza el estado de sus filas.
+> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1) y con la rama del PR 2 de la Fase 9a (correo y tenant por subdominio, D20 y D21). Cada fase, al cerrarse, actualiza el estado de sus filas.
 
 | Norma o control | Dónde se cumple | Estado |
 |-----------------|-----------------|--------|
-| RLS por tenant | Todas las tablas + D3 (Prisma sin bypass) + D6 + D17 (`pgboss`); TRUNCATE en 9b | Cumple: las 38 tablas de `public` y las 11 de `pgboss` tienen ENABLE + FORCE RLS y ningún rol de la app (incluido `worker_app`) tiene BYPASSRLS. Brecha: `anon`, `authenticated` y `prisma_app` conservan TRUNCATE (ignora RLS) en 37 tablas de `public`; se revoca en 9b. En `pgboss` nadie tiene TRUNCATE |
-| Secretos fuera del cliente y del repo | .env fuera del repo + D4 + D17 (`.dockerignore`, `.env.docker` ignorado e imágenes revisadas en CI); server-only en 9b | Cumple, se refuerza en 9b |
+| RLS por tenant | Todas las tablas + D3 (Prisma sin bypass) + D6 + D17 (`pgboss`) + D20 (`email_enqueuer`); TRUNCATE en 9b | Cumple: las 38 tablas de `public` y las 11 de `pgboss` tienen ENABLE + FORCE RLS y ningún rol de la app (incluidos `worker_app` y `email_enqueuer`) tiene BYPASSRLS. `email_enqueuer` solo inserta trabajos de `email.send` y no lee su contenido; `worker_app` lee la marca del tenant solo a través de `email_branding()`. Brecha: `anon`, `authenticated` y `prisma_app` conservan TRUNCATE (ignora RLS) en 37 tablas de `public`; se revoca en 9b. En `pgboss` nadie tiene TRUNCATE |
+| Secretos fuera del cliente y del repo | .env fuera del repo + D4 + D17 (`.dockerignore`, `.env.docker` ignorado e imágenes revisadas en CI) + D20 (`EMAIL_ENQUEUE_DATABASE_URL` solo en el servidor); server-only en 9b | Cumple, se refuerza en 9b |
 | Rate limiting (429) | 9b | Pendiente: el código existe, falta conectarlo |
 | CSP estricta | 9b | Pendiente: la CSP todavía permite 'unsafe-inline' y 'unsafe-eval' en scripts |
-| Validación de entradas (zod) | 9b | Parcial: ARCO, empleados, skills-hub y `createTenant` validan con zod; faltan `performance/actions.ts` y `lib/tenant/actions.ts` |
-| Errores sin exponer detalles | 9b | Pendiente: 16 respuestas de Server Actions devuelven `error.message` de la base y no hay `error.tsx`. `/api/health` (D17) ya responde sin detalles |
+| Validación de entradas (zod) | 9b | Parcial: ARCO, empleados, skills-hub, `createTenant`, los trabajos de correo (al encolar y en el worker, D20), el código de empresa y la configuración del worker (D21) validan con zod; faltan `performance/actions.ts` y `lib/tenant/actions.ts` |
+| Errores sin exponer detalles | 9b | Pendiente: 16 respuestas de Server Actions devuelven `error.message` de la base y no hay `error.tsx`. `/api/health` (D17) y el 404 de tenant (D21) ya responden sin detalles |
 | Sin rutas admin/debug expuestas | 9b + Admin Center con RBP y MFA | Parcial: no hay rutas de debug y Admin Center ya exige `can()` y AAL2; falta el test de 9b sobre el build de producción |
 | Logging y monitoreo | 9a (`/api/health`) + 9b (logs JSON) + 23 (Sentry) | Parcial: `/api/health` y el HEALTHCHECK de las imágenes existen (D17); faltan logs JSON (9b) y Sentry y uptime (23) |
 | Bitácora inmutable y sin datos sensibles | 9b | Parcial: solo se escribe vía `write_audit_log` y UPDATE/DELETE están bloqueados por políticas RESTRICTIVE; faltan revocar TRUNCATE y redactar datos sensibles. `anonymize_user` (D10) reemplaza datos personales por ARCO |
@@ -391,7 +391,9 @@ Contratar PITR y encender su export por tenant:
 | LFPDPPP 2025: derechos ARCO | 20 | Parcial: el admin procesa solicitudes y la supresión existe (D10); faltan autoservicio y bloqueo (Known Risk registrado) |
 | Licencias de fuentes e íconos | 11 (OFL, Lucide/Phosphor/Tabler) | Pendiente: hoy no hay paquetes de fuentes ni de íconos |
 | Theme Manager usable por administradores sin experiencia técnica | 11 | Pendiente |
-| Respaldos y restauración | 9a local + 23 producción | Pendiente: solo existe el respaldo previo a cada db-remote-sync (D7). El PR 1 de la 9a (#45) no incluye respaldos; el export por tenant y la prueba de restauración local llegan en el PR 3 de la 9a |
+| Aislamiento de tenant por subdominio o código de empresa | 9a (D21) + 23 (dominio real) | Cumple en local: el middleware solo deja pasar al tenant del token y activo; otro tenant, uno inexistente y uno suspendido reciben el mismo 404, y los anónimos la misma redirección al login. Un tenant suspendido sale de los tokens nuevos (hook). Probado con el middleware real contra Supabase local |
+| Correo transaccional | 9a (D20) + 23 (Resend, SPF/DKIM/DMARC) | Cumple en local: el worker envía por el adaptador SMTP a Mailpit; enlaces solo al dominio de la app y sus subdominios; marca validada (logo `http(s)`, color con contraste 4.5:1); sin direcciones en los logs; trabajos borrados al día. Cada plantilla se prueba en Mailpit |
+| Respaldos y restauración | 9a local + 23 producción | Pendiente: solo existe el respaldo previo a cada db-remote-sync (D7). Los PR 1 (#45) y 2 de la 9a no incluyen respaldos; el export por tenant y la prueba de restauración local llegan en el PR 4 de la 9a |
 
 ---
 

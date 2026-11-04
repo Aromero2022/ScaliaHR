@@ -29,6 +29,7 @@ model Tenant {
   is_tme_active           Boolean                   @default(false)
   is_tih_active           Boolean                   @default(false)
   is_pos_mgmt_active      Boolean                   @default(false)
+  suspended_at            DateTime?                 @db.Timestamptz(6)
   arco_requests           arco_requests[]
   audit_logs              AuditLog[]
   business_rules          BusinessRule[]

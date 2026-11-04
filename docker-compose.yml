@@ -24,6 +24,10 @@ services:
       DIRECT_URL: postgresql://prisma_app:${PRISMA_APP_PASSWORD}@db:5432/postgres
       # Fixed superuser password of Supabase local; admin-client needs it (D3).
       ADMIN_DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+      # lib/email enqueues as email_enqueuer, which can only add email.send jobs (D20).
+      EMAIL_ENQUEUE_DATABASE_URL: postgresql://email_enqueuer:${EMAIL_ENQUEUER_PASSWORD:?set it in .env.docker}@db:5432/postgres
+      # Tenant subdomains are <slug>.localhost (D21).
+      APP_BASE_URL: http://localhost:${WEB_PORT:-3000}
     ports:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
     networks:
@@ -39,6 +43,11 @@ services:
     image: scaliahr-worker:local
     environment:
       WORKER_DATABASE_URL: postgresql://worker_app:${WORKER_APP_PASSWORD:?set it in .env.docker}@db:5432/postgres
+      # SMTP adapter (D20): Mailpit of Supabase local, reached by container name.
+      SMTP_HOST: ${MAILPIT_HOST:?run npm run local:up, which finds the Mailpit container}
+      SMTP_PORT: "1025"
+      EMAIL_FROM: no-reply@scaliahr.localhost
+      APP_BASE_URL: http://localhost:${WEB_PORT:-3000}
     networks:
       - supabase
     restart: unless-stopped

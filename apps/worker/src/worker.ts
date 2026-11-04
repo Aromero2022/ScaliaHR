@@ -7,6 +7,6 @@ export async function startWorker(config: WorkerConfig, tuning?: BossTuning): Pr
   const boss = createBoss(config.databaseUrl, tuning);
   boss.on("error", (error: Error) => console.error(`[worker] pg-boss error: ${error.message}`));
   await boss.start();
-  await registerHandlers(boss);
+  await registerHandlers(boss, config);
   return boss;
 }

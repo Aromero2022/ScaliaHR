@@ -7,8 +7,19 @@ const auth = {
   mfa: { getAuthenticatorAssuranceLevel: vi.fn() },
 };
 
+// The tenant lookup of D21: own tenant, active, unless a test says otherwise.
+const tenantLookup = { row: { id: "t1", suspended_at: null } as unknown, eq: vi.fn() };
+const from = vi.fn(() => ({
+  select: () => ({
+    eq: (column: string, value: string) => {
+      tenantLookup.eq(column, value);
+      return { maybeSingle: async () => ({ data: tenantLookup.row, error: null }) };
+    },
+  }),
+}));
+
 vi.mock("@supabase/ssr", () => ({
-  createServerClient: vi.fn(() => ({ auth })),
+  createServerClient: vi.fn(() => ({ auth, from })),
 }));
 
 import { updateSession } from "@/lib/supabase/middleware";
@@ -35,6 +46,7 @@ const base = { sub: "u1", tenant_id: "t1", app_role: "employee", aal: "aal1" };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  tenantLookup.row = { id: "t1", suspended_at: null };
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://localhost:54321");
 });
 
@@ -102,5 +114,51 @@ describe("middleware MFA policy", () => {
       error: null,
     });
     expect((await visit("/dashboard"))?.pathname).toBe("/login");
+  });
+});
+
+describe("middleware tenant check (D21)", () => {
+  async function visitHost(host: string, path: string, cookie?: string) {
+    const headers = new Headers({ host });
+    if (cookie) headers.set("cookie", cookie);
+    return updateSession(new NextRequest(`http://${host}${path}`, { headers }));
+  }
+
+  it("looks the subdomain's tenant up by slug and lets its own members through", async () => {
+    session(base);
+    const res = await visitHost("acme-corp.localhost:3000", "/dashboard");
+    expect(res.status).toBe(200);
+    expect(tenantLookup.eq).toHaveBeenCalledWith("slug", "acme-corp");
+  });
+
+  it("answers 404 before any MFA redirect when the tenant is refused", async () => {
+    session({ ...base, app_role: "owner" });
+    tenantLookup.row = null;
+    const res = await visitHost("other.localhost:3000", "/dashboard");
+    expect(res.status).toBe(404);
+    expect(res.headers.get("location")).toBeNull();
+    expect(auth.mfa.getAuthenticatorAssuranceLevel).not.toHaveBeenCalled();
+  });
+
+  it("uses the company code cookie on the app host", async () => {
+    session(base);
+    await visitHost("localhost:3000", "/dashboard", "scalia_company=acme-corp");
+    expect(tenantLookup.eq).toHaveBeenCalledWith("slug", "acme-corp");
+  });
+
+  it("checks the token's own tenant when nothing is requested, and refuses it while suspended", async () => {
+    session(base);
+    tenantLookup.row = { id: "t1", suspended_at: "2026-11-04T00:00:00Z" };
+    const res = await visitHost("localhost:3000", "/dashboard");
+    expect(tenantLookup.eq).toHaveBeenCalledWith("id", "t1");
+    expect(res.status).toBe(404);
+  });
+
+  it("keeps public paths reachable on any host, without a lookup", async () => {
+    session(base);
+    tenantLookup.row = null;
+    const res = await visitHost("unknown.localhost:3000", "/login");
+    expect(res.status).toBe(200);
+    expect(from).not.toHaveBeenCalled();
   });
 });

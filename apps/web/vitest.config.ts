@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "src"),
       "@scaliahr/shared": path.resolve(__dirname, "../../packages/shared/src"),
+      "@scaliahr/email/contract": path.resolve(__dirname, "../../packages/email/src/contract.ts"),
     },
   },
   test: {

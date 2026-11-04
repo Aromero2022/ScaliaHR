@@ -874,8 +874,8 @@ It never runs against a remote project.
   migrations recreate both.
 
 **Pending:** `pgboss` functions keep pg-boss's mutable `search_path`; review
-them with the Phase 9b advisors work. The first real jobs (email, per-tenant
-exports) arrive in PRs 2 and 3 of Phase 9a.
+them with the Phase 9b advisors work. The first real jobs arrive with Phase 9a:
+email in PR 2 (D20), per-tenant exports in PR 4.
 
 ---
 
@@ -983,6 +983,145 @@ aria-labels.
 **Tests:** axe in CI over the existing screens, with zero errors allowed, and
 screenshots at 360, 768 and 1280 px, approved when the phase closes.
 Playwright is already a dev dependency of `apps/web`.
+
+---
+
+## D20 — Transactional Email Through the Worker
+
+**Decision:** the web server never sends email. It validates a job and
+enqueues it on `email.send`; the worker renders it with the tenant's branding
+and delivers it through an SMTP adapter. Locally the adapter delivers to the
+Mailpit of Supabase local; Resend plugs into the same adapter in Phase 23
+(D16, Roadmap Principle 8). Phase 9a, PR 2.
+
+**Package `packages/email` (`@scaliahr/email`):**
+- `contract.ts`: queue name and the zod schema of a job, a union on
+  `template` with `tenantId`, `to`, optional `locale` and per-template `data`.
+  Links must be `http(s)`; unknown templates and fields are rejected.
+- React Email templates: `invitation`, `password_reset` and a generic
+  `notification` (title, paragraphs, optional action). Spanish and English;
+  the locale is the job's, then the tenant's `platform.locale`, then Spanish.
+- Branding: tenant name, logo and primary color from `system_configurations`
+  key `company.branding` (`{"logoUrl", "primaryColor"}`), which only tenant
+  admins can write. A logo must be `http(s)` and a color `#RRGGBB`; otherwise,
+  or with no configuration, the ScaliaHR brand applies. The button text is
+  white or near-black, whichever reaches 4.5:1 on the color; if neither does,
+  the default color is used.
+- Every link must stay on the app origin (`APP_BASE_URL`) or one of its tenant
+  subdomains (D21): same scheme and port, no user info. The worker refuses to
+  render a job whose link points anywhere else.
+- `transport.ts`: the adapter interface (`send`, `close`) and its SMTP
+  implementation (nodemailer, no auth or TLS, meant for Mailpit only).
+- The worker uses the compiled `dist`; the web app compiles `contract.ts` from
+  source (tsconfig paths and `transpilePackages`, like `@scaliahr/shared`).
+
+**Producer (`apps/web/src/lib/email`):** `enqueueEmail()` validates with the
+contract and sends the job with pg-boss, connected as `email_enqueuer` through
+`EMAIL_ENQUEUE_DATABASE_URL` (server-only; never `NEXT_PUBLIC_*`). It uses the
+D17 no-DDL options plus `supervise: false` and `registerInstance: false`.
+pg-boss is pinned to the same exact version as the worker, and
+`pgboss-security.test.ts` checks both pins.
+
+**Queue and roles (`20261104030000_d20_email_queue.sql`):**
+- `email.send`: 5 retries with exponential backoff from 30 s, then
+  `system.dead_letter`; finished jobs are deleted after one day, addresses
+  included.
+- `email_enqueuer`: LOGIN, NOBYPASSRLS, no CREATE anywhere. It can read
+  `pgboss.version` and its own queue row, insert into `job_common` only with
+  `name = 'email.send'`, and read back `id`, `name` and `start_after` (needed
+  by `INSERT … RETURNING`). It cannot read payloads, update or delete jobs,
+  use other queues, declare queues or touch `public`.
+- `public.email_branding(uuid)`: SECURITY DEFINER with an empty `search_path`,
+  executable only by `worker_app`, which still has no access to any `public`
+  table. It returns name, logo, color and locale, and no row when the tenant
+  does not exist or is suspended (D21).
+
+**Worker:** `SMTP_HOST`, `SMTP_PORT`, `EMAIL_FROM` and `APP_BASE_URL` are
+required and validated with zod at start. Each job is parsed with the
+contract, branded, rendered and sent; a missing or suspended tenant completes
+the job as `dropped` without sending. Logs carry the job id and outcome, never
+addresses or links.
+
+**Local stack:** `supabase/config.toml` exposes Mailpit's SMTP on
+`127.0.0.1:54325` for the integration tests. In docker-compose the worker
+reaches it by container name, which `local-up.sh` finds from the Mailpit port.
+`local-up.sh` also sets the local `email_enqueuer` password, adds missing
+variables to an older `.env.docker`, and smoke-tests one email to Mailpit.
+
+**Tests:** unit tests for the package (templates, locales, escaping, branding,
+contrast, links, contract) and for the worker handler; integration tests that
+enqueue through `lib/email`, let the worker deliver and read each template
+back from Mailpit's API, and check that suspended and nonexistent tenants get
+nothing; security tests for `email_enqueuer` and `email_branding`.
+
+**Accepted for now:**
+- Delivery is at least once: if the worker crashes between the SMTP send and
+  completing the job, the retry sends the email again.
+- A job with an invalid payload retries five times before reaching the dead
+  letter queue, since the worker does not tell bad data from a transient
+  failure.
+- Until Phase 11 brings uploads (D18), a tenant admin can point the logo at any
+  `https` image, which the recipient's mail client loads.
+- Supabase Auth's own emails (signup confirmation, its recovery flow) still use
+  Supabase templates. The app's branded invitation and reset emails need the
+  action link from `auth.admin.generateLink`, sent through `lib/email`; the
+  flows that do this arrive in Phases 10–12.
+
+---
+
+## D21 — Tenant Resolution by Subdomain or Company Code
+
+**Decision:** a request names its tenant with the host, `<slug>.<app host>`
+(`acme-corp.localhost` locally, `<cliente>.scaliahr.com` in Phase 23), or, on
+the app host itself, with the company code chosen at login. The middleware
+lets a signed-in user through only when that tenant is the one in their token
+and it is not suspended. Phase 9a, PR 2.
+
+**Resolution (`apps/web/src/lib/tenant/host.ts`):**
+- The app host comes from `APP_BASE_URL` (default `http://localhost:3000`).
+- A subdomain always wins; the company code (`scalia_company` cookie) only
+  counts on the app host. Other hosts name no tenant.
+- The login page asks for the company code (optional) only on the app host.
+  `rememberCompanyCode` validates its format with zod and stores it in an
+  httpOnly cookie; it never checks that the company exists.
+
+**Enforcement (`lib/supabase/middleware.ts`), for signed-in users on
+non-public paths:**
+- With a requested tenant, look it up by slug with the user's own session.
+  RLS on `tenants` shows each user only their own tenant, so another tenant,
+  an unknown slug and a failed lookup all return nothing.
+- Without one, look up the token's tenant by id, so a suspended tenant is
+  refused on the app host too.
+- Access requires the row's id to equal the token's `tenant_id` and
+  `suspended_at` to be null. Any refusal returns the same 404 page (no-store,
+  no tenant name), before the MFA check, and keeps refreshed session cookies.
+- Anonymous visitors get the same login redirect on any host, and public paths
+  (`/login`, `/auth`, `/signup`) are served on any host without a lookup, so
+  nobody can learn from the response whether a tenant exists.
+
+**Suspension (`20261104020000_d21_tenant_suspension.sql`):**
+`tenants.suspended_at`, set only by the platform: the owner's column-level
+UPDATE grant does not include it. `custom_access_token_hook` skips suspended
+tenants in both of its lookups, so the next token of their users carries no
+tenant (or another active membership) and RLS hides the tenant's rows.
+`email_branding` returns no row for them, so their emails are dropped (D20).
+
+**Tests:** unit tests for host parsing, the access decision, the 404 and the
+company-code action; integration tests that run the real middleware with real
+sessions against the local stack: own subdomain allowed, another tenant's
+subdomain or company code refused, nonexistent and suspended tenants answered
+exactly alike, the same login redirect for anonymous visitors, the host
+winning over the company code; and tests of the hook and the column grant.
+
+**Accepted for now:**
+- A token issued before the suspension keeps its `tenant_id` until it expires
+  (`jwt_expiry` = 900 s). The middleware refuses it at once, but direct Data
+  API calls with that token still pass RLS until then.
+- Each signed-in request on a protected path makes one `tenants` lookup.
+- Users with memberships in several tenants (support access, D13) are refused
+  on any tenant but their active one; switching tenant does not move them to
+  the other subdomain yet (Phase 12).
+- Custom domains (`tenants.domain`) are not resolved yet (Phase 23).
 
 ---
 

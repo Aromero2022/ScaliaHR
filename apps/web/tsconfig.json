@@ -21,6 +21,9 @@
       ],
       "@scaliahr/shared/*": [
         "../../packages/shared/src/*"
+      ],
+      "@scaliahr/email/contract": [
+        "../../packages/email/src/contract.ts"
       ]
     },
     "plugins": [

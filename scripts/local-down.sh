@@ -9,8 +9,9 @@ cd "$REPO_ROOT"
 ENV_FILE=".env.docker"
 [ -f "$ENV_FILE" ] || ENV_FILE=".env.docker.example"
 
-# down never creates or removes the external Supabase network; any name will do.
-SUPABASE_NETWORK="${SUPABASE_NETWORK:-supabase_network_unused}" \
+# down never creates or removes the external Supabase network nor talks to
+# Mailpit; any value will do.
+SUPABASE_NETWORK="${SUPABASE_NETWORK:-supabase_network_unused}" MAILPIT_HOST="${MAILPIT_HOST:-unused}" \
   docker compose --env-file "$ENV_FILE" down
 
 if [ "${1:-}" = "--all" ]; then
