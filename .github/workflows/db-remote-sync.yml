@@ -3,15 +3,26 @@ name: "DB Remote Sync"
 on:
   workflow_dispatch:
     inputs:
-      mode:
-        description: "Sync mode"
+      target:
+        description: "Target project: dev (environment remote-db), staging or production (Phase 23)"
         required: true
         type: choice
+        default: dev
         options:
+          - dev
+          - staging
+          - production
+      mode:
+        description: "Sync mode: production applies pending migrations only; reset and repair-push are destructive and refused for production (D7, D22)"
+        required: true
+        type: choice
+        default: production
+        options:
+          - production
           - reset
           - repair-push
       confirm:
-        description: "Type CONFIRM to proceed (destructive operation)"
+        description: "Type CONFIRM to proceed"
         required: true
         type: string
       owner_email:
@@ -33,21 +44,53 @@ env:
 
 jobs:
   sync:
-    name: "Sync remote DB (${{ inputs.mode }})"
+    name: "Sync remote DB (${{ inputs.target }}, ${{ inputs.mode }})"
     runs-on: ubuntu-24.04
-    environment: remote-db
+    # dev keeps the existing environment; staging and production get their own
+    # environments, secrets and approvals in Phase 23 (D15).
+    environment: ${{ inputs.target == 'dev' && 'remote-db' || format('remote-db-{0}', inputs.target) }}
     if: inputs.confirm == 'CONFIRM'
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SYNC_TARGET: ${{ inputs.target }}
+      SYNC_MODE: ${{ inputs.mode }}
 
     steps:
+      - uses: actions/checkout@v5
+
+      # D22: the same guard scripts/db-reset-sync.sh applies, before anything
+      # else runs. Production only accepts the production mode.
+      - name: "Guard: mode allowed for target"
+        run: |
+          source scripts/lib/db-sync-guard.sh
+          require_db_sync_mode_allowed "$SYNC_MODE" "$SYNC_TARGET"
+
       - name: "Validate inputs"
         if: inputs.owner_email != '' && inputs.mode == 'reset' && !inputs.load_seed
         run: |
           echo "::error::owner_email requires load_seed when mode=reset. A reset wipes the database; without the seed there is no demo tenant to link the owner to."
           exit 1
+
+      - name: "Validate inputs: no demo data in production"
+        if: inputs.target == 'production' && (inputs.load_seed || inputs.owner_email != '')
+        run: |
+          echo "::error::load_seed and owner_email are not allowed for target production: the seed is demo data."
+          exit 1
+
+      - name: "Validate environment secrets"
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::SUPABASE_DB_URL or SUPABASE_PROJECT_REF is empty for target $SYNC_TARGET. Its GitHub environment is not configured (staging and production arrive in Phase 23)."
+            exit 1
+          fi
+
+      - name: "Guard: destructive modes never touch a production database"
+        if: inputs.mode != 'production'
+        run: |
+          source scripts/lib/db-sync-guard.sh
+          require_not_production_db "$SUPABASE_DB_URL"
 
       - name: "Validate PRISMA_APP_PASSWORD secret"
         env:
@@ -59,14 +102,16 @@ jobs:
           fi
           echo "PRISMA_APP_PASSWORD secret is present."
 
-      - name: "Reminder: access-token hook must be disabled"
+      - name: "Reminder: access-token hook"
         run: |
-          MSG="Before this run: custom_access_token_hook must be DISABLED in the dashboard (Authentication -> Hooks). See docs/ARCHITECTURE.md (D9)."
+          if [ "$SYNC_MODE" = "production" ]; then
+            MSG="Production mode: keep custom_access_token_hook ENABLED. Pending migrations run while the app serves traffic, so they must be expand/contract compatible. See docs/ARCHITECTURE.md (D9, D22)."
+          else
+            MSG="Before this run: custom_access_token_hook must be DISABLED in the dashboard (Authentication -> Hooks). See docs/ARCHITECTURE.md (D9)."
+          fi
           echo "::warning title=Auth hook::$MSG"
           echo "### Auth hook" >> "$GITHUB_STEP_SUMMARY"
           echo "$MSG" >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/checkout@v5
 
       - uses: supabase/setup-cli@v3
         with:
@@ -102,7 +147,11 @@ jobs:
           supabase start -x realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,studio
           echo "LOCAL_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres" >> "$GITHUB_ENV"
 
+      # Production mode rehearses on the fresh local stack (every migration from
+      # scratch plus the integration tests); applying the pending ones to a copy
+      # of production is the staging run's job (D15, D22).
       - name: "Rehearsal: restore remote backup to local"
+        if: inputs.mode != 'production'
         run: |
           echo "Replacing local public schema with remote backup..."
           psql "$LOCAL_DB_URL" <<'SQL'
@@ -126,7 +175,7 @@ jobs:
 
       - name: "Rehearsal: sync (reset)"
         if: inputs.mode == 'reset'
-        run: bash scripts/db-reset-sync.sh "$LOCAL_DB_URL"
+        run: bash scripts/db-reset-sync.sh "$LOCAL_DB_URL" local
 
       - name: "Rehearsal: revoke migration history (repair-push)"
         if: inputs.mode == 'repair-push'
@@ -215,13 +264,20 @@ jobs:
       # PHASE 3 — Apply to remote
       # ──────────────────────────────────────────────────────────
 
+      - name: "Remote: apply pending migrations (production)"
+        if: inputs.mode == 'production'
+        run: bash scripts/db-migrate-sync.sh "$SUPABASE_DB_URL" "$SYNC_TARGET"
+
       - name: "Remote: sync (reset)"
-        if: inputs.mode == 'reset'
-        run: bash scripts/db-reset-sync.sh "$SUPABASE_DB_URL"
+        if: inputs.mode == 'reset' && inputs.target != 'production'
+        run: bash scripts/db-reset-sync.sh "$SUPABASE_DB_URL" "$SYNC_TARGET"
 
       - name: "Remote: revoke migration history (repair-push)"
-        if: inputs.mode == 'repair-push'
+        if: inputs.mode == 'repair-push' && inputs.target != 'production'
         run: |
+          source scripts/lib/db-sync-guard.sh
+          require_db_sync_mode_allowed repair-push "$SYNC_TARGET"
+          require_not_production_db "$SUPABASE_DB_URL"
           REMOTE_VERSIONS=$(psql "$SUPABASE_DB_URL" -t -A -c \
             "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version;")
           if [ -n "$REMOTE_VERSIONS" ]; then
@@ -235,11 +291,12 @@ jobs:
           fi
 
       - name: "Remote: apply (repair-push)"
-        if: inputs.mode == 'repair-push'
+        if: inputs.mode == 'repair-push' && inputs.target != 'production'
         run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all
 
       # ──────────────────────────────────────────────────────────
-      # PHASE 4 — Verify remote (repair-push only; reset verified by script)
+      # PHASE 4 — Verify remote (reset is verified by its script; the
+      # production mode script checks the migration count)
       # ──────────────────────────────────────────────────────────
 
       - name: "Verify: migration count"
@@ -255,12 +312,12 @@ jobs:
           fi
 
       - name: "Verify: schema diff"
-        if: inputs.mode == 'repair-push'
+        if: inputs.mode != 'reset'
         run: |
           bash scripts/check-schema-drift.sh --linked
 
       - name: "Verify: critical objects"
-        if: inputs.mode == 'repair-push'
+        if: inputs.mode != 'reset'
         run: |
           MISSING=$(psql "$SUPABASE_DB_URL" -t -A <<'SQL'
           SELECT string_agg(fn, ', ')
@@ -310,7 +367,9 @@ jobs:
         env:
           JOB_STATUS: ${{ job.status }}
         run: |
-          if [ "$JOB_STATUS" = "success" ]; then
+          if [ "$SYNC_MODE" = "production" ]; then
+            MSG="Production mode ($JOB_STATUS): the hook was never disabled; nothing to re-enable. See docs/ARCHITECTURE.md (D22)."
+          elif [ "$JOB_STATUS" = "success" ]; then
             MSG="Sync finished green: re-enable custom_access_token_hook (Authentication -> Hooks -> Postgres -> public.custom_access_token_hook), then sign out and sign in again so new tokens carry tenant_id. See docs/ARCHITECTURE.md (D9)."
           else
             MSG="Sync did not finish green ($JOB_STATUS): keep custom_access_token_hook DISABLED until a run ends green. See docs/ARCHITECTURE.md (D9)."

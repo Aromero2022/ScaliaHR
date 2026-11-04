@@ -155,7 +155,7 @@ jobs:
           echo "Inserted fake divergent migration history."
 
       - name: Run reset sync script
-        run: bash scripts/db-reset-sync.sh "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+        run: bash scripts/db-reset-sync.sh "postgresql://postgres:postgres@127.0.0.1:54322/postgres" local
 
       - name: Create demo auth user for seed coverage
         run: |

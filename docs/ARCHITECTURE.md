@@ -206,6 +206,8 @@ MCP `apply_migration` / `execute_sql` tools.
 - **Environment:** `remote-db` (requires approval + secrets).
 - **Secrets:** `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_URL`, `SUPABASE_PROJECT_REF`.
 - **Modes:**
+  - `production` — applies pending migrations only, never touching the history
+    (D22). The only mode allowed for target `production`.
   - `reset` — pushes all local migrations from scratch (`supabase db push --include-all`).
   - `repair-push` — reverts remote-only migrations, then pushes.
 - **Safety:** requires typing `CONFIRM`, creates a schema + data backup uploaded as
@@ -253,6 +255,8 @@ a comment explaining why it is tolerated.
 
 **Decision:** The hosted project's `custom_access_token_hook` is disabled for the
 whole duration of a `db-remote-sync` run and re-enabled only after a run ends green.
+This applies to `reset` and `repair-push`; in `production` mode (D22) the hook
+stays enabled, since nothing is dropped.
 
 **Why:** a reset drops and recreates schema `public`, including the hook function and
 the tables it reads. While the hook is enabled and missing or half-migrated, GoTrue
@@ -1122,6 +1126,91 @@ winning over the company code; and tests of the hook and the column grant.
   on any tenant but their active one; switching tenant does not move them to
   the other subdomain yet (Phase 12).
 - Custom domains (`tenants.domain`) are not resolved yet (Phase 23).
+
+---
+
+## D22 — Safe Migrations: Production Mode and Expand/Contract
+
+**Decision:** production only ever receives pending migrations, in order, while
+the app keeps serving traffic. `db-remote-sync` gains a `target` input (`dev`,
+`staging`, `production`) and a `production` mode; `reset` and `repair-push` are
+refused for production at three levels. Every migration must be backward
+compatible (expand/contract). Phase 9a, PR 3. Nothing remote is created:
+staging and production, with their GitHub environments
+(`remote-db-staging`, `remote-db-production`), arrive in Phase 23; `dev` keeps
+the existing `remote-db` environment.
+
+**Production mode (`scripts/db-migrate-sync.sh <db-url> <target>`):**
+1. Lists the pending migrations (`supabase db push --dry-run`).
+2. Applies them with `supabase db push`, without `--include-all`: a migration
+   older than the last applied one is refused instead of running out of order.
+3. Never truncates or repairs `supabase_migrations.schema_migrations` and never
+   drops a schema, so a history that differs from `supabase/migrations` stops
+   the run.
+4. Checks that the history holds as many versions as there are migration files.
+5. For target `production`, writes the production marker.
+
+The workflow keeps the pre-sync backup (D7), rehearses on a fresh local stack
+(every migration plus the integration tests), then runs the drift and
+critical-object checks on the remote. Seeds and `owner_email` are refused for
+production. Applying the pending migrations to a copy of production is the job
+of the staging run before promotion (D15).
+
+**Reset blocked for production, three levels:**
+- `scripts/lib/db-sync-guard.sh` holds the policy: production accepts only the
+  `production` mode, and unknown targets or modes are refused. The workflow
+  runs it before any other step, and `db-reset-sync.sh` (which now requires a
+  target) runs it before its first statement.
+- The database marks itself: `ops.production_marker` (one row at most,
+  ENABLE + FORCE RLS, no application role can see schema `ops`) is written by
+  the first production-mode sync. `reset` and `repair-push` refuse any
+  database that has it, whatever target the run claims, and also refuse when
+  the marker cannot be read. This covers a production URL configured in the
+  wrong environment.
+- The destructive remote steps of the workflow carry
+  `inputs.target != 'production'` in their conditions.
+
+A brand-new production project has no marker until its first production-mode
+sync; until then only the target check protects it.
+
+**Tests (local only):**
+- `__tests__/scripts/db-sync-guard.test.ts` covers the policy matrix. It shows,
+  with stubbed `psql` and `supabase`, that a refused reset runs no command, or
+  only the marker check. It also checks the workflow's guard order and step
+  conditions.
+- `__tests__/integration/db-sync-modes.test.ts` runs against Supabase local:
+  - production mode is a no-op when up to date;
+  - it applies exactly one pending migration without touching data;
+  - it refuses an out-of-order migration (`DbPushMissingRemoteError`) and a
+    divergent history (`DbPushMissingLocalError`) without repairing it;
+  - reset is refused for target production;
+  - once a production-mode sync has marked the database, a reset with target
+    `local` is refused and the database is unchanged.
+
+**Expand/contract rule.** In production mode the old version of the app runs
+against the new schema during the deploy, and a rollback to the previous image
+(runbook, PR 4) runs the old code against it for good. So:
+- **Expand** (any release): add tables, nullable columns or columns with a
+  default, indexes, functions, policies and queues; widen a check constraint.
+- **Migrate** (code): ship code that works with both shapes: write both, read
+  the new one with a fallback. Backfill in batches, from a worker job for large
+  tables.
+- **Contract** (a later release, once no running or rollback image uses the old
+  shape): drop columns, tables and functions, rename, `SET NOT NULL`, narrow
+  types or constraints.
+- Never in a single release: renaming a column or table, changing a column's
+  type, dropping something the running version reads, adding `NOT NULL`
+  without a default to an existing table, or changing a function's signature in
+  place. Create the new function and drop the old one in a contract step;
+  `CREATE OR REPLACE` with the same signature is fine (D21 did this with the
+  hook).
+- Security fixes (revoking a privilege, tightening RLS) may break the old
+  version on purpose and ship at once.
+- A contract migration names, in its header, the expand migration it completes
+  and the release since which the old shape is unused.
+- pg-boss upgrades (D17) follow the same rule.
+
+The rule is checked by review in each PR; there is no automated check yet.
 
 ---
 
