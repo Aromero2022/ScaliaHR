@@ -76,6 +76,6 @@ Local stack is up.
   Health:   http://localhost:${WEB_ADDRESS##*:}/api/health
   Studio:   http://127.0.0.1:54323
   Mailpit:  http://127.0.0.1:54324
-Logs: docker compose logs -f web worker
+Logs: docker logs -f scaliahr-web-1   |   docker logs -f scaliahr-worker-1
 Stop: npm run local:down   (add -- --all to stop Supabase too)
 EOF
