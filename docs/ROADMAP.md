@@ -115,6 +115,7 @@ Todo se prueba en local, contra el stack en Docker y Supabase local.
 - unstable_cache con tags por tenant para picklists, configuración de empresa, tema y catálogos de TIH/JPB; invalidar al guardar desde Admin Center.
 - Caché de RBP entre peticiones: hoy no existe (D14: contexto de permisos solo por petición). Si algún día se agrega, la llave debe incluir tenant_id y debe invalidarse en cada cambio de role_grants, group_members o permisos, con un test que demuestre que un permiso revocado deja de valer de inmediato.
 - Interfaz de caché lista para cambiar a Redis.
+- Cachear unos segundos la consulta de tenant del middleware (D21), invalidando al suspender un tenant.
 
 ### Escalabilidad
 
@@ -218,6 +219,7 @@ La "configuración de empresa (logo, tema...)" se resuelve con un Theme Manager 
 - Íconos: paquete Lucide, Phosphor o Tabler, o íconos propios recoloreados con el color del tema.
 - Preferencias por usuario: claro/oscuro/sistema, tamaño de fuente, densidad y reducir movimiento.
 - Seguridad: sin CSS libre del cliente; SVG sanitizado en servidor o rasterizado; tipos permitidos PNG, WebP y SVG validados por magic bytes con límite de tamaño; Storage privado por tenant con URLs firmadas.
+- El logo de correos y de la app solo puede venir del Storage privado del tenant; no se aceptan URLs externas (evita píxeles de rastreo).
 - Cada cambio llama `writeAuditLog()` con `THEME_UPDATED` y `diff`; vista previa antes de publicar y restaurar versión anterior (Principio 5).
 - El aviso de privacidad (DPCS) siempre visible en el login, sin importar el tema.
 
@@ -370,11 +372,11 @@ Contratar PITR y encender su export por tenant:
 
 ## Tabla de cumplimiento
 
-> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1) y con la rama del PR 2 de la Fase 9a (correo y tenant por subdominio, D20 y D21). Cada fase, al cerrarse, actualiza el estado de sus filas.
+> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1), con main en 5908222 (PR #48, Fase 9a PR 2: correo y tenant por subdominio, D20 y D21) y con la rama del PR 3 de la Fase 9a (migraciones seguras, D22). Cada fase, al cerrarse, actualiza el estado de sus filas.
 
 | Norma o control | Dónde se cumple | Estado |
 |-----------------|-----------------|--------|
-| RLS por tenant | Todas las tablas + D3 (Prisma sin bypass) + D6 + D17 (`pgboss`) + D20 (`email_enqueuer`); TRUNCATE en 9b | Cumple: las 38 tablas de `public` y las 11 de `pgboss` tienen ENABLE + FORCE RLS y ningún rol de la app (incluidos `worker_app` y `email_enqueuer`) tiene BYPASSRLS. `email_enqueuer` solo inserta trabajos de `email.send` y no lee su contenido; `worker_app` lee la marca del tenant solo a través de `email_branding()`. Brecha: `anon`, `authenticated` y `prisma_app` conservan TRUNCATE (ignora RLS) en 37 tablas de `public`; se revoca en 9b. En `pgboss` nadie tiene TRUNCATE |
+| RLS por tenant | Todas las tablas + D3 (Prisma sin bypass) + D6 + D17 (`pgboss`) + D20 (`email_enqueuer`) + D22 (`ops`); TRUNCATE en 9b | Cumple: las 38 tablas de `public`, las 11 de `pgboss` y la de `ops` tienen ENABLE + FORCE RLS y ningún rol de la app (incluidos `worker_app` y `email_enqueuer`) tiene BYPASSRLS. `email_enqueuer` solo inserta trabajos de `email.send` y no lee su contenido; `worker_app` lee la marca del tenant solo a través de `email_branding()`. Brecha: `anon`, `authenticated` y `prisma_app` conservan TRUNCATE (ignora RLS) en 37 tablas de `public`; se revoca en 9b. En `pgboss` nadie tiene TRUNCATE |
 | Secretos fuera del cliente y del repo | .env fuera del repo + D4 + D17 (`.dockerignore`, `.env.docker` ignorado e imágenes revisadas en CI) + D20 (`EMAIL_ENQUEUE_DATABASE_URL` solo en el servidor); server-only en 9b | Cumple, se refuerza en 9b |
 | Rate limiting (429) | 9b | Pendiente: el código existe, falta conectarlo |
 | CSP estricta | 9b | Pendiente: la CSP todavía permite 'unsafe-inline' y 'unsafe-eval' en scripts |
@@ -393,7 +395,8 @@ Contratar PITR y encender su export por tenant:
 | Theme Manager usable por administradores sin experiencia técnica | 11 | Pendiente |
 | Aislamiento de tenant por subdominio o código de empresa | 9a (D21) + 23 (dominio real) | Cumple en local: el middleware solo deja pasar al tenant del token y activo; otro tenant, uno inexistente y uno suspendido reciben el mismo 404, y los anónimos la misma redirección al login. Un tenant suspendido sale de los tokens nuevos (hook). Probado con el middleware real contra Supabase local |
 | Correo transaccional | 9a (D20) + 23 (Resend, SPF/DKIM/DMARC) | Cumple en local: el worker envía por el adaptador SMTP a Mailpit; enlaces solo al dominio de la app y sus subdominios; marca validada (logo `http(s)`, color con contraste 4.5:1); sin direcciones en los logs; trabajos borrados al día. Cada plantilla se prueba en Mailpit |
-| Respaldos y restauración | 9a local + 23 producción | Pendiente: solo existe el respaldo previo a cada db-remote-sync (D7). Los PR 1 (#45) y 2 de la 9a no incluyen respaldos; el export por tenant y la prueba de restauración local llegan en el PR 4 de la 9a |
+| Migraciones seguras en producción | 9a (D7, D22) + 23 (staging → producción) | Cumple en local: el modo producción de db-remote-sync solo aplica migraciones pendientes, en orden y sin reparar el historial; reset y repair-push se rechazan para producción y en cualquier base con la marca de producción, antes de tocarla. Probado contra Supabase local, sin proyectos remotos. La regla expand/contract está documentada (D22); hoy se revisa a mano en cada PR |
+| Respaldos y restauración | 9a local + 23 producción | Pendiente: solo existe el respaldo previo a cada db-remote-sync (D7), también en el modo producción. Los PR 1 (#45), 2 (#48) y 3 de la 9a no incluyen respaldos; el export por tenant y la prueba de restauración local llegan en el PR 4 de la 9a |
 
 ---
 

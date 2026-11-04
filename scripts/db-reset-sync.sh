@@ -3,13 +3,23 @@ set -euo pipefail
 
 # db-reset-sync.sh — Full reset-mode database sync
 #
-# Usage: scripts/db-reset-sync.sh <DB_URL>
+# Usage: scripts/db-reset-sync.sh <DB_URL> <TARGET>
+#   TARGET: local, dev or staging. Production is refused (D7, D22), and so is
+#   any database carrying the production marker, before anything is touched.
 
-DB_URL="${1:?Usage: $0 <DB_URL>}"
+DB_URL="${1:?Usage: $0 <DB_URL> <TARGET>}"
+TARGET="${2:?Usage: $0 <DB_URL> <TARGET>}"
+
+# shellcheck source=scripts/lib/db-sync-guard.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/db-sync-guard.sh"
+require_db_sync_mode_allowed reset "$TARGET"
+require_not_production_db "$DB_URL"
 
 RESET_PUBLIC_SQL=$(cat <<'EOSQL'
--- pgboss is created entirely by migration D17, so a reset recreates it too.
+-- pgboss (D17) and ops (D22) are created entirely by migrations, so a reset
+-- recreates them too.
 DROP SCHEMA IF EXISTS pgboss CASCADE;
+DROP SCHEMA IF EXISTS ops CASCADE;
 DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
 -- Schema-level privileges (matches Supabase defaults)
