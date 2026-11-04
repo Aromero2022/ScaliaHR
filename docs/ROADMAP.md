@@ -21,6 +21,7 @@
 | 6 | RBP + Admin Center | Completada |
 | 7 | PMGM (Desempeño y Metas) | Completada |
 | 8 | TIH (Talent Intelligence Hub) | Completada |
+| 9a | Infraestructura local | Completada (PR #45, #48, #49 y PR4_NUMBER; criterio de cierre verificado abajo) |
 
 ---
 
@@ -28,7 +29,7 @@
 
 | Fase | Nombre | Alcance |
 |------|--------|---------|
-| 9a | Infraestructura local | Dockerfile, /api/health, worker pg-boss en docker-compose, lib/email con React Email probado en Mailpit, middleware de tenant con *.localhost, db-remote-sync con reset bloqueado, export por tenant, prueba de restauración local y runbook. Todo corre gratis en local. |
+| 9a | Infraestructura local (completada) | Dockerfile, /api/health, worker pg-boss en docker-compose, lib/email con React Email probado en Mailpit, middleware de tenant con *.localhost, db-remote-sync con reset bloqueado, export por tenant, prueba de restauración local y runbook. Todo corre gratis en local. |
 | 9b | Seguridad y rendimiento local | Rate limiting activo, CSP sin unsafe-eval, server-only, caching por tenant, índices, paginación, logs estructurados en JSON, prueba de carga k6 contra Docker, Dependabot y escaneo de secretos. Errores genéricos con request id, sin rutas de debug, redacción de datos sensibles en logs, bitácora de solo inserción y zod en todas las Server Actions. |
 | 9c | Sistema de diseño y responsividad | Design tokens, layout y navegación responsive, búsqueda global ⌘K, reglas UX, accesibilidad WCAG 2.2 AA y biblioteca base de componentes, con axe y capturas en 3 breakpoints en CI. Todos los módulos siguientes se construyen sobre ella. |
 | 10 | Workflows y Notificaciones | Motor de workflows configurable, notificaciones push/email/in-app, eventos de ciclo de vida del empleado; push por adaptador (local/prueba). Consume el correo y worker de la Fase 9a. |
@@ -84,6 +85,18 @@ Todo corre gratis en local (Docker + Supabase local). En esta fase no se crea ni
 - Prueba de restauración local documentada (completa y por tenant).
 
 **Criterio de cierre:** web y worker arrancan en Docker contra Supabase local, /api/health responde, cada plantilla de correo llega a Mailpit, `<cliente>.localhost` resuelve su tenant, el modo reset de db-remote-sync queda bloqueado para producción y una restauración local probada (completa y por tenant).
+
+**Estado: completada** (PR #45, #48, #49 y PR4_NUMBER). Cada punto del criterio se prueba en CI en cada PR:
+
+| Punto del criterio | Evidencia |
+|--------------------|-----------|
+| Web y worker arrancan en Docker contra Supabase local | Job `docker`: `npm run local:up` construye y arranca ambas imágenes (D17) |
+| /api/health responde | Prueba de humo de `local:up` y `health.test.ts` (D17) |
+| Cada plantilla de correo llega a Mailpit | `email.test.ts` del worker (invitación, reseteo y notificación) y el correo de humo de `local:up` (D20) |
+| `<cliente>.localhost` resuelve su tenant | `tenant-host.test.ts`: middleware real con sesiones reales; otro tenant, inexistente o suspendido reciben el mismo 404 (D21) |
+| Reset de db-remote-sync bloqueado para producción | `db-sync-guard.test.ts` y `db-sync-modes.test.ts`, sin tocar proyectos remotos (D22) |
+| Restauración local probada, completa y por tenant | `backup.test.ts` del worker: export por el worker, restauración por tenant con los demás intactos y restauración completa en sitio (D23) |
+| Rollback a la imagen anterior en docker-compose | Simulacro del job `docker` y `docs/RUNBOOK.md` (D24) |
 
 ---
 
@@ -372,7 +385,7 @@ Contratar PITR y encender su export por tenant:
 
 ## Tabla de cumplimiento
 
-> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1), con main en 5908222 (PR #48, Fase 9a PR 2: correo y tenant por subdominio, D20 y D21) y con la rama del PR 3 de la Fase 9a (migraciones seguras, D22). Cada fase, al cerrarse, actualiza el estado de sus filas.
+> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1), con main en 5908222 (PR #48, Fase 9a PR 2: correo y tenant por subdominio, D20 y D21), con main en 3ca8d5d (PR #49, Fase 9a PR 3: migraciones seguras, D22) y con la rama del PR 4 de la Fase 9a (respaldos y runbook, D23 y D24). Cada fase, al cerrarse, actualiza el estado de sus filas.
 
 | Norma o control | Dónde se cumple | Estado |
 |-----------------|-----------------|--------|
@@ -396,7 +409,7 @@ Contratar PITR y encender su export por tenant:
 | Aislamiento de tenant por subdominio o código de empresa | 9a (D21) + 23 (dominio real) | Cumple en local: el middleware solo deja pasar al tenant del token y activo; otro tenant, uno inexistente y uno suspendido reciben el mismo 404, y los anónimos la misma redirección al login. Un tenant suspendido sale de los tokens nuevos (hook). Probado con el middleware real contra Supabase local |
 | Correo transaccional | 9a (D20) + 23 (Resend, SPF/DKIM/DMARC) | Cumple en local: el worker envía por el adaptador SMTP a Mailpit; enlaces solo al dominio de la app y sus subdominios; marca validada (logo `http(s)`, color con contraste 4.5:1); sin direcciones en los logs; trabajos borrados al día. Cada plantilla se prueba en Mailpit |
 | Migraciones seguras en producción | 9a (D7, D22) + 23 (staging → producción) | Cumple en local: el modo producción de db-remote-sync solo aplica migraciones pendientes, en orden y sin reparar el historial; reset y repair-push se rechazan para producción y en cualquier base con la marca de producción, antes de tocarla. Probado contra Supabase local, sin proyectos remotos. La regla expand/contract está documentada (D22); hoy se revisa a mano en cada PR |
-| Respaldos y restauración | 9a local + 23 producción | Pendiente: solo existe el respaldo previo a cada db-remote-sync (D7), también en el modo producción. Los PR 1 (#45), 2 (#48) y 3 de la 9a no incluyen respaldos; el export por tenant y la prueba de restauración local llegan en el PR 4 de la 9a |
+| Respaldos y restauración | 9a local (D23, D24) + 23 producción | Cumple en local: export por tenant ejecutado por el worker (solo filas de ese tenant, SHA-256 y versión de esquema), restauración por tenant sin tocar a los demás y respaldo completo restaurable en sitio en una transacción, probados en CI contra Supabase local; runbook en `docs/RUNBOOK.md`. Los respaldos tienen datos personales: quedan fuera de git y de las imágenes. Pendiente para la Fase 23: respaldos diarios y PITR del plan Pro, exports diarios a almacenamiento cifrado y restauración sobre bases hospedadas |
 
 ---
 

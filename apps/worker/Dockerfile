@@ -40,6 +40,8 @@ COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=deps /repo/packages/email/node_modules ./packages/email/node_modules
 COPY --from=builder /repo/packages/email/package.json ./packages/email/package.json
 COPY --from=builder /repo/packages/email/dist ./packages/email/dist
+# Per-tenant exports (D23) go to the volume mounted here; node must own it.
+RUN mkdir -p /backups && chown node:node /backups
 COPY --from=builder /repo/apps/worker/package.json ./apps/worker/package.json
 COPY --from=builder /repo/apps/worker/dist ./apps/worker/dist
 USER node

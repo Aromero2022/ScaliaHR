@@ -15,6 +15,8 @@ services:
         NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set it in .env.docker}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set it in .env.docker}
+      labels:
+        org.opencontainers.image.revision: ${GIT_REVISION:-unknown}
     image: scaliahr-web:local
     environment:
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
@@ -40,6 +42,8 @@ services:
       dockerfile: apps/worker/Dockerfile
       args:
         NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+      labels:
+        org.opencontainers.image.revision: ${GIT_REVISION:-unknown}
     image: scaliahr-worker:local
     environment:
       WORKER_DATABASE_URL: postgresql://worker_app:${WORKER_APP_PASSWORD:?set it in .env.docker}@db:5432/postgres
@@ -48,11 +52,18 @@ services:
       SMTP_PORT: "1025"
       EMAIL_FROM: no-reply@scaliahr.localhost
       APP_BASE_URL: http://localhost:${WEB_PORT:-3000}
+      # Per-tenant exports (D23); copy them out with docker cp (docs/RUNBOOK.md).
+      BACKUP_DIR: /backups
+    volumes:
+      - backups:/backups
     networks:
       - supabase
     restart: unless-stopped
     # Matches the 30 s graceful stop in apps/worker/src/index.ts.
     stop_grace_period: 35s
+
+volumes:
+  backups:
 
 networks:
   supabase:

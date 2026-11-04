@@ -230,6 +230,22 @@ jobs:
             echo "$image: user=$user, no secrets in env, no .env files"
           done
 
+      - name: Per-tenant export through the running worker (D23)
+        run: |
+          docker exec scaliahr-worker-1 node dist/export-tenant.js a0000000-0000-0000-0000-000000000001
+          docker exec scaliahr-worker-1 sh -c 'ls -l /backups/tenants/a0000000-0000-0000-0000-000000000001/*.export.gz'
+
+      - name: Rollback drill (D24)
+        run: |
+          # A second local:up keeps the first images as :previous; rollback restarts them.
+          npm run local:up
+          npm run local:rollback
+          for image in scaliahr-web scaliahr-worker; do
+            running="$(docker inspect -f '{{.Image}}' "${image}-1")"
+            previous="$(docker image inspect -f '{{.Id}}' "${image}:previous")"
+            [ "$running" = "$previous" ] || { echo "::error::${image} is not running the :previous image"; exit 1; }
+          done
+
       - name: Container logs (on failure)
         if: failure()
         run: SUPABASE_NETWORK=unused MAILPIT_HOST=unused docker compose --env-file .env.docker logs --no-color --tail 200 web worker || true

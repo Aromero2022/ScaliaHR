@@ -8,6 +8,7 @@ const env = {
   SMTP_PORT: "1025",
   EMAIL_FROM: "no-reply@scaliahr.localhost",
   APP_BASE_URL: "http://localhost:3000",
+  BACKUP_DIR: "/backups",
 };
 
 describe("loadConfig", () => {
@@ -19,6 +20,7 @@ describe("loadConfig", () => {
         from: "no-reply@scaliahr.localhost",
         appBaseUrl: "http://localhost:3000",
       },
+      backupDir: "/backups",
     });
   });
 
@@ -32,6 +34,7 @@ describe("loadConfig", () => {
     ["SMTP_PORT", "smtp"],
     ["EMAIL_FROM", "not-an-address"],
     ["APP_BASE_URL", "javascript:alert(1)"],
+    ["BACKUP_DIR", "backups"],
   ])("rejects an invalid %s", (name, value) => {
     expect(() => loadConfig({ ...env, [name]: value })).toThrow(new RegExp(name));
   });

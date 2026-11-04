@@ -89,6 +89,7 @@ beforeAll(async () => {
   worker = await startWorker({
     databaseUrl: workerUrl,
     email: { smtp: { host: "127.0.0.1", port: smtpPort }, from: "no-reply@scaliahr.localhost", appBaseUrl: APP },
+    backupDir: "/nonexistent",
   });
 });
 
