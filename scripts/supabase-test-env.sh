@@ -44,6 +44,10 @@ BEGIN
 END $$;
 ROLE_SQL
   export PRISMA_TEST_DB_URL="${_db_url/postgres:postgres/prisma_test:prisma_test_pw}"
+
+  # worker_app is created by migration D17 without a password; give it a test one.
+  psql "$_db_url" -v ON_ERROR_STOP=1 -q -c "ALTER ROLE worker_app WITH PASSWORD 'worker_test_pw'"
+  export WORKER_TEST_DB_URL="${_db_url/postgres:postgres/worker_app:worker_test_pw}"
 fi
 unset _db_url
 

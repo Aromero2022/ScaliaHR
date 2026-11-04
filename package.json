@@ -14,7 +14,12 @@
     "dev:mobile": "turbo dev --filter=@scaliahr/mobile",
     "db:generate": "turbo db:generate",
     "db:sync": "turbo db:sync",
-    "check:forbidden": "bash scripts/check-forbidden.sh"
+    "check:forbidden": "bash scripts/check-forbidden.sh",
+    "local:up": "bash scripts/local-up.sh",
+    "local:down": "bash scripts/local-down.sh"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,yml,yaml,md,sql,sh,toml}": [

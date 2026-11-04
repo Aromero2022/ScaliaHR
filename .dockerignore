@@ -1,0 +1,22 @@
+# Build context for apps/web/Dockerfile and apps/worker/Dockerfile.
+# Secrets never enter an image: every .env file stays out.
+.env
+.env.*
+**/.env
+**/.env.*
+
+.git
+.github
+.husky
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/coverage
+**/playwright-report
+**/test-results
+apps/mobile
+supabase/.temp
+supabase/.branches
+docs
+*.log

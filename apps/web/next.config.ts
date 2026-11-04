@@ -1,4 +1,15 @@
+import path from "node:path";
 import type { NextConfig } from "next";
+
+// The browser talks to Supabase directly, so the configured project (local
+// Supabase included) must be reachable besides hosted *.supabase.co projects.
+function supabaseConnectSources(): string[] {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) return [];
+  const { origin, hostname } = new URL(url);
+  if (hostname.endsWith(".supabase.co")) return [];
+  return [origin, origin.replace(/^http/, "ws")];
+}
 
 const cspDirectives = [
   "default-src 'self'",
@@ -6,7 +17,7 @@ const cspDirectives = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  ["connect-src 'self' https://*.supabase.co wss://*.supabase.co", ...supabaseConnectSources()].join(" "),
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -14,6 +25,8 @@ const cspDirectives = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: path.join(__dirname, "../.."),
   transpilePackages: ["@scaliahr/shared"],
 
   async headers() {

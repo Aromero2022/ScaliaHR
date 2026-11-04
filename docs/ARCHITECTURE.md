@@ -786,6 +786,99 @@ emails.
 
 ---
 
+## D17 — Local Container Stack and Worker Queue
+
+**Decision:** Phase 9a runs the app locally as two containers, web (Next.js
+standalone) and worker (pg-boss consumer), on top of the Supabase CLI stack.
+`npm run local:up` is the single entry point. Nothing here is paid (Roadmap,
+Principle 8).
+
+**Images:**
+- `apps/web/Dockerfile`: multi-stage with `turbo prune @scaliahr/web --docker`,
+  Node 22 Alpine, `output: "standalone"`, non-root `nextjs` user, `HEALTHCHECK`
+  on `/api/health`. Only `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` are build arguments (Next.js inlines them in
+  the browser bundle, so they are public by design); every secret is runtime
+  environment.
+- `apps/worker/Dockerfile`: same pruning, compiled TypeScript, production
+  dependencies only, non-root `node` user, no build arguments.
+- `.dockerignore` keeps every `.env*` file out of the build context. The CI
+  `docker` job checks that both images run as non-root and carry no
+  secret-like variables or `.env` files. Images are built, never pushed
+  (publishing is Phase 23).
+
+**docker-compose.yml:** only `web` and `worker`. Both join the Supabase CLI
+network, which `scripts/local-up.sh` discovers from the database container and
+passes as `SUPABASE_NETWORK`; there the CLI's containers answer as `db` and
+`kong`. Web publishes `127.0.0.1:3000` only (D4). Local credentials live in
+`.env.docker` (git-ignored; template `.env.docker.example`).
+
+**Server-side Supabase URL:** inside a container, `NEXT_PUBLIC_SUPABASE_URL`
+(`http://localhost:54321`, what the browser uses) points at the container
+itself. `lib/supabase/server-url.ts` makes the server and middleware clients use
+`SUPABASE_INTERNAL_URL` (`http://kong:8000`) while keeping the cookie name
+derived from the public URL (`sb-<host>-auth-token`), so browser and server
+share the session. The CSP `connect-src` adds the configured Supabase origin
+when it is not a hosted `*.supabase.co` project.
+
+**`/api/health`:** public by design: no session, excluded from the middleware
+matcher, and outside `(protected)`, so the authz coverage test does not apply.
+It returns `{ status, checks: { app, database } }` with 200 or 503 and
+`Cache-Control: no-store`, runs `SELECT 1` through the `prisma_app` connection
+with a 2 s timeout, and never returns or logs error messages, hosts or
+connection strings.
+
+**`scripts/local-up.sh`:**
+1. Starts Supabase local.
+2. Aborts unless the database URL is `127.0.0.1` or `localhost` with no query
+   string (`scripts/lib/local-db-guard.sh`).
+3. Sets local-only passwords for `prisma_app` and `worker_app`
+   (`scripts/set-local-role-passwords.mjs`, which checks the URL again).
+4. Builds and starts both containers.
+5. Smoke-tests `/api/health` and one `system.ping` job.
+
+It never runs against a remote project.
+
+**Worker queue (pg-boss 12.38.0, schema version 46):**
+- Schema `pgboss` comes only from
+  `supabase/migrations/20261104010000_d17_worker_queue_pgboss.sql` (D1),
+  generated with `npm -w @scaliahr/worker run pgboss:sql`. pg-boss is pinned
+  exactly. Upgrading it requires a new migration
+  (`pgboss:sql -- migrate <current version>`): `pgboss-security.test.ts` fails
+  while the database schema version differs from the installed package.
+- Queues are declared only in migrations and are never partitioned, so they
+  live in the shared job table and need no per-queue DDL. Current queues:
+  `system.ping` (2 retries with backoff, dead letter) and `system.dead_letter`.
+- The worker never runs DDL. `migrate`, `createSchema`, `schedule`, `reindex`
+  and `persistQueueStats` are off (`apps/worker/src/boss.ts`). Cron scheduling
+  stays off because pg-boss's timekeeper declares its internal
+  `__pgboss__send-it` queue on every start; scheduled jobs need a migration
+  that declares that queue and an explicit decision on how the worker may
+  insert it.
+- The construction plans create `queue_stats` partitions named after the day
+  they run. The migration drops them so the schema does not depend on the date
+  it is applied (queue stats stay off).
+- `worker_app`:
+  - LOGIN, NOBYPASSRLS; no CREATE on any schema or on the database; owns
+    nothing.
+  - DML on `pgboss` tables, except INSERT and DELETE on `queue` and `version`.
+  - No EXECUTE on `create_queue` or `delete_queue`.
+- Every `pgboss` table has ENABLE + FORCE RLS, with policies only for
+  `worker_app` and `postgres` (the migration owner). `anon`, `authenticated`,
+  `service_role` and `prisma_app` have no access, and PostgREST does not
+  expose `pgboss`.
+- The `worker_app` password is set by `local-up.sh` locally and by
+  `supabase-test-env.sh` for tests. On hosted projects it will be a secret
+  (Phase 23, like `PRISMA_APP_PASSWORD`).
+- `db-reset-sync.sh` (reset mode) drops `pgboss` together with `public`, since
+  migrations recreate both.
+
+**Pending:** `pgboss` functions keep pg-boss's mutable `search_path`; review
+them with the Phase 9b advisors work. The first real jobs (email, per-tenant
+exports) arrive in PRs 2 and 3 of Phase 9a.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.
