@@ -221,6 +221,21 @@ La "configuración de empresa (logo, tema...)" se resuelve con un Theme Manager 
 - Cada cambio llama `writeAuditLog()` con `THEME_UPDATED` y `diff`; vista previa antes de publicar y restaurar versión anterior (Principio 5).
 - El aviso de privacidad (DPCS) siempre visible en el login, sin importar el tema.
 
+#### Experiencia para administradores sin experiencia técnica
+
+- Asistente en 3 pasos:
+  1. Subir logo, con extracción automática de colores y 3 paletas sugeridas.
+  2. Elegir uno de los 6 presets en tarjetas que muestran el dashboard real del tenant con su logo.
+  3. Vista previa en vivo de login, dashboard y formulario en escritorio y móvil, y publicar.
+- Validación de contraste con mensajes en lenguaje simple y botón "Aplicar sugerencia"; nunca mostrar ratios técnicos al usuario básico.
+- Recorte, ajuste y compresión de imágenes en el navegador con guías de tamaño; errores de upload que dicen qué hacer. El servidor sigue aplicando las validaciones de seguridad de arriba (magic bytes, límite de tamaño, SVG sanitizado).
+- Estados borrador y publicado; deshacer; restaurar versión anterior con un clic; "Volver al tema predeterminado".
+- Etiquetas sin jerga ("Color principal", "Logo para fondo oscuro") y ayuda ⓘ en cada campo indicando dónde se ve.
+- Modo avanzado oculto por defecto: hex, tipografía, paquete de íconos e íconos propios, dentro de los mismos límites de D18.
+- Permiso RBP "Administrar tema", independiente del resto de Admin Center.
+
+**Criterio de cierre del Theme Manager:** un usuario sin experiencia cambia logo, colores y preset, y publica, en menos de 10 minutos sin ayuda.
+
 ### Datos sensibles
 
 - Permiso RBP "Ver dato sensible": CURP, RFC, NSS, CLABE y salario enmascarados por defecto; botón "mostrar" solo con ese permiso, y cada revelación registrada con `writeAuditLog()`. Hoy la ficha del empleado muestra CURP, RFC y salario completos a quien pasa RLS (el propio empleado, su jefe directo y admin; D6). NSS y CLABE todavía no existen en el esquema: llegan con la Fase 14. `can()` ya admite permisos por campo (`field_key`).
@@ -375,6 +390,7 @@ Contratar PITR y encender su export por tenant:
 | LFPDPPP 2025: aviso de privacidad | 11 (DPCS visible en todos los temas) | Pendiente: DPCS todavía no existe |
 | LFPDPPP 2025: derechos ARCO | 20 | Parcial: el admin procesa solicitudes y la supresión existe (D10); faltan autoservicio y bloqueo (Known Risk registrado) |
 | Licencias de fuentes e íconos | 11 (OFL, Lucide/Phosphor/Tabler) | Pendiente: hoy no hay paquetes de fuentes ni de íconos |
+| Theme Manager usable por administradores sin experiencia técnica | 11 | Pendiente |
 | Respaldos y restauración | 9a local + 23 producción | Pendiente: solo existe el respaldo previo a cada db-remote-sync (D7) |
 
 ---

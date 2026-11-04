@@ -793,6 +793,15 @@ fixed limits, from the Theme Manager in Admin Center (Roadmap, Phase 11).
 Presets change only the skin, meaning the values of the D19 design tokens. The
 layout and the navigation are the same in every preset.
 
+**Principle:** customization happens through a guided wizard with guardrails,
+built for administrators without technical experience: contrast is checked and
+fixed with one click, images are cropped and compressed before upload, every
+change starts as a draft that can be undone or rolled back, and nothing is
+published without a live preview. Advanced mode (hex values, font, icon pack,
+custom icons) is optional, hidden by default and bound by the same limits.
+Managing the theme takes its own RBP permission, "Administrar tema", separate
+from the rest of Admin Center.
+
 **Presets:**
 - Clean (default), Glass, Soft, Midnight, Editorial and Bento.
 - Each preset has a light mode, a dark mode and an automatic high-contrast
