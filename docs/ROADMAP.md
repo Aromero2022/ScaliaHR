@@ -29,9 +29,10 @@
 | Fase | Nombre | Alcance |
 |------|--------|---------|
 | 9a | Infraestructura local | Dockerfile, /api/health, worker pg-boss en docker-compose, lib/email con React Email probado en Mailpit, middleware de tenant con *.localhost, db-remote-sync con reset bloqueado, export por tenant, prueba de restauración local y runbook. Todo corre gratis en local. |
-| 9b | Seguridad y rendimiento local | Rate limiting activo, CSP sin unsafe-eval, server-only, caching por tenant, índices, paginación, logs estructurados en JSON, prueba de carga k6 contra Docker, Dependabot y escaneo de secretos. |
+| 9b | Seguridad y rendimiento local | Rate limiting activo, CSP sin unsafe-eval, server-only, caching por tenant, índices, paginación, logs estructurados en JSON, prueba de carga k6 contra Docker, Dependabot y escaneo de secretos. Errores genéricos con request id, sin rutas de debug, redacción de datos sensibles en logs, bitácora de solo inserción y zod en todas las Server Actions. |
+| 9c | Sistema de diseño y responsividad | Design tokens, layout y navegación responsive, búsqueda global ⌘K, reglas UX, accesibilidad WCAG 2.2 AA y biblioteca base de componentes, con axe y capturas en 3 breakpoints en CI. Todos los módulos siguientes se construyen sobre ella. |
 | 10 | Workflows y Notificaciones | Motor de workflows configurable, notificaciones push/email/in-app, eventos de ciclo de vida del empleado; push por adaptador (local/prueba). Consume el correo y worker de la Fase 9a. |
-| 11 | Admin Center base | CRUD de RBP, DPCS, Picklist Center, Import Employee Data, configuración de empresa, reporte de auditoría, política de login y reseteo de contraseña por RH. |
+| 11 | Admin Center base | CRUD de RBP, DPCS, Picklist Center, Import Employee Data, configuración de empresa con Theme Manager por tenant, permiso "Ver dato sensible", reporte de auditoría, política de login y reseteo de contraseña por RH. |
 | 12 | Consola de plataforma y suscripciones | Catálogo de planes, alta de clientes, facturación por adaptador (local/prueba), consola del proveedor, acceso de soporte, tenants sandbox, canales de release y conversión demo → cliente. |
 | 13 | API pública e integraciones | API REST versionada, API keys, OAuth2, webhooks salientes, documentación OpenAPI. Integraciones con terceros por adaptador (local/prueba). |
 | 14 | Onboarding y Offboarding | Alta y preboarding, captura de datos fiscales, firma electrónica por adaptador (local/prueba), tareas por responsable, offboarding con revocación de accesos. |
@@ -126,7 +127,64 @@ Todo se prueba en local, contra el stack en Docker y Supabase local.
 - Logs estructurados en JSON con request id y tenant id.
 - Reporte de errores detrás de un adaptador: en local escribe en los logs JSON. Sentry se conecta al mismo adaptador en la Fase 23.
 
-**Criterio de cierre:** prueba de carga k6 contra Docker aprobada, rate limiting activo y probado, CSP sin unsafe-eval, ninguna llave privada importable desde componentes cliente y un error forzado visible en los logs JSON con su request id y tenant id.
+### Errores, logs y bitácora
+
+- Mensajes de error genéricos al usuario con request id; el detalle solo en logs. `error.tsx` global sin stack trace. Hoy 16 respuestas de Server Actions devuelven al cliente el `error.message` de Supabase o Postgres, y no existe ningún `error.tsx`.
+- Ninguna ruta de debug en el build de producción, con un test que lo verifique.
+- Redacción de datos sensibles en logs (contraseñas, tokens, CURP, RFC, NSS, CLABE, salario).
+- Bitácora de solo inserción: sin UPDATE ni DELETE desde la app. Hoy `audit_logs` solo se escribe vía `write_audit_log` y las políticas RESTRICTIVE ya bloquean UPDATE y DELETE; falta revocar TRUNCATE (siguiente viñeta) y cubrirlo con un test. La única excepción es la supresión ARCO de D10 (`anonymize_user`), que corre en la base y reemplaza datos personales.
+- Revocar TRUNCATE a `anon`, `authenticated` y `prisma_app` en las tablas de `public`, con un test: TRUNCATE ignora RLS, y hoy esos roles lo tienen en 37 de las 38 tablas por los grants por defecto de Supabase (también los repite `scripts/db-reset-sync.sh`).
+- Validación con zod en servidor en todas las Server Actions (verificar las existentes). Hoy validan con zod las de ARCO, empleados, skills-hub y `createTenant`; faltan `performance/actions.ts` (lee `FormData` sin esquema) y `lib/tenant/actions.ts` (regex manual, aunque D2 dice Zod). `lms-sync`, `provision-tenant` y `get-module-flags` llevan `"use server"` sin ser acciones de cliente: quitárselo o validarlas también.
+
+**Criterio de cierre:** prueba de carga k6 contra Docker aprobada, rate limiting activo y probado, CSP sin unsafe-eval, ninguna llave privada importable desde componentes cliente y un error forzado visible en los logs JSON con su request id y tenant id. Además: ninguna Server Action sin zod, ningún mensaje de error interno visible para el usuario, el test de rutas de debug pasando sobre el build de producción y TRUNCATE revocado.
+
+---
+
+## Fase 9c — Sistema de diseño y responsividad
+
+Base visual y de interacción sobre la que se construyen todos los módulos desde la Fase 10. Corre en local, sin servicios de pago (Principio 8). Decisión de arquitectura: D19.
+
+### Design tokens
+
+- Design tokens como variables CSS: color, tipografía, espaciado en múltiplos de 4, radios y sombras. Tailwind consume los tokens.
+- Espaciado de formularios: label→input 8px, input→ayuda 4px, entre campos 20px, entre secciones 24px.
+
+### Layout y navegación
+
+- Layout Holy Grail / Two Column.
+- Navegación: sidebar completo colapsable en escritorio, riel de íconos en tablet y dock inferior de máximo 5 íconos con texto en móvil.
+- Búsqueda global con ⌘K.
+
+### Responsive
+
+- Grid con auto-fit, clamp() con texto de cuerpo mínimo 16px, container queries para widgets, min(100% - 2rem, 65ch) en textos largos, flex-wrap + gap en chips y aspect-ratio en fotos y video.
+- Dashboard de 1 a 4 columnas; tablas que se vuelven tarjetas en móvil; formularios largos por pasos.
+
+### Reglas UX
+
+- Un solo botón primario por pantalla.
+- Áreas táctiles de 44px.
+- Skeletons en cargas mayores a 400 ms.
+- Menús que solo muestran módulos contratados (D12) y permitidos por rol (RBP). El sidebar actual ya filtra por flag de módulo y por `can()` (D14); el riel y el dock usan el mismo filtro.
+
+### Accesibilidad (WCAG 2.2 AA)
+
+- Labels visibles (nunca solo placeholder).
+- Foco visible.
+- Navegación completa con teclado.
+- Zoom al 200 % sin romper el layout.
+- prefers-reduced-motion respetado (framer-motion con useReducedMotion). framer-motion todavía no está en el repo; se agrega en esta fase.
+
+### Biblioteca base
+
+- Botón, input, stat card, tabla, modal, toast, skeleton y agenda de día y hora con la zona horaria del tenant visible y aria-labels.
+
+### Pruebas
+
+- axe en CI.
+- Capturas en 3 breakpoints: 360, 768 y 1280 px (Playwright ya está en `apps/web`).
+
+**Criterio de cierre:** axe sin errores en las pantallas existentes y las 3 capturas aprobadas.
 
 ---
 
@@ -145,6 +203,27 @@ CRUD de RBP (roles, grupos y asignaciones), DPCS (aviso de privacidad versionado
 
 - Al habilitar roles personalizados, `insert_effective_record` (y cualquier función de la base que hoy autorice por `app_role`) debe validar el permiso RBP en lugar del rol fijo.
 - Cada Server Action del CRUD de RBP debe llamar `writeAuditLog()` con la acción correspondiente: `ROLE_CREATED`, `ROLE_UPDATED`, `ROLE_DELETED`, `PERMISSION_GRANTED`, `PERMISSION_REVOKED`, `GROUP_MEMBER_ADDED`, `GROUP_MEMBER_REMOVED`. Las entradas deben incluir `entity_id` (UUID del recurso) y `diff` (campos modificados) para trazabilidad completa.
+
+### Theme Manager (D18)
+
+La "configuración de empresa (logo, tema...)" se resuelve con un Theme Manager por tenant, construido sobre los tokens de la Fase 9c.
+
+- 6 presets seleccionables por tenant: Clean (default), Glass, Soft, Midnight, Editorial y Bento. Cada uno con modo claro y oscuro y una variante de alto contraste automática.
+- Los presets solo cambian la piel; el layout y la navegación son iguales en todos.
+- Estilos excluidos por accesibilidad o legibilidad: Neumorphism, Brutalism, Neo-Brutalism, Y2K, Cyberpunk, Retro y Maximalism.
+- Glass: fondo sólido detrás del texto y fallback con prefers-reduced-transparency.
+- Marca del cliente: logo claro y oscuro (encabezado, login, correos y PDFs), favicon, fondo de login, banner del dashboard y fondo del preset Glass.
+- Colores primario y secundario con validación de contraste (4.5:1 texto, 3:1 componentes); si no cumplen, se ajustan automáticamente.
+- Tipografía de una lista cerrada con licencia OFL.
+- Íconos: paquete Lucide, Phosphor o Tabler, o íconos propios recoloreados con el color del tema.
+- Preferencias por usuario: claro/oscuro/sistema, tamaño de fuente, densidad y reducir movimiento.
+- Seguridad: sin CSS libre del cliente; SVG sanitizado en servidor o rasterizado; tipos permitidos PNG, WebP y SVG validados por magic bytes con límite de tamaño; Storage privado por tenant con URLs firmadas.
+- Cada cambio llama `writeAuditLog()` con `THEME_UPDATED` y `diff`; vista previa antes de publicar y restaurar versión anterior (Principio 5).
+- El aviso de privacidad (DPCS) siempre visible en el login, sin importar el tema.
+
+### Datos sensibles
+
+- Permiso RBP "Ver dato sensible": CURP, RFC, NSS, CLABE y salario enmascarados por defecto; botón "mostrar" solo con ese permiso, y cada revelación registrada con `writeAuditLog()`. Hoy la ficha del empleado muestra CURP, RFC y salario completos a quien pasa RLS (el propio empleado, su jefe directo y admin; D6). NSS y CLABE todavía no existen en el esquema: llegan con la Fase 14. `can()` ya admite permisos por campo (`field_key`).
 
 ---
 
@@ -271,6 +350,32 @@ Contratar PITR y encender su export por tenant:
 - Export lógico por tenant ejecutado por el worker, diario, solo para tenants con licencia activa (se enciende al convertir una demo en cliente), restaurable sin afectar a los demás tenants.
 
 **Criterio de cierre:** ambos ambientes operando, despliegue continuo funcionando, un correo real enviado desde cada ambiente, una restauración probada (completa y por tenant), prueba de carga k6 en staging aprobada y alertas llegando ante un error forzado.
+
+---
+
+## Tabla de cumplimiento
+
+> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04. Cada fase, al cerrarse, actualiza el estado de sus filas.
+
+| Norma o control | Dónde se cumple | Estado |
+|-----------------|-----------------|--------|
+| RLS por tenant | Todas las tablas + D3 (Prisma sin bypass) + D6; TRUNCATE en 9b | Cumple: las 38 tablas de `public` tienen ENABLE + FORCE RLS y ningún rol de la app tiene BYPASSRLS. Brecha: `anon`, `authenticated` y `prisma_app` conservan TRUNCATE (ignora RLS) en 37 tablas; se revoca en 9b |
+| Secretos fuera del cliente y del repo | .env fuera del repo + D4; server-only en 9b | Cumple, se refuerza en 9b |
+| Rate limiting (429) | 9b | Pendiente: el código existe, falta conectarlo |
+| CSP estricta | 9b | Pendiente: la CSP todavía permite 'unsafe-inline' y 'unsafe-eval' en scripts |
+| Validación de entradas (zod) | 9b | Parcial: ARCO, empleados, skills-hub y `createTenant` validan con zod; faltan `performance/actions.ts` y `lib/tenant/actions.ts` |
+| Errores sin exponer detalles | 9b | Pendiente: 16 respuestas de Server Actions devuelven `error.message` de la base y no hay `error.tsx` |
+| Sin rutas admin/debug expuestas | 9b + Admin Center con RBP y MFA | Parcial: no hay rutas de debug y Admin Center ya exige `can()` y AAL2; falta el test de 9b sobre el build de producción |
+| Logging y monitoreo | 9b (logs JSON) + 23 (Sentry) | Pendiente |
+| Bitácora inmutable y sin datos sensibles | 9b | Parcial: solo se escribe vía `write_audit_log` y UPDATE/DELETE están bloqueados por políticas RESTRICTIVE; faltan revocar TRUNCATE y redactar datos sensibles. `anonymize_user` (D10) reemplaza datos personales por ARCO |
+| Uploads seguros (SVG, logos, íconos) | 11 | Pendiente: hoy no hay uploads |
+| Datos sensibles enmascarados | 11 | Pendiente: CURP, RFC y salario se muestran completos a quien pasa RLS (D6); NSS y CLABE llegan en la Fase 14 |
+| WCAG 2.2 AA (contraste, teclado, zoom, táctil) | 9c + validación de colores en 11 | Pendiente |
+| Movimiento reducido | 9c | Pendiente |
+| LFPDPPP 2025: aviso de privacidad | 11 (DPCS visible en todos los temas) | Pendiente: DPCS todavía no existe |
+| LFPDPPP 2025: derechos ARCO | 20 | Parcial: el admin procesa solicitudes y la supresión existe (D10); faltan autoservicio y bloqueo (Known Risk registrado) |
+| Licencias de fuentes e íconos | 11 (OFL, Lucide/Phosphor/Tabler) | Pendiente: hoy no hay paquetes de fuentes ni de íconos |
+| Respaldos y restauración | 9a local + 23 producción | Pendiente: solo existe el respaldo previo a cada db-remote-sync (D7) |
 
 ---
 

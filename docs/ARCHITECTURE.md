@@ -786,6 +786,104 @@ emails.
 
 ---
 
+## D18 — Theming por tenant
+
+**Decision:** each tenant picks one of six presets and adds its brand within
+fixed limits, from the Theme Manager in Admin Center (Roadmap, Phase 11).
+Presets change only the skin, meaning the values of the D19 design tokens. The
+layout and the navigation are the same in every preset.
+
+**Presets:**
+- Clean (default), Glass, Soft, Midnight, Editorial and Bento.
+- Each preset has a light mode, a dark mode and an automatic high-contrast
+  variant.
+- Excluded for accessibility or legibility: Neumorphism, Brutalism,
+  Neo-Brutalism, Y2K, Cyberpunk, Retro and Maximalism.
+- Glass keeps a solid surface behind text and falls back to opaque surfaces
+  under `prefers-reduced-transparency`.
+
+**What a tenant can customize (tokens):**
+- Primary and secondary colors, validated for contrast (4.5:1 for text, 3:1
+  for UI components) and adjusted automatically when they fail.
+- Font, from a closed list of OFL-licensed families.
+- Icons: the Lucide, Phosphor or Tabler pack, or the tenant's own icons
+  recolored with the theme color.
+- Brand assets: light and dark logo (header, login, emails and PDFs), favicon,
+  login background, dashboard banner and Glass background.
+
+**User preferences:** light, dark or system mode; font size; density; reduced
+motion. They apply on top of the tenant theme.
+
+**Limits and upload security:**
+- No free-form CSS from the customer: a theme is data (token values and
+  assets), never a stylesheet.
+- Only PNG, WebP and SVG, validated by magic bytes (not by extension or MIME
+  header) and with a size limit.
+- SVG is sanitized on the server or rasterized before it is stored.
+- Assets live in private per-tenant Storage and are served through signed
+  URLs.
+- Every change calls `writeAuditLog()` with `THEME_UPDATED` and its `diff`.
+  Changes are previewed before publishing, versioned, and an earlier version
+  can be restored (Roadmap, Principle 5).
+- The privacy notice (DPCS) stays visible on the login page under every theme.
+
+---
+
+## D19 — Sistema de diseño responsive
+
+**Decision:** Phase 9c builds one design system that every later module uses:
+CSS-variable tokens consumed by Tailwind, one layout, one navigation model, a
+base component library and automated accessibility checks. D18 presets are
+sets of values for these tokens.
+
+**Tokens:** color, typography, spacing in multiples of 4, radii and shadows,
+defined as CSS variables. Tailwind reads them, so components carry no
+hard-coded values. Form spacing: label→input 8px, input→help text 4px, between
+fields 20px, between sections 24px.
+
+**Breakpoints:** three reference widths, 360 px (mobile), 768 px (tablet) and
+1280 px (desktop), which are also the widths of the visual tests. Layouts use
+intrinsic techniques before media queries:
+- auto-fit grids;
+- `clamp()` for type, with body text never below 16px;
+- container queries for widgets;
+- `min(100% - 2rem, 65ch)` for long text;
+- `flex-wrap` + `gap` for chips;
+- `aspect-ratio` for photos and video.
+
+The dashboard goes from 1 to 4 columns, tables become cards on mobile and long
+forms are split into steps.
+
+**Layout and navigation:**
+- Holy Grail / Two Column layout.
+- Desktop: full collapsible sidebar. Tablet: icon rail. Mobile: bottom dock
+  with at most 5 icons, each with its label.
+- Global search with ⌘K.
+- Menus show only the modules the tenant has licensed (D12) and the role
+  allows (RBP). The current sidebar already filters by module flag and `can()`
+  (D14); the rail and the dock reuse the same filter.
+
+**UX rules:** one primary button per screen, 44px touch targets, skeletons for
+loads over 400 ms.
+
+**Accessibility (WCAG 2.2 AA):**
+- Visible labels, never a placeholder alone.
+- Visible focus.
+- Full keyboard navigation.
+- 200% zoom without breaking the layout.
+- `prefers-reduced-motion` respected: animations go through framer-motion with
+  `useReducedMotion` (framer-motion is added in Phase 9c).
+
+**Base components:** button, input, stat card, table, modal, toast, skeleton,
+and a day/time scheduler that shows the tenant's time zone and carries
+aria-labels.
+
+**Tests:** axe in CI over the existing screens, with zero errors allowed, and
+screenshots at 360, 768 and 1280 px, approved when the phase closes.
+Playwright is already a dev dependency of `apps/web`.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.
