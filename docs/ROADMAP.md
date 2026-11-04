@@ -370,18 +370,18 @@ Contratar PITR y encender su export por tenant:
 
 ## Tabla de cumplimiento
 
-> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04. Cada fase, al cerrarse, actualiza el estado de sus filas.
+> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, y revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1). Cada fase, al cerrarse, actualiza el estado de sus filas.
 
 | Norma o control | Dónde se cumple | Estado |
 |-----------------|-----------------|--------|
-| RLS por tenant | Todas las tablas + D3 (Prisma sin bypass) + D6; TRUNCATE en 9b | Cumple: las 38 tablas de `public` tienen ENABLE + FORCE RLS y ningún rol de la app tiene BYPASSRLS. Brecha: `anon`, `authenticated` y `prisma_app` conservan TRUNCATE (ignora RLS) en 37 tablas; se revoca en 9b |
-| Secretos fuera del cliente y del repo | .env fuera del repo + D4; server-only en 9b | Cumple, se refuerza en 9b |
+| RLS por tenant | Todas las tablas + D3 (Prisma sin bypass) + D6 + D17 (`pgboss`); TRUNCATE en 9b | Cumple: las 38 tablas de `public` y las 11 de `pgboss` tienen ENABLE + FORCE RLS y ningún rol de la app (incluido `worker_app`) tiene BYPASSRLS. Brecha: `anon`, `authenticated` y `prisma_app` conservan TRUNCATE (ignora RLS) en 37 tablas de `public`; se revoca en 9b. En `pgboss` nadie tiene TRUNCATE |
+| Secretos fuera del cliente y del repo | .env fuera del repo + D4 + D17 (`.dockerignore`, `.env.docker` ignorado e imágenes revisadas en CI); server-only en 9b | Cumple, se refuerza en 9b |
 | Rate limiting (429) | 9b | Pendiente: el código existe, falta conectarlo |
 | CSP estricta | 9b | Pendiente: la CSP todavía permite 'unsafe-inline' y 'unsafe-eval' en scripts |
 | Validación de entradas (zod) | 9b | Parcial: ARCO, empleados, skills-hub y `createTenant` validan con zod; faltan `performance/actions.ts` y `lib/tenant/actions.ts` |
-| Errores sin exponer detalles | 9b | Pendiente: 16 respuestas de Server Actions devuelven `error.message` de la base y no hay `error.tsx` |
+| Errores sin exponer detalles | 9b | Pendiente: 16 respuestas de Server Actions devuelven `error.message` de la base y no hay `error.tsx`. `/api/health` (D17) ya responde sin detalles |
 | Sin rutas admin/debug expuestas | 9b + Admin Center con RBP y MFA | Parcial: no hay rutas de debug y Admin Center ya exige `can()` y AAL2; falta el test de 9b sobre el build de producción |
-| Logging y monitoreo | 9b (logs JSON) + 23 (Sentry) | Pendiente |
+| Logging y monitoreo | 9a (`/api/health`) + 9b (logs JSON) + 23 (Sentry) | Parcial: `/api/health` y el HEALTHCHECK de las imágenes existen (D17); faltan logs JSON (9b) y Sentry y uptime (23) |
 | Bitácora inmutable y sin datos sensibles | 9b | Parcial: solo se escribe vía `write_audit_log` y UPDATE/DELETE están bloqueados por políticas RESTRICTIVE; faltan revocar TRUNCATE y redactar datos sensibles. `anonymize_user` (D10) reemplaza datos personales por ARCO |
 | Uploads seguros (SVG, logos, íconos) | 11 | Pendiente: hoy no hay uploads |
 | Datos sensibles enmascarados | 11 | Pendiente: CURP, RFC y salario se muestran completos a quien pasa RLS (D6); NSS y CLABE llegan en la Fase 14 |
@@ -391,7 +391,7 @@ Contratar PITR y encender su export por tenant:
 | LFPDPPP 2025: derechos ARCO | 20 | Parcial: el admin procesa solicitudes y la supresión existe (D10); faltan autoservicio y bloqueo (Known Risk registrado) |
 | Licencias de fuentes e íconos | 11 (OFL, Lucide/Phosphor/Tabler) | Pendiente: hoy no hay paquetes de fuentes ni de íconos |
 | Theme Manager usable por administradores sin experiencia técnica | 11 | Pendiente |
-| Respaldos y restauración | 9a local + 23 producción | Pendiente: solo existe el respaldo previo a cada db-remote-sync (D7) |
+| Respaldos y restauración | 9a local + 23 producción | Pendiente: solo existe el respaldo previo a cada db-remote-sync (D7). El PR 1 de la 9a (#45) no incluye respaldos; el export por tenant y la prueba de restauración local llegan en el PR 3 de la 9a |
 
 ---
 
