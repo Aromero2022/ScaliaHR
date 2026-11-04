@@ -8,6 +8,8 @@ set -euo pipefail
 DB_URL="${1:?Usage: $0 <DB_URL>}"
 
 RESET_PUBLIC_SQL=$(cat <<'EOSQL'
+-- pgboss is created entirely by migration D17, so a reset recreates it too.
+DROP SCHEMA IF EXISTS pgboss CASCADE;
 DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
 -- Schema-level privileges (matches Supabase defaults)

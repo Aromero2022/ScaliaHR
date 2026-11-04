@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import nextConfig from "../../next.config";
 
 type HeaderEntry = { key: string; value: string };
@@ -67,6 +67,31 @@ describe("Security headers in next.config", () => {
     expect(csp!.value).toContain(
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co"
     );
+  });
+
+  it("CSP allows the configured local Supabase origin and nothing broader", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://localhost:54321");
+    vi.resetModules();
+    const { default: config } = await import("../../next.config");
+    const groups = await config.headers!();
+    const value = groups[0].headers.find((h) => h.key === "Content-Security-Policy")!.value;
+    vi.unstubAllEnvs();
+
+    const connect = value.split("; ").find((d) => d.startsWith("connect-src"));
+    expect(connect).toBe(
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:54321 ws://localhost:54321",
+    );
+  });
+
+  it("CSP adds nothing for hosted *.supabase.co projects", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://abcdefghij.supabase.co");
+    vi.resetModules();
+    const { default: config } = await import("../../next.config");
+    const groups = await config.headers!();
+    const value = groups[0].headers.find((h) => h.key === "Content-Security-Policy")!.value;
+    vi.unstubAllEnvs();
+
+    expect(value).toContain("connect-src 'self' https://*.supabase.co wss://*.supabase.co;");
   });
 
   it("CSP allows fonts from Google", () => {

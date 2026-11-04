@@ -5,8 +5,9 @@ export async function middleware(request: NextRequest) {
   return await updateSession(request);
 }
 
+// api/health stays out: healthchecks run without a session and must not depend on Auth.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/health$|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

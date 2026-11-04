@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
@@ -45,10 +45,25 @@ jobs:
       - name: Unit tests
         run: npx vitest run
 
+      - name: Worker lint
+        run: npx eslint .
+        working-directory: apps/worker
+
+      - name: Worker typecheck
+        run: npx tsc --noEmit
+        working-directory: apps/worker
+
+      - name: Worker unit tests
+        run: npx vitest run
+        working-directory: apps/worker
+
       - name: Build
         run: npx next build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+          # The lockfile carries only the Linux @next/swc binaries; skip Next's
+          # attempt to patch in the other platforms.
+          NEXT_IGNORE_INCORRECT_LOCKFILE: "1"
           NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321"
           NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
 
@@ -60,7 +75,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
@@ -95,6 +110,11 @@ jobs:
         env:
           NODE_ENV: test
 
+      - name: Run worker integration tests
+        run: |
+          source scripts/supabase-test-env.sh
+          npm -w @scaliahr/worker run test:integration
+
       - name: GoTrue logs (on failure)
         if: failure()
         run: docker logs --tail 200 "$(docker ps -a --filter name=supabase_auth --format '{{.Names}}' | head -1)" 2>&1 || true
@@ -107,7 +127,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
@@ -161,3 +181,53 @@ jobs:
       - name: GoTrue logs (on failure)
         if: failure()
         run: docker logs --tail 200 "$(docker ps -a --filter name=supabase_auth --format '{{.Names}}' | head -1)" 2>&1 || true
+
+  docker:
+    name: Docker images (build only)
+    runs-on: ubuntu-24.04
+    # Builds both images and runs them against Supabase local. Nothing is pushed:
+    # there is no registry login and no push step (publishing is Phase 23).
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.122.1
+
+      - name: Build images and start the local stack (npm run local:up)
+        run: npm run local:up
+
+      - name: Images run as non-root and carry no secrets
+        run: |
+          for image in scaliahr-web:local scaliahr-worker:local; do
+            user="$(docker image inspect -f '{{.Config.User}}' "$image")"
+            if [ -z "$user" ] || [ "$user" = "root" ] || [ "$user" = "0" ]; then
+              echo "::error::$image runs as root"
+              exit 1
+            fi
+            if docker image inspect -f '{{json .Config.Env}}' "$image" | grep -E -i 'DATABASE_URL|SERVICE_ROLE|JWT_SECRET|PASSWORD|ANON_KEY'; then
+              echo "::error::$image bakes a secret into its environment"
+              exit 1
+            fi
+            if docker run --rm --entrypoint sh "$image" -c 'find / -xdev -name ".env*" 2>/dev/null' | grep -q .; then
+              echo "::error::$image contains a .env file"
+              exit 1
+            fi
+            echo "$image: user=$user, no secrets in env, no .env files"
+          done
+
+      - name: Container logs (on failure)
+        if: failure()
+        run: SUPABASE_NETWORK=unused docker compose --env-file .env.docker logs --no-color --tail 200 web worker || true
+
+      - name: Stop the local stack
+        if: always()
+        run: npm run local:down -- --all

@@ -1,6 +1,8 @@
 node_modules/
 .env
 .env.local
+# Local Docker stack credentials; only .env.docker.example is versioned.
+.env.docker
 .next/
 dist/
 *.log
@@ -19,3 +21,4 @@ ios/
 web-build/
 *.tsbuildinfo
 supabase/.temp/
+supabase/.branches/

@@ -1,117 +1,51 @@
-version: "3.9"
+# Local stack (Phase 9a, D17): web + worker on top of `supabase start`.
+#   npm run local:up     start Supabase local, build and start both containers
+#   npm run local:down   stop the containers (add -- --all to stop Supabase too)
+# Supabase itself comes from the Supabase CLI. These containers join the CLI's
+# Docker network, where its database and API gateway answer as `db` and `kong`.
+
+name: scaliahr
 
 services:
-  # ─── NEXT.JS APPLICATION ───────────────────────────────────────────
-  nextjs:
+  web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    ports:
-      - "3000:3000"
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set it in .env.docker}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set it in .env.docker}
+    image: scaliahr-web:local
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@supabase-db:5432/postgres
-      NEXT_PUBLIC_SUPABASE_URL: http://supabase-kong:8000
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      MOODLE_BASE_URL: ${MOODLE_BASE_URL:-http://host.docker.internal:8080}
-      MOODLE_WS_TOKEN: ${MOODLE_WS_TOKEN}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-    depends_on:
-      supabase-db:
-        condition: service_healthy
-      supabase-auth:
-        condition: service_started
-    networks:
-      - scaliahr-internal
-      - scaliahr-public
-
-  # ─── SUPABASE: POSTGRESQL ──────────────────────────────────────────
-  supabase-db:
-    image: supabase/postgres:15.6.1.143
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_INTERNAL_URL: http://kong:8000
+      DATABASE_URL: postgresql://prisma_app:${PRISMA_APP_PASSWORD:?set it in .env.docker}@db:5432/postgres
+      DIRECT_URL: postgresql://prisma_app:${PRISMA_APP_PASSWORD}@db:5432/postgres
+      # Fixed superuser password of Supabase local; admin-client needs it (D3).
+      ADMIN_DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
     ports:
-      - "54322:5432"
-    environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-for-dev-only}
-    volumes:
-      - supabase-db-data:/var/lib/postgresql/data
-      - ./supabase/migrations:/docker-entrypoint-initdb.d/migrations
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
     networks:
-      - scaliahr-internal
+      - supabase
+    restart: unless-stopped
 
-  # ─── SUPABASE: AUTH (GOTRUE) ───────────────────────────────────────
-  supabase-auth:
-    image: supabase/gotrue:v2.164.0
-    ports:
-      - "9999:9999"
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+    image: scaliahr-worker:local
     environment:
-      GOTRUE_API_HOST: 0.0.0.0
-      GOTRUE_API_PORT: 9999
-      API_EXTERNAL_URL: http://localhost:8000
-      GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgresql://supabase_auth_admin:postgres@supabase-db:5432/postgres
-      GOTRUE_SITE_URL: http://localhost:3000
-      GOTRUE_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-for-dev-only}
-      GOTRUE_JWT_EXP: 3600
-      GOTRUE_DISABLE_SIGNUP: "false"
-      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
-    depends_on:
-      supabase-db:
-        condition: service_healthy
+      WORKER_DATABASE_URL: postgresql://worker_app:${WORKER_APP_PASSWORD:?set it in .env.docker}@db:5432/postgres
     networks:
-      - scaliahr-internal
+      - supabase
+    restart: unless-stopped
+    # Matches the 30 s graceful stop in apps/worker/src/index.ts.
+    stop_grace_period: 35s
 
-  # ─── SUPABASE: REST (POSTGREST) ────────────────────────────────────
-  supabase-rest:
-    image: postgrest/postgrest:v12.2.3
-    ports:
-      - "3001:3000"
-    environment:
-      PGRST_DB_URI: postgresql://authenticator:postgres@supabase-db:5432/postgres
-      PGRST_DB_SCHEMAS: public,storage
-      PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-for-dev-only}
-      PGRST_DB_USE_LEGACY_GUCS: "false"
-    depends_on:
-      supabase-db:
-        condition: service_healthy
-    networks:
-      - scaliahr-internal
-
-  # ─── SUPABASE: API GATEWAY (KONG) ─────────────────────────────────
-  supabase-kong:
-    image: kong:3.5
-    ports:
-      - "8000:8000"
-      - "8443:8443"
-    environment:
-      KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
-      KONG_DNS_ORDER: LAST,A,CNAME
-      KONG_PLUGINS: request-transformer,cors,key-auth,acl
-    volumes:
-      - ./.docker/kong.yml:/var/lib/kong/kong.yml:ro
-    depends_on:
-      - supabase-auth
-      - supabase-rest
-    networks:
-      - scaliahr-internal
-      - scaliahr-public
-
-# ─── NETWORKS ──────────────────────────────────────────────────────
 networks:
-  scaliahr-internal:
-    driver: bridge
-    internal: true
-  scaliahr-public:
-    driver: bridge
-
-# ─── VOLUMES ───────────────────────────────────────────────────────
-volumes:
-  supabase-db-data:
+  supabase:
+    external: true
+    name: ${SUPABASE_NETWORK:?run npm run local:up, which starts Supabase and sets SUPABASE_NETWORK}
