@@ -61,9 +61,6 @@ jobs:
         run: npx next build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
-          # The lockfile carries only the Linux @next/swc binaries; skip Next's
-          # attempt to patch in the other platforms.
-          NEXT_IGNORE_INCORRECT_LOCKFILE: "1"
           NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321"
           NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
 
