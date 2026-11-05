@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeNextPath } from "@/lib/auth/mfa-policy";
 import { logMfaEnroll, logMfaEnrollFailed } from "../actions";
+import { mfaErrorMessage } from "@/lib/auth/messages";
 
 export default function MfaEnrollPage() {
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -38,7 +39,7 @@ export default function MfaEnrollPage() {
         friendlyName: "Authenticator App",
       });
       if (error) {
-        setError(error.message);
+        setError(mfaErrorMessage(error));
         return;
       }
       setFactorId(data.id);
@@ -57,7 +58,7 @@ export default function MfaEnrollPage() {
     const { data: challenge, error: cErr } =
       await supabase.auth.mfa.challenge({ factorId });
     if (cErr) {
-      setError(cErr.message);
+      setError(mfaErrorMessage(cErr));
       setLoading(false);
       return;
     }
@@ -70,7 +71,7 @@ export default function MfaEnrollPage() {
 
     if (vErr) {
       await logMfaEnrollFailed().catch(() => {});
-      setError(vErr.message);
+      setError(mfaErrorMessage(vErr));
       setLoading(false);
       return;
     }

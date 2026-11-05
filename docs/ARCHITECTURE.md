@@ -1396,6 +1396,88 @@ GitHub Actions (Principle 8).
 
 ---
 
+## D27 — Safe Errors and JSON Logs
+
+**Decision:** no database, service or Auth error message reaches the user. The
+detail goes to structured JSON logs with the request id and tenant id, sensitive
+data masked; the user sees a generic message with a code to quote. Error
+reporting sits behind an adapter that writes those logs locally; Sentry plugs
+into it in Phase 23. Phase 9b, PR 2.
+
+**Request and tenant ids (`src/middleware.ts`, `lib/supabase/middleware.ts`):**
+- Every request gets a fresh `x-request-id` (UUID), returned as a response
+  header and forwarded to the page or Server Action. An id sent by the client
+  is always replaced.
+- `x-tenant-id` is forwarded only from the verified token's `tenant_id`. A
+  value sent by the client is deleted. Both headers are for logs only, never
+  for authorization.
+- `/api/health` and static assets stay outside the middleware and get no id.
+
+**Logs (`lib/log`):**
+- `log(level, event, fields, ctx)` writes one JSON line: `time`, `level`,
+  `event`, `requestId`, `tenantId` and the fields. It works on the Node and
+  Edge runtimes.
+- `redact()` blanks sensitive keys at any depth: passwords, secrets, tokens,
+  authorization, cookies, API keys, CURP, RFC, NSS, CLABE, salary and bank
+  fields. Inside free text it masks JWTs, bearer tokens, CURP, RFC, CLABE, card
+  numbers and NSS, because database errors quote the offending values.
+- The worker writes the same kind of JSON lines (`apps/worker/src/log.ts`)
+  with the job id and the tenant id of the job. It never logs payloads, and
+  error messages get the same masks. The operator CLIs (`smoke.js`,
+  `export-tenant.js`) keep plain text.
+
+**Errors:**
+- `reportError(event, error, ctx)` goes through an `ErrorReporter`: the JSON
+  log reporter now, Sentry in Phase 23 via `setErrorReporter`.
+- `safeError(event, error, message?)` is the only way a Server Action or page
+  turns an error into text. It reports the error with the request context and
+  returns the generic message plus `Código: <request id>`. It replaces the 21
+  places that returned `error.message` from Supabase or Postgres:
+  - ARCO, employee changes, performance, skills hub, tenant switch, the
+    employees list;
+  - `createTenant`;
+  - the unused MFA helpers.
+- `createTenant`'s mapped messages (user already in a tenant, duplicate slug)
+  remain, because they are ours.
+- The audit-log helper, the LMS sync and `/api/health` report through the same
+  logger. The LMS sync no longer returns Moodle's messages to its caller.
+- Unhandled errors (server components, route handlers, Server Actions that
+  throw) are reported by `instrumentation.ts` (`onRequestError`). The report
+  carries the request id, tenant id, method, path without query string, route
+  type and Next.js's digest.
+- `app/error.tsx` and `app/global-error.tsx` show a generic message and the
+  digest; never the message or the stack.
+- Login and MFA run in the browser against Supabase Auth.
+  `lib/auth/messages.ts` maps their errors to generic Spanish messages, telling
+  only 429 (too many attempts) apart from "wrong credentials or code".
+- Zod issue messages are still returned: they are our own validation texts.
+
+**Tests:**
+- unit tests for redaction, the logger, the reporter adapter, `safeError`,
+  `onRequestError` and the middleware ids (fresh, never the client's, tenant
+  only from the token);
+- `__tests__/static/no-error-leaks.test.ts`, which fails on any
+  `error: x.message`, `setError(x.message)` or `{x.message}` in `src`;
+- an integration test for a forced error: a real session through the real
+  middleware, then a real Postgres error quoting an RFC through `safeError()`.
+  The JSON line carries the request id and the token's tenant id with the RFC
+  masked, and the user gets only the generic message and the code;
+- worker unit tests for its JSON lines and masks.
+
+**Accepted for now:**
+- Next.js also prints its own non-JSON line for unhandled errors.
+- The digest in `error.tsx` is the user's reference for rendering errors; the
+  logs pair it with the request id.
+- Audit-log diffs keep the changed values (salary, personal fields) as the
+  record of the change; masking them for readers is part of the Phase 11
+  sensitive-data work.
+- The employees search builds a PostgREST `or()` filter from the raw search
+  text, so commas or parentheses in it can add conditions. RLS still limits
+  the rows to the user's tenant. It is fixed with the input validation of the
+  hardening PR (Phase 9b).
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { writeAuditLog } from "@/lib/audit/log";
 import { can } from "@/lib/authz/can";
+import { safeError } from "@/lib/errors/safe-error";
 
 const uuidSchema = z.string().uuid();
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD requerido");
@@ -77,8 +78,7 @@ export async function createJobChange(
   });
 
   if (error) {
-    console.error("[ec.job_change]", error.message);
-    return { success: false, error: error.message };
+    return { success: false, error: await safeError("ec.job_change", error) };
   }
 
   await writeAuditLog({
@@ -140,8 +140,7 @@ export async function createCompensationChange(
   });
 
   if (error) {
-    console.error("[ec.comp_change]", error.message);
-    return { success: false, error: error.message };
+    return { success: false, error: await safeError("ec.comp_change", error) };
   }
 
   await writeAuditLog({
@@ -241,8 +240,7 @@ export async function createPersonalInfoChange(
   });
 
   if (error) {
-    console.error("[ec.personal_change]", error.message);
-    return { success: false, error: error.message };
+    return { success: false, error: await safeError("ec.personal_change", error) };
   }
 
   await writeAuditLog({

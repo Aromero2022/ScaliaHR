@@ -27,6 +27,13 @@ vi.mock("next/headers", () => ({
 
 import { createClient } from "@/lib/supabase/server";
 import { can } from "@/lib/authz/can";
+import { GENERIC_ERROR } from "@/lib/errors/safe-error";
+
+const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+/** What the JSON logger wrote with console.error during the test. */
+function loggedErrors(): string {
+  return errorSpy.mock.calls.map((args) => args.join(" ")).join("\n");
+}
 import {
   updateSelfAssessment,
   setManagerAssessment,
@@ -174,7 +181,9 @@ describe("setManagerAssessment", () => {
     });
     mockCan.mockResolvedValue({ allowed: true });
     const res = await setManagerAssessment(validInput);
-    expect(res).toEqual({ error: "Not authorized: not a direct manager or admin" });
+    // D27: the database message is logged, never returned.
+    expect(res).toEqual({ error: GENERIC_ERROR });
+    expect(loggedErrors()).toContain("Not authorized: not a direct manager or admin");
   });
 
   it("returns error when target employee skill not found", async () => {
@@ -183,7 +192,8 @@ describe("setManagerAssessment", () => {
     });
     mockCan.mockResolvedValue({ allowed: true });
     const res = await setManagerAssessment(validInput);
-    expect(res).toEqual({ error: "Employee skill record not found" });
+    expect(res).toEqual({ error: GENERIC_ERROR });
+    expect(loggedErrors()).toContain("Employee skill record not found");
   });
 });
 
@@ -197,8 +207,8 @@ describe("cross-tenant FK enforcement", () => {
     });
     mockCan.mockResolvedValue({ allowed: true });
     const res = await updateSelfAssessment({ skillId: UUID_SKILL_CROSS, level: 3 });
-    expect(res).toHaveProperty("error");
-    expect((res as { error: string }).error).toContain("foreign key constraint");
+    expect(res).toEqual({ error: GENERIC_ERROR });
+    expect(loggedErrors()).toContain("es_skill_fk");
   });
 
   it("job_role_skills upsert with a skill from another tenant fails", async () => {
@@ -214,8 +224,8 @@ describe("cross-tenant FK enforcement", () => {
     const res = await updateJobRoleSkill({
       jobRoleId: UUID_JOB_ROLE, skillId: UUID_SKILL_CROSS, requiredProficiencyLevel: 3,
     });
-    expect(res).toHaveProperty("error");
-    expect((res as { error: string }).error).toContain("foreign key constraint");
+    expect(res).toEqual({ error: GENERIC_ERROR });
+    expect(loggedErrors()).toContain("jrs_skill_fk");
   });
 });
 

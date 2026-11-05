@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { safeError } from "@/lib/errors/safe-error";
 
 export async function switchTenant(tenantId: string) {
   if (!tenantId || typeof tenantId !== "string") {
@@ -40,7 +41,7 @@ export async function switchTenant(tenantId: string) {
       { onConflict: "user_id" }
     );
 
-  if (error) return { error: error.message };
+  if (error) return { error: await safeError("tenant.switchTenant", error) };
 
   await supabase.auth.refreshSession();
   revalidatePath("/", "layout");
@@ -65,7 +66,7 @@ export async function revokeMembership(tenantId: string) {
     .eq("user_id", user.id)
     .eq("tenant_id", tenantId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await safeError("tenant.revokeMembership", error) };
 
   const { data: settings } = await supabase
     .from("user_settings")

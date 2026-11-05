@@ -6,6 +6,7 @@ import { getClaims } from "@/lib/supabase/claims";
 import { revalidatePath } from "next/cache";
 import { can } from "@/lib/authz/can";
 import { writeAuditLog } from "@/lib/audit/log";
+import { safeError } from "@/lib/errors/safe-error";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -77,7 +78,7 @@ export async function updateSelfAssessment(
     p_level: level,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: await safeError("skills.updateSelfAssessment", error) };
 
   revalidatePath("/skills-hub");
   return { success: true };
@@ -104,7 +105,7 @@ export async function setManagerAssessment(
     p_level: level,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: await safeError("skills.setManagerAssessment", error) };
 
   revalidatePath("/skills-hub");
   return { success: true };
@@ -134,7 +135,7 @@ export async function createSkill(input: unknown): Promise<ActionResult> {
     .select("id")
     .single();
 
-  if (error) return { error: error.message };
+  if (error) return { error: await safeError("skills.createSkill", error) };
 
   await writeAuditLog({
     tenantId: tenantId,
@@ -186,7 +187,7 @@ export async function updateSkill(input: unknown): Promise<ActionResult> {
     .eq("id", skillId)
     .eq("tenant_id", tenantId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: await safeError("skills.updateSkill", error) };
 
   const diff: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(payload)) {
@@ -248,7 +249,7 @@ export async function updateJobRoleSkill(
     { onConflict: "tenant_id,job_role_id,skill_id" }
   );
 
-  if (error) return { error: error.message };
+  if (error) return { error: await safeError("skills.updateJobRoleSkill", error) };
 
   await writeAuditLog({
     tenantId: tenantId,

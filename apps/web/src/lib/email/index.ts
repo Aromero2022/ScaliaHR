@@ -27,7 +27,12 @@ export function createEmailQueue(connectionString: string): EmailQueue {
   function boss(): Promise<PgBoss> {
     started ??= (async () => {
       const instance = new PgBoss({ connectionString, ...PRODUCER_OPTIONS });
-      instance.on("error", (error: Error) => console.error(`[email] pg-boss error: ${error.message}`));
+      // A JSON line like lib/log's (D27). No "@/" import here: the worker suite imports this file.
+      instance.on("error", (error: Error) =>
+        console.error(
+          JSON.stringify({ time: new Date().toISOString(), level: "error", event: "email.queue_error", error: { name: error.name } }),
+        ),
+      );
       await instance.start();
       return instance;
     })().catch((error: unknown) => {

@@ -7,6 +7,7 @@ import { getClaims } from "@/lib/supabase/claims";
 import { writeAuditLog } from "@/lib/audit/log";
 import { can } from "@/lib/authz/can";
 import { createHash } from "crypto";
+import { safeError } from "@/lib/errors/safe-error";
 
 const uuidSchema = z.string().uuid();
 
@@ -68,8 +69,7 @@ export async function createArcoRequest(
     .single();
 
   if (error) {
-    console.error("[arco.create]", error.message);
-    return { success: false, error: error.message };
+    return { success: false, error: await safeError("arco.create", error) };
   }
 
   await writeAuditLog({
@@ -129,7 +129,7 @@ export async function processArcoRequest(
       })
       .eq("id", request.id);
 
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: await safeError("arco.processArcoRequest", error) };
 
     await writeAuditLog({
       tenantId: ctx.tenantId,
@@ -153,7 +153,7 @@ export async function processArcoRequest(
       { p_user_id: request.subject_id }
     );
 
-    if (exportErr) return { success: false, error: exportErr.message };
+    if (exportErr) return { success: false, error: await safeError("arco.processArcoRequest", exportErr) };
 
     const jsonStr = JSON.stringify(exportData, null, 2);
     exportHash = createHash("sha256").update(jsonStr).digest("hex");
@@ -174,7 +174,7 @@ export async function processArcoRequest(
       p_arco_request_id: request.id,
     });
 
-    if (anonErr) return { success: false, error: anonErr.message };
+    if (anonErr) return { success: false, error: await safeError("arco.processArcoRequest", anonErr) };
 
     await writeAuditLog({
       tenantId: ctx.tenantId,
@@ -197,7 +197,7 @@ export async function processArcoRequest(
     })
     .eq("id", request.id);
 
-  if (updateErr) return { success: false, error: updateErr.message };
+  if (updateErr) return { success: false, error: await safeError("arco.processArcoRequest", updateErr) };
 
   await writeAuditLog({
     tenantId: ctx.tenantId,
@@ -230,7 +230,7 @@ export async function exportUserData(
     p_user_id: subjectId,
   });
 
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: await safeError("arco.exportUserData", error) };
 
   const jsonStr = JSON.stringify(data, null, 2);
   const hash = createHash("sha256").update(jsonStr).digest("hex");

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeNextPath } from "@/lib/auth/mfa-policy";
 import { logMfaVerify, logMfaVerifyFailed } from "../actions";
+import { mfaErrorMessage } from "@/lib/auth/messages";
 
 export default function MfaVerifyPage() {
   const [factorId, setFactorId] = useState<string | null>(null);
@@ -37,7 +38,7 @@ export default function MfaVerifyPage() {
     const { data: challenge, error: cErr } =
       await supabase.auth.mfa.challenge({ factorId });
     if (cErr) {
-      setError(cErr.message);
+      setError(mfaErrorMessage(cErr));
       setLoading(false);
       return;
     }
@@ -50,7 +51,7 @@ export default function MfaVerifyPage() {
 
     if (vErr) {
       await logMfaVerifyFailed().catch(() => {});
-      setError(vErr.message);
+      setError(mfaErrorMessage(vErr));
       setLoading(false);
       return;
     }
