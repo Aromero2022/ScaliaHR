@@ -6,7 +6,10 @@ import { TestWorld } from "./helpers/world";
 
 const env = integrationEnv();
 
-process.env.DATABASE_URL = env.prismaDbUrl;
+// D28: createTenant spends a tenant_create token through prisma_app, the role the server uses.
+const prismaAppUrl = process.env.PRISMA_APP_TEST_DB_URL;
+if (!prismaAppUrl) throw new Error("PRISMA_APP_TEST_DB_URL is not set: source scripts/supabase-test-env.sh");
+process.env.DATABASE_URL = prismaAppUrl;
 process.env.ADMIN_DATABASE_URL = env.dbUrl;
 
 vi.mock("next/cache", () => ({
@@ -25,6 +28,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 const { createTenant } = await import("@/lib/admin/create-tenant");
 const { adminPrisma } = await import("@/lib/db/admin-client");
+const { prisma } = await import("@/lib/db/tenant-client");
 
 const db = new pg.Client({ connectionString: env.dbUrl });
 await db.connect();
@@ -77,6 +81,7 @@ afterAll(async () => {
   } finally {
     await db.end();
     await adminPrisma.$disconnect();
+    await prisma.$disconnect();
   }
 }, 15_000);
 
@@ -307,5 +312,18 @@ describe("createTenant() produces same structure as seed.sql demo tenant", () =>
 
     expect(result).toHaveProperty("error", "El usuario ya pertenece a otra empresa");
     expect(result).not.toHaveProperty("success");
+  });
+
+  it("refuses the fourth attempt of an account within the hour (D28)", async () => {
+    const someone = await world.createAuthUser();
+    const asSomeone = { data: { user: { id: someone.authId, email: someone.email } }, error: null };
+    const invalid = { name: "x", slug: "x", rfc: "", modules: { employee_central: true, recruiting: false, performance: false, lms: false } };
+    for (let i = 0; i < 3; i++) {
+      mockGetUser.mockResolvedValueOnce(asSomeone);
+      const result = await createTenant(invalid);
+      expect(result.error).toBe("El nombre debe tener al menos 2 caracteres");
+    }
+    mockGetUser.mockResolvedValueOnce(asSomeone);
+    await expect(createTenant(invalid)).resolves.toEqual({ error: "Demasiados intentos. Intenta de nuevo en 60 minutos." });
   });
 });

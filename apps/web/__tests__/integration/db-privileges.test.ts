@@ -127,19 +127,18 @@ describe("audit log is insert-only for the app (D25)", () => {
   });
 });
 
-describe("rate_limits (D25)", () => {
-  it("is reachable only through check_rate_limit()", async () => {
+describe("rate_limits (D25, D28)", () => {
+  it("is not reachable from the Data API, directly or through the limiter", async () => {
     const direct = await tenant.employee.client.from("rate_limits").select("id");
     expect(direct.error?.code).toBe("42501");
-    const viaRpc = await tenant.employee.client.rpc("check_rate_limit", {
+    // D28: only the server (prisma_app) spends tokens; see rate-limiting.test.ts.
+    const viaRpc = await tenant.employee.client.rpc("rate_limit_consume", {
       p_key: `d25-${tenant.id}`,
       p_action: "d25_probe",
       p_max_tokens: 5,
       p_window_seconds: 60,
     });
-    expect(viaRpc.error).toBeNull();
-    expect(viaRpc.data).toBe(true);
-    await db.query("DELETE FROM public.rate_limits WHERE key = $1", [`d25-${tenant.id}`]);
+    expect(viaRpc.error?.code).toBe("42501");
   });
 });
 

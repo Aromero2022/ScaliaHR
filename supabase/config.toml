@@ -28,6 +28,21 @@ uri = "pg-functions://postgres/public/custom_access_token_hook"
 timebox = "24h"
 inactivity_timeout = "1h"
 
+# Native Supabase Auth limits (D28), the values the hosted project must carry,
+# written down so a CLI upgrade cannot change them silently. Locally GoTrue gets
+# them but does not enforce the per-IP ones (token_refresh, sign_in_sign_ups,
+# token_verifications): the CLI sets no rate-limit header, and without one GoTrue
+# skips them. email_sent applies only with custom SMTP. Locally the app's own
+# limiter (lib/rate-limit) is the one that acts.
+[auth.rate_limit]
+email_sent = 2
+sms_sent = 30
+anonymous_users = 30
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 30
+web3 = 30
+
 [auth.mfa]
 max_enrolled_factors = 10
 

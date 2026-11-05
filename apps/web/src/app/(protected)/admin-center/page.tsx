@@ -3,6 +3,8 @@ import { requireAuth } from "@/lib/supabase/claims";
 import { redirect, notFound } from "next/navigation";
 import { can } from "@/lib/authz/can";
 import Link from "next/link";
+import RateLimitSettings, { type RateLimitSetting } from "@/components/rate-limit-settings";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 
 interface StatCard {
   label: string;
@@ -48,7 +50,7 @@ export default async function AdminCenterPage() {
     notFound();
   }
 
-  const [rolesRes, groupsRes, permsRes, configsRes, auditRes, usersRes] =
+  const [rolesRes, groupsRes, permsRes, configsRes, auditRes, usersRes, limitsRes] =
     await Promise.all([
       supabase
         .from("permission_roles")
@@ -75,6 +77,9 @@ export default async function AdminCenterPage() {
       supabase
         .from("users")
         .select("id", { count: "exact", head: true }),
+      configPerm.allowed
+        ? supabase.from("tenant_rate_limits").select("action, max_tokens, window_seconds")
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
   const stats: StatCard[] = [
@@ -106,6 +111,21 @@ export default async function AdminCenterPage() {
 
   const configs = (configsRes.data ?? []) as ConfigRow[];
   const auditEntries = (auditRes.data ?? []) as AuditRow[];
+  const rateLimits: RateLimitSetting[] = (
+    [
+      ["write", "Acciones de escritura"],
+      ["api", "Rutas HTTP"],
+    ] as const
+  ).map(([action, label]) => {
+    const own = (limitsRes.data ?? []).find((row) => row.action === action);
+    return {
+      action,
+      label,
+      maxTokens: own?.max_tokens ?? RATE_LIMITS[action].maxTokens,
+      windowSeconds: own?.window_seconds ?? RATE_LIMITS[action].windowSeconds,
+      isDefault: !own,
+    };
+  });
 
   return (
     <div className="space-y-8">
@@ -172,6 +192,16 @@ export default async function AdminCenterPage() {
                 </p>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Rate limits (D28) — requires admin.manage_config:edit */}
+        {configPerm.allowed && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <h2 className="mb-4 text-lg font-semibold text-white">
+              Límites de solicitudes
+            </h2>
+            <RateLimitSettings settings={rateLimits} />
           </div>
         )}
 

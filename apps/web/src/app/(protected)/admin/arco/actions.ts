@@ -8,6 +8,7 @@ import { writeAuditLog } from "@/lib/audit/log";
 import { can } from "@/lib/authz/can";
 import { createHash } from "crypto";
 import { safeError } from "@/lib/errors/safe-error";
+import { limitWrite } from "@/lib/rate-limit";
 
 const uuidSchema = z.string().uuid();
 
@@ -42,6 +43,9 @@ const createArcoSchema = z.object({
 export async function createArcoRequest(
   input: z.input<typeof createArcoSchema>
 ): Promise<ActionResult<{ id: string }>> {
+  const limited = await limitWrite();
+  if (limited) return { success: false, error: limited };
+
   const parsed = createArcoSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message };
@@ -96,6 +100,9 @@ const processArcoSchema = z.object({
 export async function processArcoRequest(
   input: z.input<typeof processArcoSchema>
 ): Promise<ActionResult<{ id: string; exportHash?: string }>> {
+  const limited = await limitWrite();
+  if (limited) return { success: false, error: limited };
+
   const parsed = processArcoSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message };
@@ -217,6 +224,9 @@ export async function processArcoRequest(
 export async function exportUserData(
   subjectId: string
 ): Promise<ActionResult<{ json: string; hash: string }>> {
+  const limited = await limitWrite();
+  if (limited) return { success: false, error: limited };
+
   const valid = uuidSchema.safeParse(subjectId);
   if (!valid.success) return { success: false, error: "ID inválido" };
 

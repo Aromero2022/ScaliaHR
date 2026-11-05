@@ -4,8 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { safeError } from "@/lib/errors/safe-error";
+import { limitWrite } from "@/lib/rate-limit";
 
 export async function switchTenant(tenantId: string) {
+  const limited = await limitWrite();
+  if (limited) return { error: limited };
+
   if (!tenantId || typeof tenantId !== "string") {
     return { error: "tenant_id inválido" };
   }
@@ -49,6 +53,9 @@ export async function switchTenant(tenantId: string) {
 }
 
 export async function revokeMembership(tenantId: string) {
+  const limited = await limitWrite();
+  if (limited) return { error: limited };
+
   if (!tenantId || typeof tenantId !== "string") {
     return { error: "tenant_id inválido" };
   }

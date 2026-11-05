@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/supabase/claims";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
 import { can } from "@/lib/authz/can";
+import { eqAnyOf } from "@/lib/postgrest/filters";
 import { redirect } from "next/navigation";
 import AccessDenied from "@/components/access-denied";
 import PerformanceDashboard from "@/components/performance-dashboard";
@@ -67,7 +68,7 @@ export default async function PerformancePage() {
       .select(
         "id, author_id, subject_id, content, visibility, category, created_at, author:users!continuous_feedbacks_author_id_fkey(first_name, last_name), subject:users!continuous_feedbacks_subject_id_fkey(first_name, last_name)"
       )
-      .or(`author_id.eq.${bizUser.id},subject_id.eq.${bizUser.id}`)
+      .or(eqAnyOf(["author_id", "subject_id"], bizUser.id))
       .order("created_at", { ascending: false }),
     supabase
       .from("users")

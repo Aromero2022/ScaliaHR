@@ -5,8 +5,12 @@ import { getClaims } from "@/lib/supabase/claims";
 import { revalidatePath } from "next/cache";
 import { can } from "@/lib/authz/can";
 import { safeError } from "@/lib/errors/safe-error";
+import { limitWrite } from "@/lib/rate-limit";
 
 export async function createGoal(formData: FormData) {
+  const limited = await limitWrite();
+  if (limited) return { error: limited };
+
   const claims = await getClaims();
   if (!claims?.tenantId) return { error: "No autenticado" };
 
@@ -57,6 +61,9 @@ export async function createGoal(formData: FormData) {
 }
 
 export async function sendFeedback(formData: FormData) {
+  const limited = await limitWrite();
+  if (limited) return { error: limited };
+
   const claims = await getClaims();
   if (!claims?.tenantId) return { error: "No autenticado" };
 

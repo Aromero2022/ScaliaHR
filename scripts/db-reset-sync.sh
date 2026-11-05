@@ -107,9 +107,9 @@ SELECT 'export_user_data',
        EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
               WHERE n.nspname='public' AND p.proname='export_user_data'), NULL
 UNION ALL
-SELECT 'check_rate_limit',
+SELECT 'rate_limit_consume',
        EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-              WHERE n.nspname='public' AND p.proname='check_rate_limit'), NULL
+              WHERE n.nspname='public' AND p.proname='rate_limit_consume'), NULL
 UNION ALL
 SELECT 'write_audit_log',
        EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
@@ -154,7 +154,7 @@ WHERE n.nspname = 'public'
     'custom_access_token_hook','is_tenant_admin',
     'insert_effective_record','effective_record_at',
     'anonymize_user','export_user_data',
-    'check_rate_limit','purge_expired_rate_limits',
+    'rate_limit_consume','purge_expired_rate_limits',
     'write_audit_log','set_manager_assessment',
     'upsert_self_assessment','get_direct_reports'
   )
@@ -166,7 +166,7 @@ SELECT string_agg(fn, ', ')
 FROM unnest(ARRAY[
   'custom_access_token_hook','requesting_tenant_id','is_tenant_admin',
   'insert_effective_record','effective_record_at','anonymize_user',
-  'export_user_data','check_rate_limit','write_audit_log',
+  'export_user_data','rate_limit_consume','write_audit_log',
   'get_direct_reports','set_manager_assessment','upsert_self_assessment',
   'current_app_user_id','has_app_role','compute_arco_due_date'
 ]) AS fn

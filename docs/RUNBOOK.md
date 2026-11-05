@@ -137,7 +137,19 @@ CI los corre en cada PR, contra Supabase local:
 - `apps/worker/__tests__/integration/backup.test.ts`: export por el worker, restauración por tenant con otro tenant intacto, rechazos (archivo de otro tenant, corrupto, de otro esquema, base remota) y respaldo completo con restauración en sitio tras borrar todos los tenants.
 - Job `docker` de CI: `local:up`, export por tenant dentro del contenedor y simulacro de rollback (`local:up` dos veces y luego `local:rollback`).
 
-## 8. Diferencias que llegan en la Fase 23
+## 8. Rate limiting (D28)
+
+Un usuario que ve "Demasiados intentos" puede volver a intentarlo cuando pasa el tiempo que indica el mensaje: un minuto para login y MFA, una hora para el alta de empresa. Cada bloqueo deja una línea `rate_limit.blocked` en `docker logs scaliahr-web-1`.
+
+Si hay que desbloquear antes (por ejemplo, tras una prueba), borra las ventanas de esa acción en la base local. Las llaves son hashes, así que se borra la acción completa, para todos los usuarios:
+
+```bash
+docker exec supabase_db_ScaliaHR psql -U postgres -c "DELETE FROM public.rate_limits WHERE action IN ('login', 'login_ip')"
+```
+
+Los límites de escritura y de rutas HTTP de cada empresa se cambian en Admin Center → Límites de solicitudes.
+
+## 9. Diferencias que llegan en la Fase 23
 
 - Respaldos diarios del plan Pro y PITR para producción (D15); los exports por tenant van a almacenamiento privado y cifrado en lugar de un volumen local, y se programan a diario para tenants con licencia.
 - Rollback en Railway a la imagen anterior, y procedimiento de restauración sobre staging antes de producción.

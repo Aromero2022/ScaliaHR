@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const jar = { set: vi.fn(), delete: vi.fn() };
+// D28: the limiter has its own tests; here every attempt is allowed.
+vi.mock("@/lib/rate-limit", () => ({
+  limitWrite: vi.fn(async () => null),
+  clientIp: vi.fn(async () => "127.0.0.1"),
+  consumeRateLimit: vi.fn(async () => ({ allowed: true })),
+  rateLimitMessage: vi.fn(() => ""),
+}));
 vi.mock("next/headers", () => ({ cookies: vi.fn(async () => jar) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/supabase/claims", () => ({ getClaims: vi.fn() }));
