@@ -42,7 +42,8 @@ docker compose version >/dev/null 2>&1 || die "Docker Compose v2 (docker compose
 [ -d node_modules/pg ] || die "Dependencies are missing: run npm ci first."
 
 log "Starting Supabase local"
-supabase_cli start -x realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor
+# Services left out of Supabase local; CI also leaves out studio (D26).
+supabase_cli start -x "${SUPABASE_EXCLUDE:-realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor}"
 
 status="$(supabase_cli status --output env)"
 status_value() {

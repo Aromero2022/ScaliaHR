@@ -878,8 +878,8 @@ It never runs against a remote project.
   migrations recreate both.
 
 **Pending:** `pgboss` functions keep pg-boss's mutable `search_path`; review
-them with the Phase 9b advisors work. The first real jobs arrive with Phase 9a:
-email in PR 2 (D20), per-tenant exports in PR 4.
+them with the Phase 9b advisors work (done: D25 fixes it). The first real jobs
+arrive with Phase 9a: email in PR 2 (D20), per-tenant exports in PR 4.
 
 ---
 
@@ -1322,6 +1322,80 @@ the schema is never rolled back. Phase 9a, PR 4. Steps in `docs/RUNBOOK.md`.
 
 ---
 
+## D25 — Database Hardening: Privileges and Advisors
+
+**Decision:** app roles hold only the table privileges the app uses, the audit
+log is insert-only for them, and the Supabase advisors report nothing on the
+local database, checked in CI. Phase 9b, PR 1
+(`20261105010000_d25_db_hardening.sql`).
+
+**Privileges:**
+- `anon`, `authenticated` and `prisma_app` lose `TRUNCATE`, `TRIGGER`,
+  `REFERENCES` and `MAINTAIN` on every `public` table. `prisma_app` held them
+  through its membership in `authenticated`. Supabase grants them by default,
+  the app uses none, and each one gets around RLS:
+  - `TRUNCATE` empties a table ignoring RLS;
+  - `TRIGGER` attaches code to other users' writes;
+  - `REFERENCES` lets a foreign key pin another tenant's rows;
+  - `MAINTAIN` (PostgreSQL 17) allows `LOCK TABLE`, `VACUUM` and `REINDEX`.
+- The default privileges of `postgres` in `public` drop them too, so later
+  migrations start without them.
+- `service_role` keeps them. It bypasses RLS by design and is never used by
+  the app (D4).
+- `pgboss` and `ops` already granted nothing of the sort.
+- `db-reset-sync.sh` still recreates Supabase's default grants before pushing
+  the migrations, and this migration narrows them again.
+
+**Audit log:** `audit_logs` is written only through `write_audit_log`; direct
+inserts were already rejected. RESTRICTIVE policies already blocked UPDATE and
+DELETE, and `TRUNCATE` is now gone. Tests cover the tenant owner through the
+Data API and an app connection acting as `authenticated` with tenant claims.
+The only exception remains the ARCO suppression of D10, inside the database.
+
+**Advisors (`supabase db advisors`, security and performance):**
+- pg-boss functions get `search_path = ''`, closing the item D17 left open.
+  Their bodies are fully qualified. A pg-boss upgrade that recreates them must
+  repeat the `ALTER FUNCTION`; the check below fails until it does.
+- Covering indexes for the three pg-boss foreign keys. Their names start with
+  `d25_` because pg-boss names its own indexes `job_iN`.
+- `rate_limits` keeps no direct grants for app roles and gets an explicit
+  RESTRICTIVE deny-all policy. Access stays through `check_rate_limit()` (SECURITY DEFINER).
+- `scripts/check-advisors.mjs` (`npm run db:advisors`, and an integration test
+  in CI) fails on any finding except `unused_index`. That lint reads index usage
+  statistics, so on a freshly migrated database every index looks unused; index
+  usage is reviewed with the load-test data in a later 9b PR.
+
+**Tests:** `__tests__/integration/db-privileges.test.ts`:
+- no risky privilege for any app role in `public`, `pgboss` or `ops`;
+- a new table starts without them;
+- `TRUNCATE` refused from an app connection;
+- the audit log cannot be changed, deleted or truncated;
+- `rate_limits` is reachable only through the function;
+- the advisors check passes.
+
+---
+
+## D26 — CI: Supabase Images from the Actions Cache
+
+**Decision:** CI keeps the Supabase local images in the GitHub Actions cache
+instead of pulling them from `public.ecr.aws` on every run. ECR's anonymous rate
+limit (`toomanyrequests`) failed a run of PR #50. The cache is free and part of
+GitHub Actions (Principle 8).
+
+- `.github/actions/supabase-images`: `restore` before `supabase start` loads the
+  saved images with `docker load`. `save`, the last step of each job (also when
+  it fails), runs `docker save` on every `public.ecr.aws/supabase/*` image the
+  job pulled, only when the restore missed.
+- One cache per job, because each job pulls a different set: the reset job's
+  `supabase db diff` adds `edge-runtime`. The key holds the runner OS, the job,
+  the CLI version and a hash of the excluded services. The CLI pins every image
+  tag, so a CLI bump starts a new cache.
+- `SUPABASE_CLI_VERSION` and `SUPABASE_EXCLUDE` are set once at the top of
+  `ci.yml`. `local-up.sh` reads `SUPABASE_EXCLUDE` when set; CI also leaves
+  Studio out, and developers keep it.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.
@@ -1446,7 +1520,8 @@ application. Useful as a secondary check, not a primary audit trail.
 **Affected component:** `.github/workflows/ci.yml` — all jobs that use
 `supabase/setup-cli@v3`.
 
-**Current state:** The Supabase CLI is pinned at v2.122.1. On 2026-11-03
+**Current state:** The Supabase CLI is pinned at v2.122.1, set once in
+`SUPABASE_CLI_VERSION` at the top of `ci.yml` (D26). On 2026-11-03
 `version: latest` pulled v3.0.0, which changed how the shadow database
 used by `supabase db diff` initializes grants on the `public` schema.
 This caused the "DB reset sync test" job to report 7 unexpected GRANT/
@@ -1463,4 +1538,6 @@ features in the Supabase CLI will not be picked up automatically.
 2. If new public-schema grant statements appear, update either
    `db-reset-sync.sh` Step 2 (the `CREATE SCHEMA public` + GRANTs block)
    or `supabase/drift-allowlist.txt` to match the new shadow DB behavior.
-3. Verify all three CI jobs pass before merging the version bump.
+3. Verify all three CI jobs pass before merging the version bump. The
+   Supabase image caches are keyed by the CLI version (D26), so the first
+   run after a bump pulls the new images and caches them again.
