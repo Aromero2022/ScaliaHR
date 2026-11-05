@@ -1733,21 +1733,34 @@ fails on any debug or test route and on browser source maps. Phase 9b, PR 4.
 
 ## D33 — Dependabot and Secret Scanning
 
-**Decision:** Dependabot opens dependency updates and CI scans the whole git
-history for secrets on every PR. Both are free: Dependabot comes with GitHub,
-and gitleaks is MIT (Principle 8). Phase 9b, PR 4.
+**Decision:** Dependabot opens dependency updates, CI scans the whole git
+history for secrets on every PR, and the CI token can only read the
+repository. All of it is free: Dependabot comes with GitHub, and gitleaks is
+MIT (Principle 8). Phase 9b, PR 4.
 
 - **Dependabot (`.github/dependabot.yml`):**
   - weekly, Monday;
   - npm from the root lockfile, which covers every workspace, with minor and
-    patch updates grouped and at most 5 open PRs;
-  - GitHub Actions grouped;
+    patch updates grouped;
+  - GitHub Actions grouped, in `directories: ["/", "/.github/actions/*"]`. The
+    docs say `/` covers `.github/workflows` and a root `action.yml` only, and
+    that `directories` accepts globs, so the glob adds the local composite
+    actions (`supabase-images` uses `actions/cache`). The file passes the
+    SchemaStore schema for Dependabot v2;
+  - at most one open PR per ecosystem (`open-pull-requests-limit: 1`). They
+    are merged between loops, never while a loop PR is open (CLAUDE.md,
+    "Forma de trabajo");
   - `pg-boss` is ignored: migration D17 creates its schema for this exact
     version, so an upgrade needs a new migration.
   - Its PRs run the same CI as any other.
+- **CI token:** `ci.yml` sets `permissions: contents: read` for `GITHUB_TOKEN`
+  at the workflow root. No job needs more: checkout only reads, and the caches
+  use the runner's own token.
 - **Secret scan:** job "Secret scan" in `ci.yml` runs gitleaks v8.30.1, pinned
   by image digest, over the full history (`fetch-depth: 0`, since a secret
   removed later is still leaked).
+  - Its checkout uses `persist-credentials: false`: the gitleaks container
+    mounts the checkout, `.git/config` included, and must not see the token.
   - `.gitleaks.toml` keeps the default rules and allows only Supabase local's
     public demo JWTs (issuer `supabase-demo`, the same in every local stack).
   - `npm run check:secrets` runs the same scan locally.
@@ -1760,6 +1773,8 @@ and gitleaks is MIT (Principle 8). Phase 9b, PR 4.
   digest or `SUPABASE_CLI_VERSION` in `ci.yml` either. Those move by hand.
 - GitHub's own secret scanning and push protection are repository settings,
   outside this repo; turning them on is the owner's call.
+- Ignoring `pg-boss` also silences its security updates. It is checked by hand
+  with `npm audit` in every phase.
 
 ---
 

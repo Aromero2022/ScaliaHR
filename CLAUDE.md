@@ -24,6 +24,10 @@
 - Tests: Vitest en `apps/web/__tests__/`
 - Migraciones: `supabase/migrations/` (orden cronologico en el nombre)
 
+## Forma de trabajo
+
+- Los PRs de Dependabot se revisan como cualquier otro y solo se mergean entre loops, nunca con un PR de loop abierto; si CI falla, se investiga igual que un PR propio.
+
 # CLAUDE.md
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
