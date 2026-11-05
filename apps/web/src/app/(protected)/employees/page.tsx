@@ -9,15 +9,17 @@ import AccessDenied from "@/components/access-denied";
 import { can } from "@/lib/authz/can";
 import { Suspense } from "react";
 import { safeError } from "@/lib/errors/safe-error";
+import { ilikeAnyOf } from "@/lib/postgrest/filters";
+import { EmployeeListParams } from "@/lib/validations/employees";
 
 const PAGE_SIZE = 20;
 
 export default async function EmployeesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const params = await searchParams;
+  const { q: search, page } = EmployeeListParams.parse(await searchParams);
   const claims = await requireAuth();
   if (!claims.tenantId) redirect("/dashboard");
 
@@ -36,8 +38,6 @@ export default async function EmployeesPage({
   const { allowed } = await can(bizUser.id, "ec.view_org_chart", "view");
   if (!allowed) return <AccessDenied />;
 
-  const search = params.q?.trim() ?? "";
-  const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
@@ -53,9 +53,7 @@ export default async function EmployeesPage({
     .range(from, to);
 
   if (search) {
-    query = query.or(
-      `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,employee_id.ilike.%${search}%`
-    );
+    query = query.or(ilikeAnyOf(["first_name", "last_name", "email", "employee_id"], search));
   }
 
   const { data: employees, count, error: queryError } = await query;
