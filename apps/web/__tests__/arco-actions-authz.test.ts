@@ -6,6 +6,8 @@ const mockGetUser = vi.fn();
 const mockFrom = vi.fn();
 const mockRpc = vi.fn();
 
+// D28: the limiter has its own tests; here every attempt is allowed.
+vi.mock("@/lib/rate-limit", () => ({ limitWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({
     auth: { getUser: mockGetUser },

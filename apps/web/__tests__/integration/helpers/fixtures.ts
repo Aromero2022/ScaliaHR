@@ -140,6 +140,13 @@ function checkLiteral(col: ColumnMeta): string | undefined {
   return undefined;
 }
 
+// Integer columns default to 1, or to a CHECK's lower bound when that is higher
+// (tenant_rate_limits.window_seconds >= 10, D28).
+function checkLowerBound(col: ColumnMeta): number {
+  const bounds = col.checkDefs.flatMap((def) => [...def.matchAll(/>=\s*\(?(\d+)/g)].map((m) => Number(m[1])));
+  return Math.max(1, ...bounds);
+}
+
 // Values are JSON-compatible so the same row can go to PostgREST and,
 // through explicit casts, to pg.
 export function valueForColumn(col: ColumnMeta): unknown {
@@ -159,6 +166,7 @@ export function valueForColumn(col: ColumnMeta): unknown {
     case "int2":
     case "int4":
     case "int8":
+      return checkLowerBound(col);
     case "numeric":
     case "float4":
     case "float8":

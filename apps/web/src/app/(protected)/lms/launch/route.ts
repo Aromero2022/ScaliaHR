@@ -3,8 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
 import * as moodle from "@/lib/lms/moodle-client";
+import { limitApi } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
+  const limited = await limitApi();
+  if (limited) return limited;
+
   const origin = request.nextUrl.origin;
   const supabase = await createClient();
   // Verified JWT claims: tenant_id is written at the claim root by the hook.

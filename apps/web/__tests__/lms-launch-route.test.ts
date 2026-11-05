@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// D28: the limiter has its own tests; here every request is allowed.
+vi.mock("@/lib/rate-limit", () => ({ limitApi: vi.fn(async () => null) }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));

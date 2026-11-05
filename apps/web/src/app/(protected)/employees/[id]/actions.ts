@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { writeAuditLog } from "@/lib/audit/log";
 import { can } from "@/lib/authz/can";
 import { safeError } from "@/lib/errors/safe-error";
+import { limitWrite } from "@/lib/rate-limit";
 
 const uuidSchema = z.string().uuid();
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD requerido");
@@ -50,6 +51,9 @@ const jobChangeSchema = z.object({
 export async function createJobChange(
   input: z.input<typeof jobChangeSchema>
 ): Promise<ActionResult<{ id: string }>> {
+  const limited = await limitWrite();
+  if (limited) return { success: false, error: limited };
+
   const parsed = jobChangeSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message };
@@ -110,6 +114,9 @@ const compensationSchema = z.object({
 export async function createCompensationChange(
   input: z.input<typeof compensationSchema>
 ): Promise<ActionResult<{ id: string }>> {
+  const limited = await limitWrite();
+  if (limited) return { success: false, error: limited };
+
   const parsed = compensationSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message };
@@ -186,6 +193,9 @@ const personalInfoSchema = z.object({
 export async function createPersonalInfoChange(
   input: z.input<typeof personalInfoSchema>
 ): Promise<ActionResult<{ id: string }>> {
+  const limited = await limitWrite();
+  if (limited) return { success: false, error: limited };
+
   const parsed = personalInfoSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message };

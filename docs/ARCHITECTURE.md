@@ -1360,6 +1360,7 @@ The only exception remains the ARCO suppression of D10, inside the database.
   `d25_` because pg-boss names its own indexes `job_iN`.
 - `rate_limits` keeps no direct grants for app roles and gets an explicit
   RESTRICTIVE deny-all policy. Access stays through `check_rate_limit()` (SECURITY DEFINER).
+  D28 replaces it with `rate_limit_consume()`, which only `prisma_app` can call.
 - `scripts/check-advisors.mjs` (`npm run db:advisors`, and an integration test
   in CI) fails on any finding except `unused_index`. That lint reads index usage
   statistics, so on a freshly migrated database every index looks unused; index
@@ -1447,9 +1448,10 @@ into it in Phase 23. Phase 9b, PR 2.
   type and Next.js's digest.
 - `app/error.tsx` and `app/global-error.tsx` show a generic message and the
   digest; never the message or the stack.
-- Login and MFA run in the browser against Supabase Auth.
-  `lib/auth/messages.ts` maps their errors to generic Spanish messages, telling
-  only 429 (too many attempts) apart from "wrong credentials or code".
+- Login and MFA ran in the browser against Supabase Auth; since D28 they run
+  in Server Actions. `lib/auth/messages.ts` maps their errors to generic
+  Spanish messages, telling only 429 (too many attempts) apart from "wrong
+  credentials or code".
 - Zod issue messages are still returned: they are our own validation texts.
 
 **Tests:**
@@ -1471,10 +1473,136 @@ into it in Phase 23. Phase 9b, PR 2.
 - Audit-log diffs keep the changed values (salary, personal fields) as the
   record of the change; masking them for readers is part of the Phase 11
   sensitive-data work.
-- The employees search builds a PostgREST `or()` filter from the raw search
-  text, so commas or parentheses in it can add conditions. RLS still limits
-  the rows to the user's tenant. It is fixed with the input validation of the
-  hardening PR (Phase 9b).
+- The employees search built a PostgREST `or()` filter from the raw search
+  text, so commas or parentheses in it could add conditions (RLS still limited
+  the rows to the user's tenant). Fixed in D28.
+
+---
+
+## D28 — Rate Limiting
+
+**Decision:** every attempt to sign in, verify MFA, create a tenant, run a
+Server Action or call an HTTP route spends a token of a Postgres-native limiter
+first. The web server calls it through `prisma_app`, so it works before a
+session exists and no Data API client can drain or reset a bucket. Login, MFA
+and tenant creation fail closed; the rest fail open. Phase 9b, PR 3. No new
+service: the limiter is a table and a function in the database (Principle 8).
+
+**Database (`20261105020000_d28_rate_limiting.sql`):**
+- `rate_limit_consume(key, action, max, window, tenant_id)` spends one token
+  in a fixed window per (key, action) and returns 0 when allowed, or the
+  seconds until the window resets (the Retry-After value). With a tenant id, the
+  tenant's own limit for that action replaces the default. About one call in a
+  hundred deletes windows older than a day, the longest window allowed.
+- EXECUTE only for `prisma_app`: revoked from `PUBLIC`, `anon`, `authenticated`
+  and `service_role`, which Supabase grants by default.
+- `check_rate_limit()` is dropped. It answered only allowed/denied and any
+  signed-in user could call it with any key. Expand/contract: no image called
+  it (`lib/rate-limit.ts` had no callers).
+- `tenant_rate_limits` (tenant, action, max, window): only `write` and `api`,
+  with bounds (1–600 tokens, 10–3600 s) so a tenant cannot switch limits off.
+  ENABLE + FORCE RLS; tenant admins read, insert and update their own tenant;
+  no DELETE policy. It has a `tenant_id`, so tenant exports include it (D23).
+
+**Policies (`lib/rate-limit.ts`):**
+
+| Bucket | Key | Limit | If the limiter fails |
+|--------|-----|-------|----------------------|
+| `login_ip` | client IP | 20 / 60 s | refuse |
+| `login` | requested tenant + email | 5 / 60 s | refuse |
+| `mfa_verify` | tenant + user | 5 / 60 s | refuse |
+| `tenant_create` | user | 3 / 3600 s | refuse |
+| `write` | tenant + user (IP before a session) | 30 / 60 s, per tenant | allow |
+| `api` | tenant + user (IP before a session) | 30 / 60 s, per tenant | allow |
+
+- Keys are SHA-256 hashes of the bucket name and its parts: `rate_limits`
+  stores no email or IP.
+- The client IP is the last `X-Forwarded-For` hop, the one the proxy in front
+  of the app writes. Only `login_ip` uses it; the account and user buckets do
+  not depend on the IP.
+- A refused Server Action returns "Demasiados intentos. Intenta de nuevo en N
+  segundos." Next.js does not let a Server Action set its HTTP status. HTTP
+  routes answer 429 with `Retry-After`. Each refusal writes a
+  `rate_limit.blocked` JSON line (D27).
+- When a fail-closed check cannot reach the limiter, the answer is "No se pudo
+  procesar la solicitud" with a 30 s wait, and the error is reported.
+
+**Where:**
+- Login is the `signIn` Server Action. It checks `login_ip`, then `login`,
+  before Supabase Auth sees the password. It signs in on the server (session
+  cookies set there) and writes `AUTH_LOGIN` itself. A failed sign-in writes an
+  `auth.login_failed` JSON line with the status only.
+- MFA verification is the `verifyMfa` Server Action: zod on the factor id and
+  the 6-digit code, the `mfa_verify` bucket, `challengeAndVerify` on the server,
+  and `MFA_VERIFY` / `MFA_VERIFY_FAILED` written by the server.
+- `createTenant` spends a `tenant_create` token after the user check.
+- Every other exported Server Action starts with `limitWrite()` (ARCO,
+  employee changes, performance, skills hub, tenant switch and revoke, company
+  code, MFA enrollment audit, Admin Center). `/lms/launch` starts with
+  `limitApi()`.
+- `/api/health` is not limited: it is a healthcheck, and the limiter would cost
+  the same database round trip as the check it protects.
+- Admin Center shows "Límites de solicitudes" to `admin.manage_config:edit`.
+  `updateTenantRateLimit` validates with zod (same bounds as the table),
+  requires AAL2, upserts under RLS and writes `RATE_LIMIT_UPDATED`. Login, MFA
+  and tenant creation keep the platform's limits: they protect authentication
+  itself, and before a session the tenant is not verified.
+
+**Supabase Auth native limits:** `[auth.rate_limit]` in `supabase/config.toml`
+writes down the values the hosted project must carry (email 2/h,
+token_refresh 150, sign_in_sign_ups 30, token_verifications 30 per 5 min…),
+so a CLI upgrade cannot change them silently. Locally GoTrue receives them
+but does not enforce the per-IP ones: the CLI sets no rate-limit header, and
+without one GoTrue skips them. Checked: 170 wrong passwords in a row against
+local Auth got no 429. Locally, the app's limiter is the one that acts.
+
+**Employees search filter:** `lib/postgrest/filters.ts` builds `.or()` values
+inside double quotes (with `\` and `"` escaped), where `,` `.` `:` `(` `)` are
+plain text, and escapes the LIKE wildcards. `*` is dropped, because PostgREST
+turns it into `%`. The search text is validated with zod (trimmed, at most 100
+characters, page ≥ 1). `performance/page.tsx` uses the same builder. A static
+test fails on any `.or()`, `.filter()` or `.not()` built from a template
+literal or string concatenation.
+
+**Tests:**
+- unit: policies, hashed keys, fail-closed vs fail-open, last-hop IP, messages,
+  429 + Retry-After; filter builders and the search schema; the Admin Center
+  action (bounds, AAL2, permission, upsert, audit);
+- static: every exported Server Action calls a limiter, every route handler
+  calls `limitApi()` (health excepted), no raw PostgREST filters;
+- integration, against Supabase local:
+  - `rate_limit_consume` as `prisma_app`, window reset and tenant overrides;
+  - the function cannot be called from the Data API, anonymous or signed in;
+  - RLS and bounds of `tenant_rate_limits`;
+  - the real `signIn` and `verifyMfa` against Supabase Auth: the sixth
+    attempt is refused even with the right password or code, one IP is limited
+    across accounts, login fails closed when the limiter is unreachable, and
+    the login is audited on the server;
+  - the fourth tenant creation in an hour is refused;
+  - `"a,id.eq.1)("` returns no row and no error, where the old filter ran the
+    injected `id.eq.1`.
+
+**Accepted for now:**
+- The Supabase Auth API stays public (the browser client needs it), so a
+  client calling it directly with the anon key skips the app's limiter. Only
+  the native per-IP limits protect that path, and they act only on the hosted
+  project. The Auth hooks that would close it (password and MFA verification
+  attempts) need a paid plan, so they are not used (Principle 8).
+- Since login and MFA run on the server, hosted Supabase Auth would count every
+  attempt against the server's IP. Phase 23 must forward the client IP with
+  `Sb-Forwarded-For` (secret API key, `security_sb_forwarded_for_enabled`),
+  or all users share one bucket.
+- Without a proxy, `X-Forwarded-For` comes from the client, so the per-IP
+  bucket is a first barrier only. The account bucket is not affected.
+- The account bucket lets an attacker block a victim's login while they keep
+  sending wrong passwords; the victim can sign in again one window (60 s) after
+  the attacker stops.
+- Fixed windows allow up to twice the limit across a window boundary.
+- There is no password-reset flow yet (it arrives with Resend in Phase 23). When
+  it is built, its Server Action is caught by the coverage test until it spends
+  a token. Supabase Auth's `/recover` keeps its native per-user and email limits.
+- Each limited call adds one database round trip; `write` and `api` also read
+  the session claims.
 
 ---
 
@@ -1538,7 +1666,15 @@ the Phase 11 RBP CRUD must call `writeAuditLog()` with the appropriate action
 
 ## Known Risk — Login Audit Depends on the Client
 
-**Status:** Accepted (temporary). Registered 2026-11-03.
+**Status:** Partially resolved by D28 (2026-11-05). Login and MFA verification
+now run in Server Actions: `AUTH_LOGIN`, `MFA_VERIFY` and `MFA_VERIFY_FAILED`
+are written by the server, and a failed login writes an `auth.login_failed`
+JSON line (D27). Gap 1 remains for the audit table: a failed login has no
+tenant or actor, so it is a log line, not an audit entry. Gap 2 remains: direct
+calls to the Supabase Auth API leave no app audit. MFA enrollment still runs in
+the browser. The original analysis follows.
+
+**Status at registration:** Accepted (temporary). Registered 2026-11-03.
 
 **Affected component:** Login page (`apps/web/src/app/login/page.tsx`),
 MFA pages (`apps/web/src/app/(protected)/mfa/enroll/page.tsx`,

@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { logLoginEvent, rememberCompanyCode } from "./actions";
-import { signInErrorMessage } from "@/lib/auth/messages";
+import { rememberCompanyCode, signIn } from "./actions";
 
 export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolean }) {
   const [companyCode, setCompanyCode] = useState("");
@@ -13,7 +11,6 @@ export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolea
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,16 +26,12 @@ export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolea
       }
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const result = await signIn({ email, password }).catch(() => ({ error: "No se pudo iniciar sesión. Intenta de nuevo." }));
 
-    if (error) {
-      setError(signInErrorMessage(error));
+    if (result.error) {
+      setError(result.error);
       setLoading(false);
     } else {
-      await logLoginEvent().catch(() => {});
       router.push("/dashboard");
       router.refresh();
     }

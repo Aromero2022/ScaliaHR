@@ -55,6 +55,10 @@ ROLE_SQL
   # email_enqueuer (migration D20) gets a test password the same way.
   psql "$_db_url" -v ON_ERROR_STOP=1 -q -c "ALTER ROLE email_enqueuer WITH PASSWORD 'enqueuer_test_pw'"
   export EMAIL_ENQUEUER_TEST_DB_URL="${_db_url/postgres:postgres/email_enqueuer:enqueuer_test_pw}"
+
+  # prisma_app is the role the web server calls the rate limiter with (D28).
+  psql "$_db_url" -v ON_ERROR_STOP=1 -q -c "ALTER ROLE prisma_app WITH PASSWORD 'prisma_app_test_pw'"
+  export PRISMA_APP_TEST_DB_URL="${_db_url/postgres:postgres/prisma_app:prisma_app_test_pw}"
 fi
 unset _db_url
 

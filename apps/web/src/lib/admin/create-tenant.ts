@@ -5,6 +5,7 @@ import { adminPrisma, Prisma } from "@/lib/db/admin-client";
 import { createTenantSchema, type CreateTenantInput } from "@/lib/validations/tenant";
 import { revalidatePath } from "next/cache";
 import { safeError } from "@/lib/errors/safe-error";
+import { consumeRateLimit, rateLimitMessage } from "@/lib/rate-limit";
 
 export async function createTenant(input: CreateTenantInput) {
   const supabase = await createClient();
@@ -13,6 +14,10 @@ export async function createTenant(input: CreateTenantInput) {
   } = await supabase.auth.getUser();
 
   if (!user) return { error: "No autenticado" };
+
+  // D28: fixed platform limit per account, fail-closed.
+  const limited = await consumeRateLimit("tenant_create", [user.id]);
+  if (!limited.allowed) return { error: rateLimitMessage(limited) };
 
   const parsed = createTenantSchema.safeParse(input);
   if (!parsed.success) {

@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { can } from "@/lib/authz/can";
 import { writeAuditLog } from "@/lib/audit/log";
 import { safeError } from "@/lib/errors/safe-error";
+import { limitWrite } from "@/lib/rate-limit";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -61,6 +62,9 @@ async function getAuthContext() {
 export async function updateSelfAssessment(
   input: unknown
 ): Promise<ActionResult> {
+  const limited = await limitWrite();
+  if (limited) return { error: limited };
+
   const parsed = SelfAssessmentSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -87,6 +91,9 @@ export async function updateSelfAssessment(
 export async function setManagerAssessment(
   input: unknown
 ): Promise<ActionResult> {
+  const limited = await limitWrite();
+  if (limited) return { error: limited };
+
   const parsed = ManagerAssessmentSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -112,6 +119,9 @@ export async function setManagerAssessment(
 }
 
 export async function createSkill(input: unknown): Promise<ActionResult> {
+  const limited = await limitWrite();
+  if (limited) return { error: limited };
+
   const parsed = CreateSkillSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -151,6 +161,9 @@ export async function createSkill(input: unknown): Promise<ActionResult> {
 }
 
 export async function updateSkill(input: unknown): Promise<ActionResult> {
+  const limited = await limitWrite();
+  if (limited) return { error: limited };
+
   const parsed = UpdateSkillSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -215,6 +228,9 @@ export async function updateSkill(input: unknown): Promise<ActionResult> {
 export async function updateJobRoleSkill(
   input: unknown
 ): Promise<ActionResult> {
+  const limited = await limitWrite();
+  if (limited) return { error: limited };
+
   const parsed = JobRoleSkillSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 

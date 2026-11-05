@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeNextPath } from "@/lib/auth/mfa-policy";
-import { logMfaVerify, logMfaVerifyFailed } from "../actions";
-import { mfaErrorMessage } from "@/lib/auth/messages";
+import { verifyMfa } from "../actions";
 
 export default function MfaVerifyPage() {
   const [factorId, setFactorId] = useState<string | null>(null);
@@ -35,28 +34,15 @@ export default function MfaVerifyPage() {
     setError(null);
     setLoading(true);
 
-    const { data: challenge, error: cErr } =
-      await supabase.auth.mfa.challenge({ factorId });
-    if (cErr) {
-      setError(mfaErrorMessage(cErr));
+    const result = await verifyMfa({ factorId, code }).catch(() => ({
+      error: "No se pudo completar la verificación. Intenta de nuevo.",
+    }));
+    if (result.error) {
+      setError(result.error);
       setLoading(false);
       return;
     }
 
-    const { error: vErr } = await supabase.auth.mfa.verify({
-      factorId,
-      challengeId: challenge.id,
-      code,
-    });
-
-    if (vErr) {
-      await logMfaVerifyFailed().catch(() => {});
-      setError(mfaErrorMessage(vErr));
-      setLoading(false);
-      return;
-    }
-
-    await logMfaVerify().catch(() => {});
     router.push(safeNextPath(searchParams.get("next")));
     router.refresh();
   }
