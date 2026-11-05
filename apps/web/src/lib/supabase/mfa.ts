@@ -1,4 +1,5 @@
 import { createClient } from "./server";
+import { safeError } from "@/lib/errors/safe-error";
 
 export async function enrollTotp() {
   const supabase = await createClient();
@@ -7,7 +8,7 @@ export async function enrollTotp() {
     friendlyName: "Authenticator App",
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: await safeError("mfa.enrollTotp", error) };
   return { factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret, uri: data.totp.uri };
 }
 
@@ -16,7 +17,7 @@ export async function verifyTotp(factorId: string, code: string) {
   const { data: challenge, error: challengeError } =
     await supabase.auth.mfa.challenge({ factorId });
 
-  if (challengeError) return { error: challengeError.message };
+  if (challengeError) return { error: await safeError("mfa.verifyTotp", challengeError) };
 
   const { error: verifyError } = await supabase.auth.mfa.verify({
     factorId,
@@ -24,7 +25,7 @@ export async function verifyTotp(factorId: string, code: string) {
     code,
   });
 
-  if (verifyError) return { error: verifyError.message };
+  if (verifyError) return { error: await safeError("mfa.verifyTotp", verifyError) };
   return { success: true };
 }
 

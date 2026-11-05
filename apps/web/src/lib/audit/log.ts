@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { headers } from "next/headers";
+import { reportError } from "@/lib/log/report";
+import { requestContext } from "@/lib/log/request-context";
 
 type AuditEntry = {
   tenantId: string;
@@ -29,7 +31,7 @@ export async function writeAuditLog(entry: AuditEntry): Promise<string | null> {
   });
 
   if (error) {
-    console.error("[audit] write_audit_log failed:", error.message);
+    reportError("audit.write_failed", error, await requestContext(), { action: entry.action });
     return null;
   }
 

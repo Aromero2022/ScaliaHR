@@ -1,14 +1,15 @@
 import { loadConfig } from "./config.js";
+import { log } from "./log.js";
 import { startWorker } from "./worker.js";
 
 const boss = await startWorker(loadConfig());
-console.log("[worker] started");
+log("info", "worker.started");
 
 let stopping = false;
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   if (stopping) return;
   stopping = true;
-  console.log(`[worker] ${signal} received, finishing active jobs`);
+  log("info", "worker.stopping", { signal });
   await boss.stop({ graceful: true, timeout: 30_000 });
   process.exit(0);
 }

@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { appRoleFromClaims, aalFromClaims, mfaStepFor, requiresAal2 } from "@/lib/auth/mfa-policy";
 import { COMPANY_CODE_COOKIE, requestedTenant, tenantAccessAllowed, tenantNotFound } from "@/lib/tenant/host";
+import { TENANT_ID_HEADER } from "@/lib/log/request-context";
 import { supabaseServerTarget } from "./server-url";
 
 const PUBLIC_PATHS = ["/login", "/auth", "/signup"];
@@ -51,6 +52,16 @@ export async function updateSession(request: NextRequest) {
   if (user) {
     const { data } = await supabase.auth.getClaims();
     const claims = data?.claims ?? null;
+
+    // D27: logs downstream carry the token's tenant. NextResponse.next() copies
+    // the request headers when it is created, so rebuild it (keeping any
+    // refreshed session cookies) after setting the header.
+    if (typeof claims?.tenant_id === "string" && claims.tenant_id !== "") {
+      request.headers.set(TENANT_ID_HEADER, claims.tenant_id);
+      const forwarded = NextResponse.next({ request });
+      supabaseResponse.cookies.getAll().forEach((cookie) => forwarded.cookies.set(cookie));
+      supabaseResponse = forwarded;
+    }
 
     // D21: the tenant of the subdomain or company code must be the token's
     // tenant and active; every refusal gets the same 404. Anonymous visitors

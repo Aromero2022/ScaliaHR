@@ -385,7 +385,7 @@ Contratar PITR y encender su export por tenant:
 
 ## Tabla de cumplimiento
 
-> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1), con main en 5908222 (PR #48, Fase 9a PR 2: correo y tenant por subdominio, D20 y D21), con main en 3ca8d5d (PR #49, Fase 9a PR 3: migraciones seguras, D22), con main en b101eb7 (PR #50, Fase 9a PR 4: respaldos y runbook, D23 y D24) y con la rama del PR 1 de la Fase 9b (privilegios de la base y advisors, D25 y D26). Cada fase, al cerrarse, actualiza el estado de sus filas.
+> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1), con main en 5908222 (PR #48, Fase 9a PR 2: correo y tenant por subdominio, D20 y D21), con main en 3ca8d5d (PR #49, Fase 9a PR 3: migraciones seguras, D22), con main en b101eb7 (PR #50, Fase 9a PR 4: respaldos y runbook, D23 y D24), con main en c28be3f (PR #51, Fase 9b PR 1: privilegios de la base y advisors, D25 y D26) y con la rama del PR 2 de la Fase 9b (errores seguros y logs JSON, D27). Cada fase, al cerrarse, actualiza el estado de sus filas.
 
 | Norma o control | Dónde se cumple | Estado |
 |-----------------|-----------------|--------|
@@ -394,10 +394,10 @@ Contratar PITR y encender su export por tenant:
 | Rate limiting (429) | 9b | Pendiente: el código existe, falta conectarlo |
 | CSP estricta | 9b | Pendiente: la CSP todavía permite 'unsafe-inline' y 'unsafe-eval' en scripts |
 | Validación de entradas (zod) | 9b | Parcial: ARCO, empleados, skills-hub, `createTenant`, los trabajos de correo (al encolar y en el worker, D20), el código de empresa y la configuración del worker (D21) validan con zod; faltan `performance/actions.ts` y `lib/tenant/actions.ts` |
-| Errores sin exponer detalles | 9b | Pendiente: 16 respuestas de Server Actions devuelven `error.message` de la base y no hay `error.tsx`. `/api/health` (D17) y el 404 de tenant (D21) ya responden sin detalles |
+| Errores sin exponer detalles | 9b (D27) | Cumple: ningún mensaje de la base, de Supabase Auth ni de servicios llega al usuario; las Server Actions y páginas pasan por `safeError()` (mensaje genérico con el request id), login y MFA usan mensajes genéricos, y `error.tsx`/`global-error.tsx` muestran solo un texto genérico y el digest. Un test estático falla ante cualquier `error.message` hacia el usuario |
 | Sin rutas admin/debug expuestas | 9b + Admin Center con RBP y MFA | Parcial: no hay rutas de debug y Admin Center ya exige `can()` y AAL2; falta el test de 9b sobre el build de producción |
-| Logging y monitoreo | 9a (`/api/health`) + 9b (logs JSON) + 23 (Sentry) | Parcial: `/api/health` y el HEALTHCHECK de las imágenes existen (D17); faltan logs JSON (9b) y Sentry y uptime (23) |
-| Bitácora inmutable y sin datos sensibles | 9b | Parcial: solo se escribe vía `write_audit_log`, UPDATE/DELETE están bloqueados por políticas RESTRICTIVE y TRUNCATE quedó revocado (D25), con tests desde la Data API y desde una conexión de la app; falta redactar datos sensibles en logs (PR de errores de la 9b). `anonymize_user` (D10) reemplaza datos personales por ARCO |
+| Logging y monitoreo | 9a (`/api/health`) + 9b (logs JSON, D27) + 23 (Sentry) | Parcial: `/api/health` y el HEALTHCHECK de las imágenes existen (D17); web y worker escriben logs JSON con request id, tenant id y redacción de datos sensibles, y los errores pasan por un adaptador de reporte (D27), probado con un error forzado. Faltan Sentry en el mismo adaptador y uptime (23) |
+| Bitácora inmutable y sin datos sensibles | 9b + 11 | Parcial: solo se escribe vía `write_audit_log`, UPDATE/DELETE están bloqueados por políticas RESTRICTIVE y TRUNCATE quedó revocado (D25), con tests desde la Data API y desde una conexión de la app; los logs de la app redactan contraseñas, tokens, CURP, RFC, NSS, CLABE y salario (D27). Los `diff` de la bitácora guardan los valores cambiados (salario, datos personales) como registro del cambio; su enmascaramiento para quien los lee va con los datos sensibles de la Fase 11. `anonymize_user` (D10) reemplaza datos personales por ARCO |
 | Uploads seguros (SVG, logos, íconos) | 11 | Pendiente: hoy no hay uploads |
 | Datos sensibles enmascarados | 11 | Pendiente: CURP, RFC y salario se muestran completos a quien pasa RLS (D6); NSS y CLABE llegan en la Fase 14 |
 | WCAG 2.2 AA (contraste, teclado, zoom, táctil) | 9c + validación de colores en 11 | Pendiente |

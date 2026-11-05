@@ -8,6 +8,7 @@ import SearchInput from "@/components/search-input";
 import AccessDenied from "@/components/access-denied";
 import { can } from "@/lib/authz/can";
 import { Suspense } from "react";
+import { safeError } from "@/lib/errors/safe-error";
 
 const PAGE_SIZE = 20;
 
@@ -60,7 +61,7 @@ export default async function EmployeesPage({
   const { data: employees, count, error: queryError } = await query;
 
   if (queryError) {
-    console.error("[/employees] PostgREST query error:", queryError.message, queryError.details);
+    const message = await safeError("employees.list", queryError, "No se pudo cargar la lista de empleados.");
     return (
       <div className="space-y-6">
         <div>
@@ -68,7 +69,7 @@ export default async function EmployeesPage({
         </div>
         <div className="rounded-xl border border-red-800 bg-red-950/50 p-6 text-center">
           <p className="text-sm text-red-300">
-            Error al cargar empleados: {queryError.message}
+            {message}
           </p>
         </div>
       </div>

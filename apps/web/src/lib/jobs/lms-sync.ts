@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import * as moodle from "@/lib/lms/moodle-client";
+import { reportError } from "@/lib/log/report";
+import { requestContext } from "@/lib/log/request-context";
 
 type SyncResult = {
   provisioned: number;
@@ -89,8 +91,9 @@ export async function syncLmsUsers(tenantId: string): Promise<SyncResult> {
         await moodle.updateUser(moodleUserId, { suspended: 0 });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      result.errors.push(`User ${emp.id}: ${msg}`);
+      // D27: the Moodle or database detail goes to the logs, not to the caller.
+      reportError("lms.sync_user_failed", err, { ...(await requestContext()), tenantId }, { userId: emp.id });
+      result.errors.push(`User ${emp.id}: sync failed`);
     }
   }
 

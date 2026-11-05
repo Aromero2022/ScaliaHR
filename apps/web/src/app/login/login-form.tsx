@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { logLoginEvent, rememberCompanyCode } from "./actions";
+import { signInErrorMessage } from "@/lib/auth/messages";
 
 export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolean }) {
   const [companyCode, setCompanyCode] = useState("");
@@ -34,7 +35,7 @@ export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolea
     });
 
     if (error) {
-      setError(error.message);
+      setError(signInErrorMessage(error));
       setLoading(false);
     } else {
       await logLoginEvent().catch(() => {});

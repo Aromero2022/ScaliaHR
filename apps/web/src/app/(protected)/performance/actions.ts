@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getClaims } from "@/lib/supabase/claims";
 import { revalidatePath } from "next/cache";
 import { can } from "@/lib/authz/can";
+import { safeError } from "@/lib/errors/safe-error";
 
 export async function createGoal(formData: FormData) {
   const claims = await getClaims();
@@ -49,7 +50,7 @@ export async function createGoal(formData: FormData) {
     period_end: periodEnd,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: await safeError("performance.createGoal", error) };
 
   revalidatePath("/performance");
   return { success: true };
@@ -89,7 +90,7 @@ export async function sendFeedback(formData: FormData) {
     category: category || "GENERAL",
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: await safeError("performance.sendFeedback", error) };
 
   revalidatePath("/performance");
   return { success: true };

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/tenant-client";
+import { log } from "@/lib/log/logger";
 
 // Public on purpose: container healthchecks and uptime probes call it without a
 // session, so it is excluded from the middleware matcher and reveals nothing
@@ -22,7 +23,7 @@ async function checkDatabase(): Promise<CheckStatus> {
     return "ok";
   } catch (error) {
     // Only the error class: driver messages can carry hosts or connection details.
-    console.error(`[health] database check failed: ${error instanceof Error ? error.name : "unknown"}`);
+    log("error", "health.database_failed", { errorName: error instanceof Error ? error.name : "unknown" });
     return "error";
   } finally {
     clearTimeout(timer);

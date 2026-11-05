@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { adminPrisma, Prisma } from "@/lib/db/admin-client";
 import { createTenantSchema, type CreateTenantInput } from "@/lib/validations/tenant";
 import { revalidatePath } from "next/cache";
+import { safeError } from "@/lib/errors/safe-error";
 
 export async function createTenant(input: CreateTenantInput) {
   const supabase = await createClient();
@@ -205,6 +206,6 @@ export async function createTenant(input: CreateTenantInput) {
       return { error: "Ya existe una organización con ese slug" };
     }
 
-    return { error: message };
+    return { error: await safeError("tenant.create", err) };
   }
 }
