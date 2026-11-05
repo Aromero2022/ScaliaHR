@@ -16,7 +16,11 @@
     "db:sync": "turbo db:sync",
     "check:forbidden": "bash scripts/check-forbidden.sh",
     "local:up": "bash scripts/local-up.sh",
-    "local:down": "bash scripts/local-down.sh"
+    "local:down": "bash scripts/local-down.sh",
+    "local:rollback": "bash scripts/local-up.sh --rollback",
+    "backup:full": "bash scripts/backup-full.sh",
+    "restore:full": "bash scripts/restore-full.sh",
+    "restore:tenant": "node scripts/restore-tenant.mjs"
   },
   "engines": {
     "node": ">=22.12.0"

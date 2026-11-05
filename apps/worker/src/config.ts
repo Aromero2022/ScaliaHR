@@ -10,6 +10,8 @@ const EnvSchema = z.object({
   EMAIL_FROM: z.email(),
   // Origin of the web app: links in emails must stay on it or its tenant subdomains.
   APP_BASE_URL: z.url({ protocol: /^https?$/ }),
+  // Where per-tenant exports are written (D23): a volume locally, storage in Phase 23.
+  BACKUP_DIR: z.string().startsWith("/", "must be an absolute path"),
 });
 
 export interface WorkerConfig {
@@ -19,6 +21,7 @@ export interface WorkerConfig {
     from: string;
     appBaseUrl: string;
   };
+  backupDir: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
@@ -38,5 +41,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
       from: data.EMAIL_FROM,
       appBaseUrl: data.APP_BASE_URL,
     },
+    backupDir: data.BACKUP_DIR,
   };
 }

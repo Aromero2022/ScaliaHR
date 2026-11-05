@@ -58,6 +58,7 @@ describe("worker against the local queue (D17)", () => {
         databaseUrl: url,
         // Unused here: system.ping never sends email.
         email: { smtp: { host: "127.0.0.1", port: 1 }, from: "no-reply@scaliahr.localhost", appBaseUrl: "http://localhost:3000" },
+        backupDir: "/nonexistent",
       },
       { superviseIntervalSeconds: 1, maintenanceIntervalSeconds: 1, monitorIntervalSeconds: 1 },
     );

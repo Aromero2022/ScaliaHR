@@ -1214,6 +1214,114 @@ The rule is checked by review in each PR; there is no automated check yet.
 
 ---
 
+## D23 — Backups and Restore (Local)
+
+**Decision:** two kinds of backup, both tested against Supabase local in CI on
+every PR. A per-tenant logical export runs in the worker and restores one tenant
+without touching the others. A full logical backup restores the whole database
+in place. Both stay local until Phase 23 (Roadmap, Principle 8). Phase 9a, PR 4.
+Operator steps are in `docs/RUNBOOK.md`.
+
+**Per-tenant export (worker, `backup.tenant_export`):**
+- Queue declared in `20261104050000_d23_tenant_backup.sql`: 2 retries with
+  backoff, then the dead letter queue. Data `{ tenantId }`, validated with zod.
+  `node dist/export-tenant.js <tenant-id>` inside the worker container enqueues
+  one and waits.
+- `worker_app` still reads no `public` table directly. It uses three functions
+  that only it can execute:
+  - `tenant_backup_tables()` lists the scope: the tenant row, every table with
+    `tenant_id` (from the catalog, so new tables are included automatically) and
+    the child tables `talent_pool_entries` and `succession_nominees` through
+    their parent.
+  - `tenant_export_rows(tenant, table)` (SECURITY DEFINER, empty `search_path`)
+    refuses any table outside that list.
+  - `backup_schema_version()` gives the schema version.
+- Not exported: `rate_limits` (transient), `user_settings` (per account),
+  `auth` accounts (in the full backup) and `pgboss` jobs. A test fails when a
+  `public` table is neither in the scope nor in that list.
+- File `<BACKUP_DIR>/tenants/<tenant>/<time>.export.gz`, mode 0600, written to
+  `.partial` and renamed only when complete. Lines are `#manifest` (format,
+  version, tenant, schema version, time, tables), then `<table>\t<row JSON as
+  printed by Postgres>` (numbers are never parsed, so no precision is lost),
+  then `#end` (counts, total, SHA-256 of the row lines).
+- Locally `BACKUP_DIR` is the `scaliahr_backups` volume. The adapter boundary
+  is the directory, so Phase 23 swaps it for private encrypted storage.
+
+**Per-tenant restore (`scripts/restore-tenant.mjs`, operator, local database
+only):**
+- Checks the file (format, SHA-256, counts), that its tenant is the one
+  requested, that its schema version equals the database's and that the table
+  list matches.
+- Then, in one transaction with `session_replication_role = replica`, replaces
+  every row of that tenant in the covered tables with the exported ones. Before
+  committing it checks every foreign key of `public` and every count, and rolls
+  back on any mismatch.
+- Audit log stays append-only in spirit: entries written after the export are
+  kept when their user exists after the restore. The others (users created
+  after the export) cannot stay because of the foreign key; they go to a JSON
+  report next to the export, so nothing disappears silently.
+
+**Full backup (`scripts/backup-full.sh`) and restore
+(`scripts/restore-full.sh`):**
+- `pg_dump` runs inside the Supabase database container, so it always matches
+  the server version, and it can only reach the local stack.
+- `app.dump`: `public`, `pgboss` and `ops` with structure, data and grants.
+- `platform.dump`: data of `auth.users`, identities, MFA factors, recovery codes
+  and passkeys, plus the migration history. Sessions and tokens are left out.
+- `manifest.json`: schema version and SHA-256 of both files.
+- The restore refuses a checksum mismatch, a schema version other than this
+  checkout's last migration, or a running web or worker container.
+- It then drops `public`, `pgboss` and `ops`, truncates the accounts and the
+  history, and restores accounts first and application schemas second. All of
+  this runs in a single `psql --single-transaction`, so a failure leaves the
+  database as it was.
+
+**Tests (CI, `apps/worker/__tests__/integration/backup.test.ts`):**
+- scope classification, function privileges and table-name injection;
+- the worker's export holds only its tenant's rows, numbers exact;
+- a missing tenant fails the job and writes nothing;
+- refusals change nothing: another tenant's file, a corrupted file, a remote
+  URL, another schema version, a corrupted dump;
+- a damaged tenant is restored to the export, with audit entries kept or moved
+  to the report, while another tenant and the demo tenant stay identical;
+- after deleting every tenant, an account and part of the history, a full
+  restore brings back an identical database (row counts and content hashes of
+  every table).
+
+**Accepted for now:**
+- The export and the restore read each table into memory: fine for local
+  tenants, to be streamed before large customers (Phase 23).
+- The restore leaves no entry in the tenant's audit log, which needs a user of
+  that tenant. The JSON report is the record until the platform console has its
+  own audit (Phase 12).
+- Storage objects (Phase 11 uploads) are not covered yet.
+
+---
+
+## D24 — Local Rollback and Runbook
+
+**Decision:** rolling back the local stack means restarting the previous images;
+the schema is never rolled back. Phase 9a, PR 4. Steps in `docs/RUNBOOK.md`.
+
+- `npm run local:up` tags the images it is about to replace as `:previous`,
+  labels new images with `org.opencontainers.image.revision` (git describe) and
+  applies pending migrations only (`supabase migration up --local`, the local
+  counterpart of D22's production mode).
+- `npm run local:rollback` (`local-up.sh --rollback`) retags `:previous` as
+  `:local` and keeps the replaced images as `:rolled-back`. It restarts web and
+  worker without building and runs the same smoke checks (health, ping, email).
+  Without a `:previous` image it stops before changing anything.
+- The previous image runs against the newer schema because every migration is
+  expand/contract (D22). Data damage is handled by restoring a backup (D23),
+  not by the image rollback.
+- The CI `docker` job runs the drill: `local:up` twice, then `local:rollback`,
+  and checks that both containers run the `:previous` image. It also runs a
+  per-tenant export inside the running worker.
+- Phase 23 completes the runbook with the Railway rollback and the hosted
+  restore procedures.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.

@@ -20,3 +20,5 @@ supabase/.temp
 supabase/.branches
 docs
 *.log
+# Backups hold personal data (D23); they never enter an image.
+.backups

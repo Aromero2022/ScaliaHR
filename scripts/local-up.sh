@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
-# One command for the whole local stack (Phase 9a, D17):
-#   1. Supabase local via the Supabase CLI
+# One command for the whole local stack (Phase 9a, D17, D24):
+#   1. Supabase local via the Supabase CLI, plus any pending migration
 #   2. local-only passwords for prisma_app, worker_app and email_enqueuer
-#   3. web and worker containers (docker-compose.yml)
+#   3. web and worker containers (docker-compose.yml); the images being
+#      replaced are kept as :previous
 #   4. smoke checks: /api/health, one system.ping job and one email in Mailpit
+#
+#   bash scripts/local-up.sh              build the current checkout and start it
+#   bash scripts/local-up.sh --rollback   start the :previous images again (npm run local:rollback)
 # Never touches a remote project: it aborts unless the database is on this machine.
 set -euo pipefail
+
+MODE="build"
+case "${1:-}" in
+  "") ;;
+  --rollback) MODE="rollback" ;;
+  *) printf '::error::Unknown option %s (only --rollback)\n' "$1" >&2; exit 2 ;;
+esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -43,6 +54,12 @@ MAILPIT_URL="$(status_value MAILPIT_URL)"
 
 require_local_db_url "$DB_URL" || exit 1
 
+# Pending migrations only, like the production mode of db-remote-sync (D22). A
+# history that differs from supabase/migrations stops here; `supabase db reset`
+# rebuilds the local database from scratch (its data is lost).
+log "Applying pending migrations"
+supabase_cli migration up --local
+
 if [ ! -f "$ENV_FILE" ]; then
   cp .env.docker.example "$ENV_FILE"
   log "Created $ENV_FILE from .env.docker.example"
@@ -72,8 +89,33 @@ MAILPIT_HOST="$(docker ps --filter "publish=${MAILPIT_PORT}" --format '{{.Names}
 [ -n "$MAILPIT_HOST" ] || die "Could not find the Mailpit container of Supabase local on port ${MAILPIT_PORT}."
 export MAILPIT_HOST
 
-log "Building and starting web and worker (network ${SUPABASE_NETWORK})"
-docker compose --env-file "$ENV_FILE" up --build --detach --wait --wait-timeout 300
+IMAGES="scaliahr-web scaliahr-worker"
+if [ "$MODE" = "rollback" ]; then
+  for image in $IMAGES; do
+    docker image inspect "${image}:previous" >/dev/null 2>&1 \
+      || die "There is no ${image}:previous image: nothing to roll back to (it exists after a second npm run local:up)."
+  done
+  for image in $IMAGES; do
+    docker image inspect "${image}:local" >/dev/null 2>&1 && docker tag "${image}:local" "${image}:rolled-back"
+    docker tag "${image}:previous" "${image}:local"
+  done
+  log "Rolling web and worker back to the previous images (network ${SUPABASE_NETWORK})"
+  docker compose --env-file "$ENV_FILE" up --no-build --force-recreate --detach --wait --wait-timeout 300
+else
+  for image in $IMAGES; do
+    if docker image inspect "${image}:local" >/dev/null 2>&1; then
+      docker tag "${image}:local" "${image}:previous"
+    fi
+  done
+  GIT_REVISION="$(git describe --always --dirty --abbrev=12 2>/dev/null || echo unknown)"
+  export GIT_REVISION
+  log "Building and starting web and worker ${GIT_REVISION} (network ${SUPABASE_NETWORK})"
+  docker compose --env-file "$ENV_FILE" up --build --detach --wait --wait-timeout 300
+fi
+for image in $IMAGES; do
+  printf '%s:local is revision %s\n' "$image" \
+    "$(docker image inspect -f '{{or (index .Config.Labels "org.opencontainers.image.revision") "unknown"}}' "${image}:local")"
+done
 
 WEB_ADDRESS="$(docker compose --env-file "$ENV_FILE" port web 3000)"
 log "Checking http://${WEB_ADDRESS}/api/health"
@@ -100,4 +142,5 @@ Local stack is up.
   Tenants:  http://<slug>.localhost:${WEB_ADDRESS##*:}  (demo: http://acme-corp.localhost:${WEB_ADDRESS##*:})
 Logs: docker logs -f scaliahr-web-1   |   docker logs -f scaliahr-worker-1
 Stop: npm run local:down   (add -- --all to stop Supabase too)
+Runbook (rollback, backups, restore): docs/RUNBOOK.md
 EOF
