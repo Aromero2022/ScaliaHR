@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { REQUEST_ID_HEADER, TENANT_ID_HEADER } from "@/lib/log/request-context";
+import { NONCE_HEADER, contentSecurityPolicy, createNonce } from "@/lib/security/csp";
 
 export async function middleware(request: NextRequest) {
   // D27: every request gets a fresh id; whatever the client sent is replaced.
@@ -8,8 +9,15 @@ export async function middleware(request: NextRequest) {
   const requestId = crypto.randomUUID();
   request.headers.set(REQUEST_ID_HEADER, requestId);
   request.headers.delete(TENANT_ID_HEADER);
+  // D29: a fresh nonce per request. Next.js reads the CSP of the request to put
+  // the nonce on its own scripts; the browser enforces the response's.
+  const nonce = createNonce();
+  const csp = contentSecurityPolicy(nonce);
+  request.headers.set(NONCE_HEADER, nonce);
+  request.headers.set("Content-Security-Policy", csp);
   const response = await updateSession(request);
   response.headers.set(REQUEST_ID_HEADER, requestId);
+  response.headers.set("Content-Security-Policy", csp);
   return response;
 }
 

@@ -1,8 +1,6 @@
+// D30: holds MOODLE_WS_TOKEN; importing it from a client component fails the build.
+import "server-only";
 import { z } from "zod";
-
-if (typeof window !== "undefined") {
-  throw new Error("lib/lms/moodle-client must not be imported in client code");
-}
 
 const MOODLE_BASE_URL = process.env.MOODLE_BASE_URL;
 const MOODLE_WS_TOKEN = process.env.MOODLE_WS_TOKEN;

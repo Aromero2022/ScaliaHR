@@ -1,0 +1,33 @@
+# Dependency updates (D33). Dependabot comes with GitHub at no cost
+# (Principle 8); its pull requests run the same CI as any other, so an update
+# merges only with lint, types, tests, build, migrations and images green.
+# One open PR per ecosystem: they are merged between loops, never while a loop
+# PR is open (CLAUDE.md, "Forma de trabajo").
+version: 2
+updates:
+  # One root lockfile for every npm workspace (apps/*, packages/*).
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 1
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      # pg-boss's tables are created by migration D17 for this exact version and
+      # nobody runs its DDL at runtime: an upgrade needs a new migration.
+      - dependency-name: "pg-boss"
+
+  # "/" covers .github/workflows and a root action.yml only; the glob adds the
+  # local composite actions (.github/actions/supabase-images uses actions/cache).
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]
+    open-pull-requests-limit: 1
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]

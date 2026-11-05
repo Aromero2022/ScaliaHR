@@ -11,8 +11,6 @@ import path from "node:path";
 const SRC = path.resolve(__dirname, "../../src");
 const LIMITER = /\b(?:limitWrite|limitApi|consumeRateLimit)\(/;
 
-// Not Server Actions despite the directive; Phase 9b PR 4 removes "use server" from them.
-const NOT_ACTIONS = new Set(["lib/jobs/lms-sync.ts", "lib/lms/provision-tenant.ts", "lib/tenant/get-module-flags.ts"]);
 // Healthchecks: limiting them would cost the same database round trip as the check itself.
 const UNLIMITED_ROUTES = new Set(["app/api/health/route.ts"]);
 
@@ -25,7 +23,7 @@ function files(dir: string): string[] {
 }
 
 const all = files(SRC).map((file) => ({ rel: path.relative(SRC, file), source: readFileSync(file, "utf-8") }));
-const actionFiles = all.filter(({ rel, source }) => /^["']use server["']/m.test(source) && !NOT_ACTIONS.has(rel));
+const actionFiles = all.filter(({ source }) => /^["']use server["']/m.test(source));
 const routeFiles = all.filter(({ rel }) => /(^|\/)route\.ts$/.test(rel) && !UNLIMITED_ROUTES.has(rel));
 
 /** Each exported function with its body (up to the next top-level export). */

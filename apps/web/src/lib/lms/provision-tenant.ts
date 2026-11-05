@@ -1,5 +1,3 @@
-"use server";
-
 import { createClient } from "@/lib/supabase/server";
 import * as moodle from "@/lib/lms/moodle-client";
 

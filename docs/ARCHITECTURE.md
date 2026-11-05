@@ -128,7 +128,8 @@ redirects via `auth_userkey_request_login_url`.
 - ACTIVE + mapped → unsuspend (rehire).
 
 **Security:**
-- `moodle-client.ts` has a `typeof window !== "undefined"` server-only guard.
+- `moodle-client.ts` starts with `import "server-only"` (D30; it replaced a
+  `typeof window` check), so a client import fails the build.
 - `MOODLE_WS_TOKEN` is in the `check:forbidden` list.
 - Server-only files (moodle-client, provision-tenant, lms-sync) are allowlisted.
 - Moodle Docker service binds only to `127.0.0.1`.
@@ -1603,6 +1604,177 @@ literal or string concatenation.
   a token. Supabase Auth's `/recover` keeps its native per-user and email limits.
 - Each limited call adds one database round trip; `write` and `api` also read
   the session claims.
+
+---
+
+## D29 — Content-Security-Policy with Nonces
+
+**Decision:** the middleware sends a Content-Security-Policy with a fresh nonce
+on every response it handles. Scripts run only with that nonce, with no
+`'unsafe-inline'` and no `'unsafe-eval'` outside `next dev`. The browser build
+ships no source maps. Phase 9b, PR 4.
+
+- `lib/security/csp.ts` builds the policy. Scripts get `'self' 'nonce-<n>'
+  'strict-dynamic'`: a nonced script may load the chunks it imports, and
+  nothing else runs. `next dev` adds `'unsafe-eval'`, which React's
+  development build needs. The other directives are the ones `next.config.ts`
+  used to send.
+- `src/middleware.ts` makes a 128-bit nonce per request (Web Crypto, Edge
+  runtime). It sets the policy on the request, where Next.js reads the nonce to
+  put on its own scripts, and on the response, where the browser enforces it.
+  It also forwards the nonce as `x-nonce`, replacing any value the client sent.
+- `next.config.ts` no longer sends a CSP. Two policies would both apply, and
+  one without the nonce would block every script. The other security headers
+  stay there.
+- The root layout calls `connection()`, so every page renders per request. A
+  page prerendered at build time would carry no nonce and break. The build
+  lists every route as dynamic.
+- `productionBrowserSourceMaps: false` is explicit; the build check of D32
+  fails if a `.map` file appears in `.next/static`.
+
+**Tests:**
+- unit tests for the policy (no `'unsafe-inline'`, `'unsafe-eval'` only in
+  dev, fresh nonces) and for the middleware (same nonce in the header and
+  forwarded to the page, a new one per request, set on redirects too);
+- `scripts/check-csp.mjs`: CI asks the running web image for `/login` and fails
+  unless the policy has a nonce and every `<script>` carries it;
+- in the production image, a browser visited 11 pages (login, the employee
+  modules, performance forms, MFA and Admin Center) with no CSP violation. An
+  inline script injected into the HTML was blocked, and `eval()` threw
+  `EvalError`.
+
+**Accepted for now:**
+- Styles keep `'unsafe-inline'`: React and Next.js write inline style
+  attributes, and a nonce does not cover attributes.
+- Files outside the middleware (static assets, `/api/health`) carry no CSP;
+  none of them is HTML.
+- Rendering every page per request rules out static pages; all of them already
+  depend on the session.
+
+---
+
+## D30 — Server-Only Modules and the Client Boundary
+
+**Decision:** every module that holds a key or a privileged connection starts
+with `import "server-only"`. A client component that imports one, directly or
+through other modules, fails the build, and a lint rule of our own reports it
+first, with the chain of imports. Phase 9b, PR 4.
+
+- **Marked:** `lib/db/admin-client.ts` (superuser), `lib/db/tenant-client.ts`
+  (`prisma_app`), `lib/email/index.ts` (`email_enqueuer`) and
+  `lib/lms/moodle-client.ts` (`MOODLE_WS_TOKEN`). Its runtime `window` check is
+  replaced by the marker. Everything that uses them (`can()`, the rate limiter,
+  the LMS sync…) is covered through them.
+- **Lint:** `eslint-rules/no-server-only-in-client.mjs`
+  (`scalia/no-server-only-in-client`):
+  - it applies to files that start with `"use client"`;
+  - it follows local imports (`@/…` and relative, not `import type`) until it
+    finds the marker;
+  - it stops at `"use server"` files, because a client only gets a reference
+    to a Server Action;
+  - it also refuses `server-only`, `@prisma/client`, `pg` and `pg-boss`
+    imported directly.
+- **Tests:** Vitest resolves `server-only` to the package's own server build
+  (empty), the same thing the `react-server` condition does in Next.js. The web
+  and worker configs both do this, since the worker suite imports `lib/email`.
+
+**Tests:** the rule against a fixture tree:
+- a direct import, a chain of two files, packages, dynamic imports and
+  re-exports are refused;
+- Server Action files, type-only imports, plain modules and server components
+  pass.
+
+---
+
+## D31 — Zod in Every Server Action
+
+**Decision:** every Server Action that takes input validates it with zod
+before using it, and only real Server Actions carry `"use server"`. Phase 9b,
+PR 4.
+
+- `createGoal` and `sendFeedback` read FormData through
+  `lib/validations/performance.ts`:
+  - required title and dates (`YYYY-MM-DD`), with the end date not before the
+    start;
+  - weight from 0 to 1, numeric target and length limits;
+  - feedback with a recipient id, content and the database's enum values;
+  - empty optional fields become null;
+  - anything that is not FormData is rejected.
+- `switchTenant` and `revokeMembership` validate the tenant id with
+  `z.guid()` instead of a hand-written regex. The seed's ids (`a0000000-…`) are
+  not RFC 4122 v4, which `z.uuid()` would refuse. D2's "Zod + DB" now holds.
+- `lms-sync`, `provision-tenant` and `get-module-flags` drop `"use server"`.
+  They are server helpers, but with the directive every export was a Server
+  Action that a client could call with any arguments.
+- `__tests__/static/zod-coverage.test.ts`:
+  - it lists the files that may carry `"use server"`;
+  - it fails when an exported Server Action with parameters calls neither
+    `.safeParse(` nor `.parse(`.
+
+---
+
+## D32 — No Debug or Test Routes in the Production Build
+
+**Decision:** CI inspects the production build right after `next build` and
+fails on any debug or test route and on browser source maps. Phase 9b, PR 4.
+
+- `scripts/check-prod-build.mjs` (`npm run check:prod-build`) reads the app
+  router's and the pages router's route manifests. It refuses a route when a
+  segment, split on `-` `_` `.`, is one of: debug, test(s), testing, dev,
+  devtools, playground, sandbox, mock(s), fixture(s), e2e, seed(s) or phpinfo.
+  A segment starting with `__` is also refused. Words like "latest" or
+  "developers" pass. It also lists any `.map` under `.next/static`.
+- Today's build has 17 routes and none is refused.
+- **Tests:** the matcher, the manifest reader, and the script's exit code on
+  fake builds: clean, with a debug route, with a test page, with a source map,
+  with no build at all.
+
+---
+
+## D33 — Dependabot and Secret Scanning
+
+**Decision:** Dependabot opens dependency updates, CI scans the whole git
+history for secrets on every PR, and the CI token can only read the
+repository. All of it is free: Dependabot comes with GitHub, and gitleaks is
+MIT (Principle 8). Phase 9b, PR 4.
+
+- **Dependabot (`.github/dependabot.yml`):**
+  - weekly, Monday;
+  - npm from the root lockfile, which covers every workspace, with minor and
+    patch updates grouped;
+  - GitHub Actions grouped, in `directories: ["/", "/.github/actions/*"]`. The
+    docs say `/` covers `.github/workflows` and a root `action.yml` only, and
+    that `directories` accepts globs, so the glob adds the local composite
+    actions (`supabase-images` uses `actions/cache`). The file passes the
+    SchemaStore schema for Dependabot v2;
+  - at most one open PR per ecosystem (`open-pull-requests-limit: 1`). They
+    are merged between loops, never while a loop PR is open (CLAUDE.md,
+    "Forma de trabajo");
+  - `pg-boss` is ignored: migration D17 creates its schema for this exact
+    version, so an upgrade needs a new migration.
+  - Its PRs run the same CI as any other.
+- **CI token:** `ci.yml` sets `permissions: contents: read` for `GITHUB_TOKEN`
+  at the workflow root. No job needs more: checkout only reads, and the caches
+  use the runner's own token.
+- **Secret scan:** job "Secret scan" in `ci.yml` runs gitleaks v8.30.1, pinned
+  by image digest, over the full history (`fetch-depth: 0`, since a secret
+  removed later is still leaked).
+  - Its checkout uses `persist-credentials: false`: the gitleaks container
+    mounts the checkout, `.git/config` included, and must not see the token.
+  - `.gitleaks.toml` keeps the default rules and allows only Supabase local's
+    public demo JWTs (issuer `supabase-demo`, the same in every local stack).
+  - `npm run check:secrets` runs the same scan locally.
+  - The current history (177 commits) is clean. Planted test strings are
+    reported: a JWT with a real issuer and a GitHub token.
+
+**Accepted for now:**
+- Dependabot does not update the Node base image: the Dockerfiles take it as
+  an `ARG` (D17), and `.nvmrc` pins Node. It does not update the gitleaks
+  digest or `SUPABASE_CLI_VERSION` in `ci.yml` either. Those move by hand.
+- GitHub's own secret scanning and push protection are repository settings,
+  outside this repo; turning them on is the owner's call.
+- Ignoring `pg-boss` also silences its security updates. It is checked by hand
+  with `npm audit` in every phase.
 
 ---
 

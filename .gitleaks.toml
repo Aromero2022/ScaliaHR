@@ -1,0 +1,13 @@
+# Secret scanning (D33): gitleaks' default rules over the whole git history,
+# run by CI (job "Secret scan") and by `npm run check:secrets`.
+[extend]
+useDefault = true
+
+# Supabase local's demo keys (anon and service_role, issuer "supabase-demo")
+# are the same public values in every local stack and in Supabase's docs; they
+# open nothing outside a developer's own machine. Real project keys have a
+# different issuer and are still reported.
+[[allowlists]]
+description = "Public demo JWTs of Supabase local (iss supabase-demo)"
+regexTarget = "match"
+regexes = ['''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6I[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+''']

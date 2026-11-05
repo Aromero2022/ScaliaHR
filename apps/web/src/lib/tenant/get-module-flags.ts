@@ -1,5 +1,3 @@
-"use server";
-
 import { createClient } from "@/lib/supabase/server";
 import { MODULE_FLAGS_SELECT, toModuleFlags, type ModuleFlags } from "./module-flags";
 

@@ -4,21 +4,18 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { safeError } from "@/lib/errors/safe-error";
+import { z } from "zod";
 import { limitWrite } from "@/lib/rate-limit";
+
+// Tenant ids of the seed are not RFC 4122 v4 (a0000000-…), so guid, not uuid.
+const TenantId = z.guid("Formato de tenant_id inválido");
 
 export async function switchTenant(tenantId: string) {
   const limited = await limitWrite();
   if (limited) return { error: limited };
 
-  if (!tenantId || typeof tenantId !== "string") {
-    return { error: "tenant_id inválido" };
-  }
-
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(tenantId)) {
-    return { error: "Formato de tenant_id inválido" };
-  }
+  const parsed = TenantId.safeParse(tenantId);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const supabase = await createClient();
   const {
@@ -56,9 +53,8 @@ export async function revokeMembership(tenantId: string) {
   const limited = await limitWrite();
   if (limited) return { error: limited };
 
-  if (!tenantId || typeof tenantId !== "string") {
-    return { error: "tenant_id inválido" };
-  }
+  const parsed = TenantId.safeParse(tenantId);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const supabase = await createClient();
   const {

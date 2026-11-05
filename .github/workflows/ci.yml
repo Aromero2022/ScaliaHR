@@ -10,6 +10,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege for GITHUB_TOKEN (D33): every job only reads the repository.
+# The caches use the runner's own token, not this one, so no job needs more.
+permissions:
+  contents: read
+
 env:
   # One place for the Supabase CLI version and the services CI leaves out:
   # together they decide which images the cache holds (D26).
@@ -77,6 +82,29 @@ jobs:
           NEXT_TELEMETRY_DISABLED: "1"
           NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321"
           NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
+
+      - name: No debug or test routes, no browser source maps (D29, D32)
+        run: node scripts/check-prod-build.mjs apps/web/.next
+        working-directory: .
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the whole history: a secret removed later is still leaked
+          # gitleaks mounts the checkout, .git/config included: keep the token out of it.
+          persist-credentials: false
+
+      # gitleaks (MIT), pinned by digest; .gitleaks.toml adds only the public
+      # demo keys of Supabase local to its default rules (D33).
+      - name: gitleaks over the full git history
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            git --redact --no-banner --config .gitleaks.toml --exit-code 1 .
 
   db:
     name: Database migrations
@@ -277,6 +305,9 @@ jobs:
             fi
             echo "$image: user=$user, no secrets in env, no .env files"
           done
+
+      - name: Pages carry a nonce-based CSP on every script (D29)
+        run: node scripts/check-csp.mjs http://localhost:3000/login
 
       - name: Per-tenant export through the running worker (D23)
         run: |

@@ -1,3 +1,5 @@
+// D30: prisma_app connection (DATABASE_URL); server code only.
+import "server-only";
 import { PrismaClient, Prisma } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as {

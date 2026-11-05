@@ -27,6 +27,7 @@
     "postcss": "^8.5.31",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "server-only": "^0.0.1",
     "tailwindcss": "^4.3.3",
     "zod": "^4.6.7"
   },
