@@ -14,6 +14,7 @@
     "dev:mobile": "turbo dev --filter=@scaliahr/mobile",
     "db:generate": "turbo db:generate",
     "db:sync": "turbo db:sync",
+    "db:advisors": "node scripts/check-advisors.mjs",
     "check:forbidden": "bash scripts/check-forbidden.sh",
     "local:up": "bash scripts/local-up.sh",
     "local:down": "bash scripts/local-down.sh",

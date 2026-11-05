@@ -1,0 +1,59 @@
+name: Supabase images
+description: >
+  Keeps the Supabase local images in the Actions cache (D26), so CI does not
+  pull them from public.ecr.aws on every run: its anonymous rate limit
+  ("toomanyrequests") broke a run of PR #50. mode=restore loads them before
+  `supabase start`; mode=save, at the end of the job, stores every Supabase
+  image the job pulled.
+  The images are pinned by the Supabase CLI version, which is part of the key.
+inputs:
+  mode:
+    description: restore | save
+    required: true
+  cli-version:
+    description: Supabase CLI version (pins every image tag)
+    required: true
+  services-excluded:
+    description: The -x list passed to supabase start (decides which images exist)
+    required: true
+  cache-hit:
+    description: In save mode, the cache-hit output of the restore step
+    required: false
+    default: "false"
+outputs:
+  cache-hit:
+    description: "true when the images came from the cache"
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - id: key
+      shell: bash
+      env:
+        EXCLUDED: ${{ inputs.services-excluded }}
+      # One cache per job: each job pulls a different set (db diff adds edge-runtime).
+      run: echo "value=supabase-images-${{ runner.os }}-${{ github.job }}-cli-${{ inputs.cli-version }}-$(printf '%s' "$EXCLUDED" | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+    - id: restore
+      if: inputs.mode == 'restore'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/supabase-images.tar
+        key: ${{ steps.key.outputs.value }}
+
+    - if: inputs.mode == 'restore' && steps.restore.outputs.cache-hit == 'true'
+      shell: bash
+      run: docker load -i "$RUNNER_TEMP/supabase-images.tar"
+
+    - if: inputs.mode == 'save' && inputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        images="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep '^public\.ecr\.aws/supabase/' | sort)"
+        echo "Caching:"; printf '  %s\n' $images
+        docker save $images -o "$RUNNER_TEMP/supabase-images.tar"
+
+    - if: inputs.mode == 'save' && inputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/supabase-images.tar
+        key: ${{ steps.key.outputs.value }}

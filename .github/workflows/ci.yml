@@ -10,6 +10,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # One place for the Supabase CLI version and the services CI leaves out:
+  # together they decide which images the cache holds (D26).
+  SUPABASE_CLI_VERSION: 2.122.1
+  SUPABASE_EXCLUDE: realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,studio
+
 jobs:
   app:
     name: Lint · Types · Tests · Build
@@ -88,10 +94,18 @@ jobs:
 
       - uses: supabase/setup-cli@v3
         with:
-          version: 2.122.1
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      - name: Supabase images from the cache
+        id: supabase-images
+        uses: ./.github/actions/supabase-images
+        with:
+          mode: restore
+          cli-version: ${{ env.SUPABASE_CLI_VERSION }}
+          services-excluded: ${{ env.SUPABASE_EXCLUDE }}
 
       - name: Start Supabase
-        run: supabase start -x realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,studio
+        run: supabase start -x "$SUPABASE_EXCLUDE"
 
       - name: Validate migrations (db reset)
         run: supabase db reset
@@ -125,6 +139,15 @@ jobs:
         if: failure()
         run: docker logs --tail 200 "$(docker ps -a --filter name=supabase_auth --format '{{.Names}}' | head -1)" 2>&1 || true
 
+      - name: Cache Supabase images
+        if: always()
+        uses: ./.github/actions/supabase-images
+        with:
+          mode: save
+          cli-version: ${{ env.SUPABASE_CLI_VERSION }}
+          services-excluded: ${{ env.SUPABASE_EXCLUDE }}
+          cache-hit: ${{ steps.supabase-images.outputs.cache-hit }}
+
   db-reset-test:
     name: DB reset sync test
     runs-on: ubuntu-24.04
@@ -141,10 +164,18 @@ jobs:
 
       - uses: supabase/setup-cli@v3
         with:
-          version: 2.122.1
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      - name: Supabase images from the cache
+        id: supabase-images
+        uses: ./.github/actions/supabase-images
+        with:
+          mode: restore
+          cli-version: ${{ env.SUPABASE_CLI_VERSION }}
+          services-excluded: ${{ env.SUPABASE_EXCLUDE }}
 
       - name: Start Supabase
-        run: supabase start -x realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,studio
+        run: supabase start -x "$SUPABASE_EXCLUDE"
 
       - name: Insert fake divergent history
         run: |
@@ -188,6 +219,15 @@ jobs:
         if: failure()
         run: docker logs --tail 200 "$(docker ps -a --filter name=supabase_auth --format '{{.Names}}' | head -1)" 2>&1 || true
 
+      - name: Cache Supabase images
+        if: always()
+        uses: ./.github/actions/supabase-images
+        with:
+          mode: save
+          cli-version: ${{ env.SUPABASE_CLI_VERSION }}
+          services-excluded: ${{ env.SUPABASE_EXCLUDE }}
+          cache-hit: ${{ steps.supabase-images.outputs.cache-hit }}
+
   docker:
     name: Docker images (build only)
     runs-on: ubuntu-24.04
@@ -206,7 +246,15 @@ jobs:
 
       - uses: supabase/setup-cli@v3
         with:
-          version: 2.122.1
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      - name: Supabase images from the cache
+        id: supabase-images
+        uses: ./.github/actions/supabase-images
+        with:
+          mode: restore
+          cli-version: ${{ env.SUPABASE_CLI_VERSION }}
+          services-excluded: ${{ env.SUPABASE_EXCLUDE }}
 
       - name: Build images and start the local stack (npm run local:up)
         run: npm run local:up
@@ -249,6 +297,15 @@ jobs:
       - name: Container logs (on failure)
         if: failure()
         run: SUPABASE_NETWORK=unused MAILPIT_HOST=unused docker compose --env-file .env.docker logs --no-color --tail 200 web worker || true
+
+      - name: Cache Supabase images
+        if: always()
+        uses: ./.github/actions/supabase-images
+        with:
+          mode: save
+          cli-version: ${{ env.SUPABASE_CLI_VERSION }}
+          services-excluded: ${{ env.SUPABASE_EXCLUDE }}
+          cache-hit: ${{ steps.supabase-images.outputs.cache-hit }}
 
       - name: Stop the local stack
         if: always()
