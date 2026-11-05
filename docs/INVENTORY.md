@@ -357,7 +357,7 @@ Sin tests dedicados.
 | `has_app_role(text)` | authenticated | Verifica app_role claim en JWT |
 | `write_audit_log(...)` | authenticated, service_role | Fuerza tenant/user de sesion |
 | `insert_effective_record(...)` | authenticated | Hardened: tabla cerrada, format(%I), tenant forzado |
-| `check_rate_limit(...)` | service_role | Rate limiting |
+| `rate_limit_consume(...)` | prisma_app | Rate limiting (D28): gasta un token y devuelve los segundos de espera |
 | `rls_auto_enable()` | service_role | Event trigger auto-enable RLS en tablas nuevas |
 
 ### Module Flags

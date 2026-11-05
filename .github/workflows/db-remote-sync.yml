@@ -324,7 +324,7 @@ jobs:
           FROM unnest(ARRAY[
             'custom_access_token_hook','requesting_tenant_id','is_tenant_admin',
             'insert_effective_record','effective_record_at','anonymize_user',
-            'export_user_data','check_rate_limit','write_audit_log',
+            'export_user_data','rate_limit_consume','write_audit_log',
             'get_direct_reports','set_manager_assessment','upsert_self_assessment',
             'current_app_user_id','has_app_role','compute_arco_due_date',
             'purge_expired_rate_limits'
