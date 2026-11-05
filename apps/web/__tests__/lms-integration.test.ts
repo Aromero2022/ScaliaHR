@@ -295,7 +295,8 @@ describe("MOODLE_WS_TOKEN never in client bundle", () => {
       path.join(REPO_ROOT, "apps/web/src/lib/lms/moodle-client.ts"),
       "utf-8"
     );
-    expect(content).toContain("must not be imported in client code");
+    // D30: the server-only marker makes a client import fail the build.
+    expect(content).toMatch(/^import "server-only";$/m);
   });
 
   it("check:forbidden includes MOODLE_WS_TOKEN", async () => {

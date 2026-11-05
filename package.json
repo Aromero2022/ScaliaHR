@@ -16,6 +16,8 @@
     "db:sync": "turbo db:sync",
     "db:advisors": "node scripts/check-advisors.mjs",
     "check:forbidden": "bash scripts/check-forbidden.sh",
+    "check:secrets": "docker run --rm -v \"$PWD:/repo\" -w /repo ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git --redact --no-banner --config .gitleaks.toml --exit-code 1 .",
+    "check:prod-build": "node scripts/check-prod-build.mjs apps/web/.next",
     "local:up": "bash scripts/local-up.sh",
     "local:down": "bash scripts/local-down.sh",
     "local:rollback": "bash scripts/local-up.sh --rollback",

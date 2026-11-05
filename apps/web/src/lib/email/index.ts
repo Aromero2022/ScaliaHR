@@ -1,3 +1,5 @@
+// D30: connects as email_enqueuer (EMAIL_ENQUEUE_DATABASE_URL); server code only.
+import "server-only";
 import { PgBoss } from "pg-boss";
 import { EMAIL_QUEUE, EmailJobSchema, type EmailJobInput } from "@scaliahr/email/contract";
 

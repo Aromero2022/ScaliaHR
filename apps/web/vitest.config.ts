@@ -7,6 +7,8 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
       "@scaliahr/shared": path.resolve(__dirname, "../../packages/shared/src"),
       "@scaliahr/email/contract": path.resolve(__dirname, "../../packages/email/src/contract.ts"),
+      // D30: Node has no react-server condition; tests load the package's empty server build.
+      "server-only": path.resolve(__dirname, "../../node_modules/server-only/empty.js"),
     },
   },
   test: {
