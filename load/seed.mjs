@@ -167,13 +167,22 @@ async function seedTenant(db, supabaseUrl, serviceKey, spec) {
   return { tenantId, accounts: emails.map((email) => ({ email, tenant: spec.slug, tag: spec.tag })) };
 }
 
-async function main() {
-  const [dbUrl, supabaseUrl, serviceKey, out] = process.argv.slice(2);
-  if (!out) throw new Error("usage: seed.mjs <db-url> <supabase-url> <service-role-key> <out.json>");
+/**
+ * Only the local stack: the Supabase API on this machine and a local database
+ * URL without query parameters. Also used by the e2e accounts (D44). Returns
+ * the database URL to connect to.
+ */
+export function assertLocalStack(dbUrl, supabaseUrl) {
   if (!["127.0.0.1", "localhost"].includes(new URL(supabaseUrl).hostname)) {
     throw new Error("refusing to seed a non-local Supabase");
   }
-  const db = new pg.Client({ connectionString: assertLocalDbUrl(dbUrl) });
+  return assertLocalDbUrl(dbUrl);
+}
+
+async function main() {
+  const [dbUrl, supabaseUrl, serviceKey, out] = process.argv.slice(2);
+  if (!out) throw new Error("usage: seed.mjs <db-url> <supabase-url> <service-role-key> <out.json>");
+  const db = new pg.Client({ connectionString: assertLocalStack(dbUrl, supabaseUrl) });
   await db.connect();
   try {
     await cleanup(db);

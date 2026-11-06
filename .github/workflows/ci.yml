@@ -319,6 +319,36 @@ jobs:
           fi
           echo "/login shows no demo credentials."
 
+      # D44: the e2e suite with axe against the production image just started,
+      # with accounts created and deleted by scripts/e2e.sh. Retries are 0: a
+      # failure is rerun at most once, by rerunning the job.
+      - name: Playwright browser for the e2e (D44)
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      - name: e2e with axe, zoom and screenshots (D44)
+        run: npm run e2e
+
+      # Only after scripts/e2e.sh found no secret in them (the marker file); a
+      # cancelled or unscanned run uploads nothing.
+      - name: e2e artifacts (HTML report, axe report, screenshots)
+        if: always() && hashFiles('apps/web/e2e-artifacts/escaneo-de-secretos.txt') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-artifacts
+          path: apps/web/e2e-artifacts
+          retention-days: 14
+
+      - name: No e2e tooling in the web image (D44)
+        run: |
+          found="$(docker run --rm --entrypoint sh scaliahr-web:local -c 'find / -xdev -type d \( -name axe-core -o -name @axe-core -o -name playwright -o -name playwright-core -o -name @playwright \) -path "*node_modules*" 2>/dev/null')"
+          if [ -n "$found" ]; then
+            echo "::error::e2e tooling in scaliahr-web:local:"
+            echo "$found"
+            exit 1
+          fi
+          echo "scaliahr-web:local carries no axe or Playwright package."
+
       # D36: a short run of the load test, so the tooling keeps working and a
       # large regression shows up. The full 1,000-user run is local (RUNBOOK).
       - name: k6 load test, short run (D36)

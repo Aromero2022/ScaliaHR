@@ -1,6 +1,6 @@
 // The production build of apps/web must ship no debug or test route, no
-// browser source maps (D29, D32) and no demo credentials in what the browser
-// downloads (D41). Run by CI right after `next build`:
+// browser source maps (D29, D32), no demo credentials in what the browser
+// downloads (D41) and no e2e tooling (D44). Run by CI right after `next build`:
 //   node scripts/check-prod-build.mjs [apps/web/.next]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -69,6 +69,37 @@ export function demoCredentialsInClientBundle(nextDir) {
   return found;
 }
 
+// D44: axe (MPL-2.0) and Playwright are dev dependencies for the e2e only.
+// Neither may reach the browser bundle (.next/static) nor the standalone server
+// (.next/standalone), which are the two things the production image copies.
+export const TEST_PACKAGES = new Set(["axe-core", "@axe-core", "playwright", "playwright-core", "@playwright"]);
+export const TEST_TOOL_MARKERS = ["Deque Systems", "axe-core", "playwright-core"];
+
+/** Test packages in the standalone server's node_modules, and their marks in the client bundle. */
+export function testToolsInBuild(nextDir) {
+  const found = [];
+  const findPackages = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.name === "node_modules") {
+        for (const pkg of readdirSync(full)) if (TEST_PACKAGES.has(pkg)) found.push(path.relative(nextDir, path.join(full, pkg)));
+      }
+      findPackages(full);
+    }
+  };
+  const standalone = path.join(nextDir, "standalone");
+  if (existsSync(standalone)) findPackages(standalone);
+  const staticDir = path.join(nextDir, "static");
+  if (existsSync(staticDir)) {
+    walkFiles(staticDir, (file) => {
+      const text = readFileSync(file, "latin1");
+      for (const marker of TEST_TOOL_MARKERS) if (text.includes(marker)) found.push(`${path.relative(nextDir, file)}: ${marker}`);
+    });
+  }
+  return found;
+}
+
 function main() {
   const nextDir = path.resolve(process.argv[2] ?? "apps/web/.next");
   if (!existsSync(path.join(nextDir, "app-path-routes-manifest.json"))) {
@@ -79,11 +110,15 @@ function main() {
   const forbidden = routes.filter(isForbiddenRoute);
   const maps = browserSourceMaps(nextDir);
   const demo = demoCredentialsInClientBundle(nextDir);
+  const tools = testToolsInBuild(nextDir);
   for (const route of forbidden) console.error(`::error::debug or test route in the production build: ${route}`);
   for (const map of maps) console.error(`::error::browser source map in the production build: ${map}`);
   for (const hit of demo) console.error(`::error::demo credential in the client bundle: ${hit}`);
-  if (forbidden.length > 0 || maps.length > 0 || demo.length > 0) process.exit(1);
-  console.log(`Production build: ${routes.length} routes, none for debug or tests; no browser source maps; no demo credentials in the client bundle.`);
+  for (const hit of tools) console.error(`::error::e2e tooling in the production build: ${hit}`);
+  if (forbidden.length > 0 || maps.length > 0 || demo.length > 0 || tools.length > 0) process.exit(1);
+  console.log(
+    `Production build: ${routes.length} routes, none for debug or tests; no browser source maps; no demo credentials in the client bundle; no axe or Playwright in the bundle or the standalone server.`,
+  );
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
