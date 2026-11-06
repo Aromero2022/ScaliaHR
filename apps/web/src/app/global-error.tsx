@@ -7,7 +7,7 @@ import "./globals.css";
 // It renders its own <html>, so it brings the theme tokens with it (D40).
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <html lang="es" {...DEFAULT_THEME_ATTRIBUTES}>
+    <html lang="es-MX" {...DEFAULT_THEME_ATTRIBUTES}>
       <head>
         <style dangerouslySetInnerHTML={{ __html: DEFAULT_THEME_CSS }} />
       </head>

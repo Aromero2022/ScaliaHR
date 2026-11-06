@@ -1,103 +1,16 @@
-"use client";
-
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+// D41 — navigation icons (decorative: the link text or aria-label names each link).
 import { clsx } from "clsx";
-import type { ModuleFlags } from "@/lib/tenant/module-flags";
-import { NAV_ITEMS, filterNavByFlags } from "@/lib/navigation/nav-config";
 
-type NavItem = {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ active: boolean }>;
-  moduleFlag?: keyof ModuleFlags;
-};
+type IconProps = { active?: boolean };
 
-const iconMap: Record<string, React.ComponentType<{ active: boolean }>> = {
-  "/dashboard": HomeIcon,
-  "/employees": EmployeesIcon,
-  "/profile": UserIcon,
-  "/org-chart": OrgIcon,
-  "/performance": PerformanceIcon,
-  "/lms": LmsIcon,
-  "/skills-hub": SkillsIcon,
-  "/admin/arco": ShieldIcon,
-  "/admin-center": AdminIcon,
-};
+const iconClass = (active?: boolean) => clsx("h-5 w-5 shrink-0", active ? "text-accent-fg" : "text-fg-subtle");
 
-const navItems: NavItem[] = NAV_ITEMS.map((item) => ({
-  ...item,
-  icon: iconMap[item.href] ?? HomeIcon,
-}));
-
-export default function Sidebar({
-  moduleFlags,
-  grantedPermissions = [],
-}: {
-  moduleFlags: ModuleFlags | null;
-  grantedPermissions?: string[];
-}) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const supabase = createClient();
-
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }
-
-  const permSet = new Set(grantedPermissions);
-  const visibleItems = filterNavByFlags(navItems, moduleFlags, permSet) as NavItem[];
-
-  return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-line bg-surface">
-      <div className="flex h-16 items-center gap-2 border-b border-line px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-on-accent">
-          S
-        </div>
-        <span className="text-lg font-bold text-fg">Scalia HR</span>
-      </div>
-
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        {visibleItems.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={clsx(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
-                active
-                  ? "bg-accent-subtle text-accent-fg"
-                  : "text-fg-muted hover:bg-surface-hover hover:text-fg"
-              )}
-            >
-              <item.icon active={active} />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="border-t border-line p-3">
-        <button
-          onClick={handleSignOut}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-fg-muted transition hover:bg-surface-hover hover:text-danger-fg"
-        >
-          <LogoutIcon />
-          Cerrar Sesión
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-function EmployeesIcon({ active }: { active: boolean }) {
+export function EmployeesIcon({ active }: IconProps) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
+      className={iconClass(active)}
+      aria-hidden="true"
+      focusable="false"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -112,10 +25,12 @@ function EmployeesIcon({ active }: { active: boolean }) {
   );
 }
 
-function HomeIcon({ active }: { active: boolean }) {
+export function HomeIcon({ active }: IconProps) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
+      className={iconClass(active)}
+      aria-hidden="true"
+      focusable="false"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -130,10 +45,12 @@ function HomeIcon({ active }: { active: boolean }) {
   );
 }
 
-function UserIcon({ active }: { active: boolean }) {
+export function UserIcon({ active }: IconProps) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
+      className={iconClass(active)}
+      aria-hidden="true"
+      focusable="false"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -148,10 +65,12 @@ function UserIcon({ active }: { active: boolean }) {
   );
 }
 
-function OrgIcon({ active }: { active: boolean }) {
+export function OrgIcon({ active }: IconProps) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
+      className={iconClass(active)}
+      aria-hidden="true"
+      focusable="false"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -166,10 +85,12 @@ function OrgIcon({ active }: { active: boolean }) {
   );
 }
 
-function AdminIcon({ active }: { active: boolean }) {
+export function AdminIcon({ active }: IconProps) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
+      className={iconClass(active)}
+      aria-hidden="true"
+      focusable="false"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -189,10 +110,12 @@ function AdminIcon({ active }: { active: boolean }) {
   );
 }
 
-function PerformanceIcon({ active }: { active: boolean }) {
+export function PerformanceIcon({ active }: IconProps) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
+      className={iconClass(active)}
+      aria-hidden="true"
+      focusable="false"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -207,10 +130,12 @@ function PerformanceIcon({ active }: { active: boolean }) {
   );
 }
 
-function LmsIcon({ active }: { active: boolean }) {
+export function LmsIcon({ active }: IconProps) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
+      className={iconClass(active)}
+      aria-hidden="true"
+      focusable="false"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -225,10 +150,12 @@ function LmsIcon({ active }: { active: boolean }) {
   );
 }
 
-function SkillsIcon({ active }: { active: boolean }) {
+export function SkillsIcon({ active }: IconProps) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
+      className={iconClass(active)}
+      aria-hidden="true"
+      focusable="false"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -243,10 +170,12 @@ function SkillsIcon({ active }: { active: boolean }) {
   );
 }
 
-function ShieldIcon({ active }: { active: boolean }) {
+export function ShieldIcon({ active }: IconProps) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
+      className={iconClass(active)}
+      aria-hidden="true"
+      focusable="false"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -261,10 +190,12 @@ function ShieldIcon({ active }: { active: boolean }) {
   );
 }
 
-function LogoutIcon() {
+export function LogoutIcon() {
   return (
     <svg
-      className="h-5 w-5 text-fg-subtle"
+      aria-hidden="true"
+      focusable="false"
+      className="h-5 w-5 shrink-0"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -277,4 +208,24 @@ function LogoutIcon() {
       />
     </svg>
   );
+}
+
+function Glyph({ d, active }: { d: string; active?: boolean }) {
+  return (
+    <svg aria-hidden="true" focusable="false" className={iconClass(active)} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+    </svg>
+  );
+}
+
+export function MoreIcon({ active }: IconProps) {
+  return <Glyph active={active} d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />;
+}
+
+export function CollapseIcon({ collapsed }: { collapsed: boolean }) {
+  return <Glyph d={collapsed ? "M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" : "M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5"} />;
+}
+
+export function CloseIcon() {
+  return <Glyph d="M6 18L18 6M6 6l12 12" />;
 }

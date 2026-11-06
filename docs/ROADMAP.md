@@ -184,6 +184,7 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Layout Holy Grail / Two Column.
 - Navegación: sidebar completo colapsable en escritorio, riel de íconos en tablet y dock inferior de máximo 5 íconos con texto en móvil.
 - Búsqueda global con ⌘K.
+- Hecho en el PR 2 (D41), salvo ⌘K: shell con landmarks y enlace para saltar al contenido, sidebar colapsable desde 1280 px, rail de 768 a 1279 px y dock de 5 entradas con diálogo "Más" bajo 768 px, todo con la misma lista filtrada por módulo y RBP; sin scroll horizontal a 320 px.
 
 ### Responsive
 
@@ -196,6 +197,7 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Áreas táctiles de 44px.
 - Skeletons en cargas mayores a 400 ms.
 - Menús que solo muestran módulos contratados (D12) y permitidos por rol (RBP). El sidebar actual ya filtra por flag de módulo y por `can()` (D14); el riel y el dock usan el mismo filtro.
+- Fechas con formato local y la zona horaria del tenant (hoy se muestran ISO crudas: "2026-01-01T00:00:00+00:00").
 
 ### Accesibilidad (WCAG 2.2 AA)
 
@@ -205,6 +207,12 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Zoom al 200 % sin romper el layout.
 - prefers-reduced-motion respetado (framer-motion con useReducedMotion). framer-motion todavía no está en el repo; se agrega en esta fase.
 - PersonSearch (D38) como combobox accesible: role=combobox, listbox con aria-activedescendant, navegación con teclado y anuncio de resultados.
+- `<html lang>` en "es-MX" (hoy "en"; WCAG 3.1.1) y textos de la UI en español: "Sign in", "Password", "PERFORMANCE SCORE", "ON TRACK", estados como "ACTIVE". El `lang` quedó hecho en el PR 2 (D41); los textos van en el PR 3.
+
+### Credenciales demo en el login
+
+- La pantalla de login muestra "Demo: elena.martinez@acme.dev / Demo1234!" sin condición, también en la imagen de producción. Que solo aparezca con una variable explícita de demo local, apagada por defecto, con un test que lo verifique en el build de producción.
+- Hecho en el PR 2 (D41): la pista sale de `SCALIA_DEMO_LOGIN_HINT`, variable del servidor apagada por defecto e ignorada en producción si `APP_BASE_URL` no es local; `check:prod-build` falla si el bundle del cliente trae la contraseña o el correo demo, y CI revisa que el `/login` de la imagen no la muestre.
 
 ### Biblioteca base
 
@@ -344,6 +352,7 @@ Depende de: Workflows (10), Admin Center (11), worker y lib/email (9a), API (13)
 - Fases 9a–22 completas y probadas al 100 % en local.
 - Cambiar el factor MFA del owner.
 - Sacar los datos demo de las migraciones a seed.sql.
+- Sin credenciales demo en ninguna pantalla.
 - `can()` como función SECURITY DEFINER en la base.
 - Verificar la bitácora de auditoría: **parcialmente resuelto** (PR #42). Login (`AUTH_LOGIN`), MFA (`MFA_ENROLL`, `MFA_VERIFY`, `MFA_ENROLL_FAILED`, `MFA_VERIFY_FAILED`) ya se registran y Admin Center los muestra con `entity`, `entity_id` y `diff`. Desde D28 (Fase 9b) el login y la verificación MFA corren en el servidor, que escribe `AUTH_LOGIN`, `MFA_VERIFY` y `MFA_VERIFY_FAILED`, y los logins fallidos quedan en los logs JSON. Pendiente: cambios de permisos (Fase 11 CRUD de RBP), los logins fallidos en la bitácora y las llamadas directas a la API de Supabase Auth (Known Risk "Login Audit Depends on the Client" en ARCHITECTURE.md).
 - Cerrar los Known Risks de ARCHITECTURE.md.
@@ -414,7 +423,7 @@ Contratar PITR y encender su export por tenant:
 
 ## Tabla de cumplimiento
 
-> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1), con main en 5908222 (PR #48, Fase 9a PR 2: correo y tenant por subdominio, D20 y D21), con main en 3ca8d5d (PR #49, Fase 9a PR 3: migraciones seguras, D22), con main en b101eb7 (PR #50, Fase 9a PR 4: respaldos y runbook, D23 y D24), con main en c28be3f (PR #51, Fase 9b PR 1: privilegios de la base y advisors, D25 y D26), con main en 20e48b5 (PR #52, Fase 9b PR 2: errores seguros y logs JSON, D27), con main en a961e52 (PR #53, Fase 9b PR 3: rate limiting y filtro de búsqueda, D28), con main en e15e0ef (PR #54, Fase 9b PR 4: endurecimiento, D29 a D33), con main en ae25e87 (PR #57, Fase 9b PR 5: rendimiento, D34 a D39) y con la rama del PR 1 de la Fase 9c (design tokens y base de temas, D40). Cada fase, al cerrarse, actualiza el estado de sus filas.
+> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1), con main en 5908222 (PR #48, Fase 9a PR 2: correo y tenant por subdominio, D20 y D21), con main en 3ca8d5d (PR #49, Fase 9a PR 3: migraciones seguras, D22), con main en b101eb7 (PR #50, Fase 9a PR 4: respaldos y runbook, D23 y D24), con main en c28be3f (PR #51, Fase 9b PR 1: privilegios de la base y advisors, D25 y D26), con main en 20e48b5 (PR #52, Fase 9b PR 2: errores seguros y logs JSON, D27), con main en a961e52 (PR #53, Fase 9b PR 3: rate limiting y filtro de búsqueda, D28), con main en e15e0ef (PR #54, Fase 9b PR 4: endurecimiento, D29 a D33), con main en ae25e87 (PR #57, Fase 9b PR 5: rendimiento, D34 a D39), con main en 8f13442 (PR #60, Fase 9c PR 1: design tokens, D40) y con la rama del PR 2 de la Fase 9c (layout responsive y navegación, D41). Cada fase, al cerrarse, actualiza el estado de sus filas.
 
 | Norma o control | Dónde se cumple | Estado |
 |-----------------|-----------------|--------|
@@ -430,9 +439,10 @@ Contratar PITR y encender su export por tenant:
 | Rendimiento bajo carga (k6, p95 < 500 ms) | 9b (D34–D38) + 23 (réplicas de web) | Cumple en local con el modelo de carga de D36: 1,000 usuarios en un tenant y 50 en cada uno de otros tres al mismo tiempo, con 20–40 s entre páginas: p95 217 ms, p99 360 ms, 0 % de fallos. Un proceso web sirve unas 40 páginas/s con p95 < 500 ms (unos 180 usuarios con 2–6 s entre páginas); más allá se escala con réplicas en la Fase 23. Listados paginados y búsqueda de personas en lugar de listas del tenant completo (D38); pool de Prisma explícito (D37). CI corre una versión corta en cada PR |
 | Logging y monitoreo | 9a (`/api/health`) + 9b (logs JSON, D27) + 23 (Sentry) | Parcial: `/api/health` y el HEALTHCHECK de las imágenes existen (D17); web y worker escriben logs JSON con request id, tenant id y redacción de datos sensibles, y los errores pasan por un adaptador de reporte (D27), probado con un error forzado. Faltan Sentry en el mismo adaptador y uptime (23) |
 | Bitácora inmutable y sin datos sensibles | 9b + 11 | Parcial: solo se escribe vía `write_audit_log`, UPDATE/DELETE están bloqueados por políticas RESTRICTIVE y TRUNCATE quedó revocado (D25), con tests desde la Data API y desde una conexión de la app; los logs de la app redactan contraseñas, tokens, CURP, RFC, NSS, CLABE y salario (D27). Los `diff` de la bitácora guardan los valores cambiados (salario, datos personales) como registro del cambio; su enmascaramiento para quien los lee va con los datos sensibles de la Fase 11. `anonymize_user` (D10) reemplaza datos personales por ARCO. Desde D28 el login y la verificación MFA se auditan desde el servidor y los logins fallidos quedan en los logs JSON |
+| Credenciales demo fuera de producción | 9c (D41) + 23 (sin datos demo) | Cumple en local: el login muestra una pista solo si la variable del servidor `SCALIA_DEMO_LOGIN_HINT` la trae (nunca `NEXT_PUBLIC_`), y se ignora en producción si `APP_BASE_URL` no es local; `check:prod-build` falla si el bundle del cliente contiene la contraseña o el correo demo, y CI revisa el `/login` de la imagen. Pendiente para la Fase 23: sacar los datos demo de las migraciones y ninguna credencial demo en pantalla |
 | Uploads seguros (SVG, logos, íconos) | 11 | Pendiente: hoy no hay uploads |
 | Datos sensibles enmascarados | 11 | Pendiente: CURP, RFC y salario se muestran completos a quien pasa RLS (D6); NSS y CLABE llegan en la Fase 14 |
-| WCAG 2.2 AA (contraste, teclado, zoom, táctil) | 9c (D40 y PRs siguientes) + validación de colores en 11 | Parcial: desde D40 todo color es un token y una prueba revisa sus 121 pares por modo (texto 4.5:1, bordes de controles, foco e indicadores 3:1) en claro, oscuro y alto contraste (7:1 y 4.5:1); el texto terciario y los placeholders también cumplen 4.5:1. Un test estático impide colores literales en los componentes. Foco visible global con el token `focus`. Faltan teclado, zoom al 200 %, áreas táctiles de 44 px y axe en CI (PRs siguientes de la 9c) |
+| WCAG 2.2 AA (contraste, teclado, zoom, táctil) | 9c (D40, D41 y PRs siguientes) + validación de colores en 11 | Parcial: desde D40 todo color es un token y una prueba revisa sus 121 pares por modo (texto 4.5:1, bordes de controles, foco e indicadores 3:1) en claro, oscuro y alto contraste (7:1 y 4.5:1); el texto terciario y los placeholders también cumplen 4.5:1. Un test estático impide colores literales en los componentes. Foco visible global con el token `focus`. Desde D41: `lang="es-MX"`, enlace para saltar al contenido, navegación con `aria-current`, diálogo "Más" modal con foco atrapado y Esc, tooltips del rail con foco de teclado y Esc, áreas táctiles de 44 px en la navegación, sin scroll horizontal a 320 px (1.4.10) y foco nunca oculto bajo el dock o el header (2.4.11), medidos en la imagen de producción. Faltan textos en español, zoom al 200 % en todas las pantallas, la biblioteca base y axe en CI (PRs siguientes de la 9c) |
 | Movimiento reducido | 9c | Parcial: las duraciones de transición son tokens que pasan a 0 con `prefers-reduced-motion: reduce` (D40). Faltan framer-motion con `useReducedMotion` y la animación del indicador de carga |
 | LFPDPPP 2025: aviso de privacidad | 11 (DPCS visible en todos los temas) | Pendiente: DPCS todavía no existe |
 | LFPDPPP 2025: derechos ARCO | 20 | Parcial: el admin procesa solicitudes y la supresión existe (D10); faltan autoservicio y bloqueo (Known Risk registrado) |

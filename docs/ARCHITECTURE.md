@@ -2136,6 +2136,106 @@ background whose text is not its `on-` token.
 
 ---
 
+## D41 — Responsive Layout and Navigation
+
+**Decision:** one application shell for every protected page, with the
+navigation of D19 at three widths, all fed by the same filtered list of
+modules. Phase 9c, PR 2. ⌘K is not part of it.
+
+**Shell (`(protected)/layout.tsx`):**
+- Landmarks `header`, `nav` and `main`, and a "Saltar al contenido" link as
+  the first focusable element (WCAG 2.4.1).
+- Padding that follows the width; no horizontal scroll at 320 px (WCAG
+  1.4.10), measured at 320, 360, 768 and 1280 px.
+
+**Navigation by width** (Tailwind `md` = 768 px, `xl` = 1280 px, the D19
+reference widths):
+- 1280 px and up: full sidebar that can be collapsed. The state lives in a
+  cookie the server reads, so the first paint is right with no script. The
+  cookie only accepts `1` (collapsed) or `0`; any other value means expanded.
+  It is `SameSite=Lax`, `Path=/`, and `Secure` when the app runs on https.
+- 768 to 1279 px (1024–1279 included): icon rail. Each icon has its
+  accessible name from `aria-label` or visually hidden text; the tooltip
+  appears on hover and on keyboard focus but never names the link.
+- Under 768 px: bottom dock with at most 5 items, each with icon and text.
+  With more than 5 modules, the fifth is "Más", which opens an accessible
+  dialog (`role="dialog"`, `aria-modal`, focus trapped, Esc closes and focus
+  returns to "Más"). The dock respects `env(safe-area-inset-bottom)`, and
+  `main` keeps bottom padding so the dock never covers content or the focused
+  element (WCAG 2.4.11).
+- In all three: the same `NAV_ITEMS` through the same `filterNavByFlags`
+  (module flags, D12, and RBP, D14); `aria-current="page"` on the active item;
+  44 px touch targets; "Cerrar sesión" always reachable.
+- The menu only hides what the user cannot open. Each page keeps its own
+  server guard (`isModuleRouteBlocked` and `can()`), and a test opens hidden
+  routes to show they stay blocked whatever the menu shows.
+
+**Also in this PR (from the 9c accessibility and login items):**
+- `<html lang="es-MX">` (WCAG 3.1.1).
+- The demo credentials leave the code. The login page (a server component)
+  shows a hint only when the server variable `SCALIA_DEMO_LOGIN_HINT` holds
+  one, never a `NEXT_PUBLIC_` variable. It is ignored when `NODE_ENV` is
+  `production` and `APP_BASE_URL` is not a local host (`localhost`,
+  `*.localhost`, `127.0.0.1`). `check:prod-build` fails if the client bundle
+  contains `Demo1234` or the demo email, and the Docker job checks that the
+  image's `/login` shows no hint. The seed and the migrations are unchanged;
+  removing the demo data is already an entry requirement of Phase 23.
+
+**Left for PR 3:** the interface texts still in English and the dates, which
+will follow the tenant's time zone (`platform.timezone`).
+
+**Implementation:**
+- `src/lib/navigation/shell.ts` (cookie, dock split, active link),
+  `focus-trap.ts`, and `nav-config.ts` with a short label per module for the
+  dock. Long labels carry soft hyphens (`Organi\u00ADgrama`): at 320 px they
+  break onto a second line with a hyphen instead of being cut off.
+- `src/components/navigation/app-navigation.tsx` (sidebar, rail, dock and the
+  "Más" dialog) and `nav-icons.tsx`; the old `components/sidebar.tsx` is gone.
+- The header's sign-out button under 768 px opens its tooltip below and to
+  the left. Opened to the right it pushed a 320 px page 87 px wider even while
+  invisible.
+- `src/lib/auth/demo-hint.ts` (`server-only`); `login/page.tsx` passes the
+  hint to the form. `docker-compose.yml` forwards an empty
+  `SCALIA_DEMO_LOGIN_HINT` unless `.env.docker` sets it.
+- `/skills-hub` now refuses a user without `tih.employee_skills` (view), like
+  every other module page. The menu already hid it, but the page opened. Every
+  role of the demo RBP holds that permission, so nobody loses access today.
+- `jsdom` 30.1.3 (MIT) is a dev dependency for the DOM tests, and Vitest
+  compiles JSX for them.
+
+**Tests:**
+- `__tests__/navigation/shell.test.ts`: the cookie with valid and invalid
+  values, the dock split, the dock labels, the active link and the demo hint
+  (including production with a host that is not local).
+- `__tests__/navigation/navigation-dom.test.ts` (jsdom): the "Más" dialog
+  with the keyboard (initial focus, Tab and Shift+Tab wrap, Esc and the close
+  button return the focus to "Más"), rail names and tooltips, Esc on a
+  tooltip, the sidebar cookie, the header tooltip placement, and the same
+  links in the three variants.
+- `__tests__/navigation/hidden-routes-guarded.test.ts`: every module the menu
+  can hide, opened with its module off and without its permission, is hidden
+  by the menu and refused by the server.
+- `check:prod-build` fails on the demo password or email in `.next/static`;
+  the Docker job checks the image's `/login`.
+- In the production image, with a browser: 6 pages × 4 widths (320, 360,
+  768, 1280) × light and dark with no horizontal scroll, the dock, rail or
+  sidebar at the right width, every navigation target at least 44 × 44 px,
+  no CSP violation and no console error; the skip link first; focus never
+  under the dock or header while tabbing through a page at 360 px; the "Más"
+  dialog with the keyboard; a rail tooltip on focus; and the collapsed
+  sidebar rendered by the server after a reload. The demo hint shows only
+  when the local stack sets the variable.
+
+**Accepted for now:**
+- Dock labels are 12 px, below the 16 px body text of D19; the full name is
+  in the text and the dialog.
+- The module labels keep their codes ("Inicio (BizX)"); they change with the
+  texts of PR 3.
+- Under 768 px, sign-out sits in the header, since the dock keeps its five
+  places for modules.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.

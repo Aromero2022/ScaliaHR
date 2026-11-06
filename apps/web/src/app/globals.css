@@ -123,6 +123,15 @@
   html {
     background-color: var(--theme-canvas);
     color: var(--theme-fg);
+    /* D41: keep focused or scrolled-to elements clear of the sticky header. */
+    scroll-padding-top: 4.5rem;
+  }
+
+  /* D41: under 768 px the dock is fixed at the bottom; nothing scrolled into view hides under it (WCAG 2.4.11). */
+  @media (width < 48rem) {
+    html {
+      scroll-padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+    }
   }
 
   /* Visible focus for anything that gets keyboard focus (WCAG 2.4.7). */
