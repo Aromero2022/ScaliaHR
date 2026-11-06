@@ -55,7 +55,7 @@ describe("middleware CSP (D29)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://localhost:54321");
-    auth.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    auth.getClaims.mockResolvedValue({ data: null, error: null });
   });
 
   async function visit(path: string) {

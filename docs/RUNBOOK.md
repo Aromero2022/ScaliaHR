@@ -2,7 +2,7 @@
 
 Operación de la pila local de la Fase 9a: arranque, actualización, rollback, respaldos y restauración. Todo corre contra Supabase local; ninguno de estos comandos toca un proyecto remoto: los scripts se niegan si la base no es `127.0.0.1` o `localhost`. La versión para staging y producción (Railway, Supabase Pro, PITR) se escribe en la Fase 23.
 
-Decisiones de referencia: D17 (contenedores y worker), D20 (correo), D21 (tenant por subdominio), D22 (migraciones seguras), D23 (respaldos) y D24 (rollback) en `docs/ARCHITECTURE.md`.
+Decisiones de referencia: D17 (contenedores y worker), D20 (correo), D21 (tenant por subdominio), D22 (migraciones seguras), D23 (respaldos), D24 (rollback), D28 (rate limiting) y D36 (prueba de carga) en `docs/ARCHITECTURE.md`.
 
 ---
 
@@ -149,7 +149,40 @@ docker exec supabase_db_ScaliaHR psql -U postgres -c "DELETE FROM public.rate_li
 
 Los límites de escritura y de rutas HTTP de cada empresa se cambian en Admin Center → Límites de solicitudes.
 
-## 9. Diferencias que llegan en la Fase 23
+## 9. Prueba de carga (D36)
+
+Con la pila arriba (`npm run local:up`):
+
+```bash
+npm run load:test
+```
+
+Qué hace:
+
+1. Borra los tenants `load-*` y sus cuentas de una corrida anterior.
+2. Crea `load-big` con 1,000 empleados y `load-a`, `load-b` y `load-c` con 50 cada uno, con cuentas en Supabase Auth local (`load/seed.mjs`; solo acepta la base local).
+3. Corre k6 en Docker (`load/pages.js`): cada usuario inicia sesión una vez y abre páginas con 20–40 s entre ellas. Sube a 1,150 usuarios en 2 min, los sostiene 4 min y baja.
+
+Pasa si en estado estable el p95 de las páginas es menor a 500 ms, fallan menos del 1 % y pasan más del 99 % de los checks (cada página responde 200 y no muestra empleados de otro tenant). El resumen queda en `load/.out/summary.json`; ese directorio está fuera de git.
+
+Variables para otras corridas:
+
+| Variable | Default | Qué cambia |
+|----------|---------|------------|
+| `LOAD_BIG_USERS`, `LOAD_SMALL_USERS` | 1000, 50 | Empleados y cuentas que crea el seed por tenant |
+| `LOAD_VUS`, `SMALL_VUS` | 1000, 50 | Usuarios concurrentes en `load-big` y en cada tenant chico (no más que los empleados) |
+| `RAMP`, `HOLD` | `2m`, `4m` | Tiempo de subida y tiempo a carga completa |
+| `THINK_MIN`, `THINK_MAX` | 20, 40 | Segundos entre páginas de cada usuario |
+
+Capacidad de un proceso web, con pausas cortas:
+
+```bash
+THINK_MIN=2 THINK_MAX=6 LOAD_VUS=150 SMALL_VUS=10 npm run load:test
+```
+
+La prueba deja los tenants `load-*` en la base local; la siguiente corrida o `supabase db reset` los borra.
+
+## 10. Diferencias que llegan en la Fase 23
 
 - Respaldos diarios del plan Pro y PITR para producción (D15); los exports por tenant van a almacenamiento privado y cifrado en lugar de un volumen local, y se programan a diario para tenants con licencia.
 - Rollback en Railway a la imagen anterior, y procedimiento de restauración sobre staging antes de producción.

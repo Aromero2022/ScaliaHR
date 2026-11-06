@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import AccessDenied from "@/components/access-denied";
 import OrgTree from "@/components/org-tree";
 import type { PositionNode } from "@/components/org-tree";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 export default async function OrgChartPage() {
   const claims = await requireAuth();
@@ -17,11 +18,7 @@ export default async function OrgChartPage() {
 
   const supabase = await createClient();
 
-  const { data: bizUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  const bizUser = await getCurrentUser();
 
   if (!bizUser) redirect("/login");
 

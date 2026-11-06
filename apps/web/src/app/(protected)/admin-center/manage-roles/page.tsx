@@ -4,6 +4,7 @@ import { redirect, notFound } from "next/navigation";
 import { can } from "@/lib/authz/can";
 import Link from "next/link";
 import RoleManager from "@/components/role-manager";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 export interface RoleGrantRow {
   id: string;
@@ -25,11 +26,7 @@ export default async function ManageRolesPage() {
   if (!claims.tenantId) redirect("/login");
 
   const supabase = await createClient();
-  const { data: bizUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  const bizUser = await getCurrentUser();
   if (!bizUser) redirect("/login");
 
   const { allowed } = await can(bizUser.id, "admin.manage_roles", "edit");

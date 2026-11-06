@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { appRoleFromClaims, aalFromClaims, mfaStepFor, requiresAal2 } from "@/lib/auth/mfa-policy";
 import { COMPANY_CODE_COOKIE, requestedTenant, tenantAccessAllowed, tenantNotFound } from "@/lib/tenant/host";
 import { TENANT_ID_HEADER } from "@/lib/log/request-context";
+import { tenantAccessCache, tenantAccessKey } from "@/lib/tenant/access-cache";
 import { supabaseServerTarget } from "./server-url";
 
 const PUBLIC_PATHS = ["/login", "/auth", "/signup"];
@@ -33,12 +34,13 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Validate session server-side and refresh the token when needed.
-  // getUser() is required so the cookie carries the latest JWT from the
-  // custom_access_token_hook (with app_role and tenant_id).
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // D34: getClaims() checks the JWT's signature against Supabase Auth's public
+  // keys (fetched once and cached) and refreshes an expired session, so the
+  // cookie keeps carrying the latest JWT from custom_access_token_hook. Unlike
+  // getUser() it makes no call to Auth on every request.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const claims = claimsData?.claims ?? null;
+  const user = claims?.sub ? { id: claims.sub } : null;
 
   const pathname = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
@@ -50,8 +52,6 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user) {
-    const { data } = await supabase.auth.getClaims();
-    const claims = data?.claims ?? null;
 
     // D27: logs downstream carry the token's tenant. NextResponse.next() copies
     // the request headers when it is created, so rebuild it (keeping any
@@ -72,7 +72,16 @@ export async function updateSession(request: NextRequest) {
         request.cookies.get(COMPANY_CODE_COOKIE)?.value,
       );
       const tokenTenant = typeof claims?.tenant_id === "string" ? claims.tenant_id : "";
-      if (!(await tenantAccessAllowed(supabase, requested, tokenTenant))) {
+      // D35: an allowed pair is remembered for a few seconds; refusals (and a
+      // failed lookup) are never cached, so they are checked again each time.
+      const cache = tenantAccessCache();
+      const key = tenantAccessKey(requested, tokenTenant);
+      let allowed = cache.get(key) === true;
+      if (!allowed) {
+        allowed = await tenantAccessAllowed(supabase, requested, tokenTenant);
+        if (allowed) cache.set(key, true);
+      }
+      if (!allowed) {
         const refused = tenantNotFound();
         // Keep a refreshed session: dropping its cookies would reuse a rotated refresh token.
         supabaseResponse.cookies.getAll().forEach((cookie) => refused.cookies.set(cookie));

@@ -24,3 +24,5 @@ web-build/
 *.tsbuildinfo
 supabase/.temp/
 supabase/.branches/
+# k6 load test output (D36): accounts and results.
+load/.out/

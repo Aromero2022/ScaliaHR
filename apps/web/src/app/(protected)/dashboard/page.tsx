@@ -1,16 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/supabase/claims";
 import { can } from "@/lib/authz/can";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 export default async function DashboardPage() {
   const claims = await requireAuth();
   const supabase = await createClient();
 
-  const { data: bizUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  const bizUser = await getCurrentUser();
 
   const { data: profile } = await supabase
     .from("users")

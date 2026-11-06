@@ -11,6 +11,7 @@ import { Suspense } from "react";
 import { safeError } from "@/lib/errors/safe-error";
 import { ilikeAnyOf } from "@/lib/postgrest/filters";
 import { EmployeeListParams } from "@/lib/validations/employees";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 const PAGE_SIZE = 20;
 
@@ -27,11 +28,7 @@ export default async function EmployeesPage({
   if (isModuleRouteBlocked("/employees", flags)) redirect("/dashboard");
 
   const supabase = await createClient();
-  const { data: bizUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  const bizUser = await getCurrentUser();
 
   if (!bizUser) redirect("/login");
 

@@ -1,7 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
 import { requireAal2 } from "@/lib/supabase/claims";
 import { redirect, notFound } from "next/navigation";
 import { can } from "@/lib/authz/can";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 export default async function AdminCenterLayout({
   children,
@@ -11,12 +11,7 @@ export default async function AdminCenterLayout({
   const claims = await requireAal2("/admin-center");
   if (!claims.tenantId) redirect("/login");
 
-  const supabase = await createClient();
-  const { data: bizUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  const bizUser = await getCurrentUser();
 
   if (!bizUser) redirect("/login");
 

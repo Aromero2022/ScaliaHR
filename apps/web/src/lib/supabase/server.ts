@@ -1,8 +1,13 @@
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { supabaseServerTarget } from "./server-url";
 
-export async function createClient() {
+// D35: one client per request (React's cache): the layout, the page, the
+// claims and the current user share it instead of each parsing the session.
+export const createClient = cache(createRequestClient);
+
+async function createRequestClient() {
   const cookieStore = await cookies();
   const target = supabaseServerTarget();
 
