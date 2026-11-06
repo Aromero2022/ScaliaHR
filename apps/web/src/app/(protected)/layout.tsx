@@ -7,6 +7,7 @@ import { NAV_ITEMS, filterNavByFlags } from "@/lib/navigation/nav-config";
 import { SIDEBAR_COOKIE, isSidebarCollapsed } from "@/lib/navigation/shell";
 import { DockNav, RailNav, SidebarNav, SignOutButton, type ShellNavItem } from "@/components/navigation/app-navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { ToastProvider } from "@/components/ui/toast";
 
 const SIDEBAR_PERMISSION_KEYS = [
   ...new Set(
@@ -48,6 +49,7 @@ export default async function ProtectedLayout({
   const collapsed = isSidebarCollapsed((await cookies()).get(SIDEBAR_COOKIE)?.value);
 
   return (
+    <ToastProvider>
     <div className="min-h-dvh bg-canvas">
       <a
         href="#contenido"
@@ -78,5 +80,6 @@ export default async function ProtectedLayout({
       </div>
       <DockNav items={items} />
     </div>
+    </ToastProvider>
   );
 }

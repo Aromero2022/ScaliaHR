@@ -7,6 +7,8 @@ import { safeNextPath } from "@/lib/auth/mfa-policy";
 import { logMfaEnroll, logMfaEnrollFailed } from "../actions";
 import { mfaErrorMessage } from "@/lib/auth/messages";
 import { messages } from "@/lib/i18n/es-MX";
+import { Button } from "@/components/ui/button";
+import { InputField } from "@/components/ui/field";
 
 const t = messages.mfaEnroll;
 
@@ -109,38 +111,29 @@ export default function MfaEnrollPage() {
         </div>
       )}
 
-      <form onSubmit={handleVerify} className="space-y-4">
+      <form onSubmit={handleVerify} className="space-y-5">
         {error && (
           <div className="rounded-lg border border-danger-line bg-danger-subtle px-4 py-3 text-sm text-danger-fg">
             {error}
           </div>
         )}
 
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-fg-muted">
-            {t.code}
-          </span>
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]{6}"
-            maxLength={6}
-            required
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            className="w-full rounded-lg border border-control bg-surface-raised px-4 py-2.5 text-fg placeholder:text-fg-subtle focus:border-focus focus:ring-1 focus:ring-focus focus:outline-none"
-            placeholder="000000"
-            autoComplete="one-time-code"
-          />
-        </label>
+        <InputField
+          label={t.code}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          required
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+          placeholder="000000"
+          autoComplete="one-time-code"
+        />
 
-        <button
-          type="submit"
-          disabled={loading || code.length !== 6}
-          className="w-full rounded-lg bg-accent px-4 py-2.5 font-semibold text-on-accent transition hover:bg-accent-hover disabled:opacity-50"
-        >
+        <Button type="submit" loading={loading} disabled={code.length !== 6} className="w-full">
           {loading ? t.submitting : t.submit}
-        </button>
+        </Button>
       </form>
     </div>
   );

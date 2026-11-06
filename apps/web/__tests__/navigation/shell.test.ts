@@ -38,10 +38,23 @@ describe("mobile dock (D41)", () => {
     for (const item of NAV_ITEMS) {
       const text = item.shortLabel.replaceAll("\u00AD", "");
       expect(text.length, item.href).toBeGreaterThan(0);
-      expect(item.label.startsWith(text.slice(0, 4)) || item.label.includes(text), item.href).toBe(true);
+      // D43: the short label never contradicts the long name (compared without case: "Perfil" in "Mi perfil").
+      const label = item.label.toLowerCase();
+      const short = text.toLowerCase();
+      expect(label.startsWith(short.slice(0, 4)) || label.includes(short), item.href).toBe(true);
       // 64 px per dock item at 320 px: up to 7 characters a line at 12 px (measured in Inter).
       for (const piece of item.shortLabel.split("\u00AD")) expect(piece.length, `${item.href}: ${piece}`).toBeLessThanOrEqual(7);
     }
+  });
+});
+
+describe("menu names (D43)", () => {
+  it("are the approved names, from the es-MX module, without module codes", () => {
+    expect(NAV_ITEMS.map((i) => i.label)).toEqual([
+      "Inicio", "Empleados", "Mi perfil", "Organigrama", "Desempeño", "Formación", "Habilidades", "Derechos ARCO", "Administración",
+    ]);
+    for (const item of NAV_ITEMS) expect(item.label, item.href).not.toMatch(/\(|\b(BizX|EC|PMGM|LMS|TIH)\b|Talent|Admin Center/);
+    expect(NAV_ITEMS.find((i) => i.href === "/skills-hub")!.shortLabel.replaceAll("\u00AD", "")).toBe("Habilidades");
   });
 });
 

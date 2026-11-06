@@ -5,6 +5,7 @@ import { can } from "@/lib/authz/can";
 import Link from "next/link";
 import RoleManager from "@/components/role-manager";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { messages } from "@/lib/i18n/es-MX";
 
 export interface RoleGrantRow {
   id: string;
@@ -73,22 +74,21 @@ export default async function ManageRolesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-2">
+          <nav aria-label={messages.rolesPage.breadcrumb} className="flex items-center gap-2">
             <Link
               href="/admin-center"
-              className="text-sm text-fg-muted transition hover:text-fg"
+              className="inline-flex min-h-11 items-center text-sm text-fg-muted transition hover:text-fg"
             >
-              Admin Center
+              {messages.adminCenter.heading}
             </Link>
-            <span className="text-fg-subtle">/</span>
-            <span className="text-sm text-fg-muted">Gestión de Roles</span>
-          </div>
+            <span aria-hidden="true" className="text-fg-subtle">/</span>
+            <span aria-current="page" className="text-sm text-fg-muted">{messages.rolesPage.current}</span>
+          </nav>
           <h1 className="mt-2 text-2xl font-bold text-fg">
-            Role-Based Permissions
+            {messages.rolesPage.heading}
           </h1>
           <p className="mt-1 text-sm text-fg-muted">
-            Roles de permiso, permisos técnicos asignados y asignaciones de
-            grupo
+            {messages.rolesPage.subheading}
           </p>
         </div>
       </div>

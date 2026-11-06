@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { enumLabel, messages } from "@/lib/i18n/es-MX";
 import { formatDateOnly, formatInstant } from "@/lib/format/dates";
 import { getSessionTimeZone } from "@/lib/tenant/get-tenant-time-zone";
+import { Badge } from "@/components/ui/badge";
 
 const t = messages.profile;
 const fields = messages.fields;
@@ -137,9 +138,7 @@ export default async function ProfilePage() {
                 className="rounded-lg border border-line px-4 py-3"
               >
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs font-medium text-fg-muted">
-                    {enumLabel("FeedbackCategory", f.category)}
-                  </span>
+                  <Badge enumName="FeedbackCategory" value={f.category} />
                   <span className="text-xs text-fg-subtle">
                     {formatInstant(f.created_at, timeZone, { withTime: false })}
                   </span>

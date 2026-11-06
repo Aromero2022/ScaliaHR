@@ -184,7 +184,7 @@ describe("desktop sidebar (D41)", () => {
   it("starts collapsed when the server read the cookie as collapsed", async () => {
     await render(createElement(SidebarNav, { items, initialCollapsed: true }));
     expect(container.querySelector("nav")!.getAttribute("data-collapsed")).toBe("1");
-    expect(accessibleText(container.querySelector("a[href='/profile']")!)).toBe("Mi Perfil");
+    expect(accessibleText(container.querySelector("a[href='/profile']")!)).toBe("Mi perfil");
   });
 });
 

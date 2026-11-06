@@ -12,7 +12,9 @@ import { safeError } from "@/lib/errors/safe-error";
 import { ilikeAnyOf } from "@/lib/postgrest/filters";
 import { EmployeeListParams } from "@/lib/validations/employees";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { enumLabel, messages } from "@/lib/i18n/es-MX";
+import { messages } from "@/lib/i18n/es-MX";
+import { Table } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 const t = messages.employees;
 
@@ -149,78 +151,58 @@ export default async function EmployeesPage({
       </div>
 
       <div className="overflow-hidden rounded-xl border border-line bg-surface">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-line text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                <th className="px-6 py-3">{t.columns.employee}</th>
-                <th className="px-6 py-3">{t.columns.jobTitle}</th>
-                <th className="px-6 py-3">{t.columns.department}</th>
-                <th className="px-6 py-3">{t.columns.employeeNumber}</th>
-                <th className="px-6 py-3">{t.columns.status}</th>
-                <th className="px-6 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {rows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-6 py-12 text-center text-fg-subtle"
-                  >
-                    {search ? t.noResultsFor(search) : t.none}
-                  </td>
-                </tr>
-              ) : (
-                rows.map((emp) => (
-                  <tr
-                    key={emp.id}
-                    className="transition hover:bg-surface-hover"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-semibold text-accent-fg">
-                          {initials(emp.firstName, emp.lastName)}
-                        </div>
-                        <div>
-                          <p className="font-medium text-fg">
-                            {emp.firstName} {emp.lastName}
-                          </p>
-                          <p className="text-xs text-fg-subtle">{emp.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-fg-muted">
-                      {emp.jobTitle ?? emp.positionTitle ?? messages.common.empty}
-                    </td>
-                    <td className="px-6 py-4 text-fg-muted">
-                      {emp.department ?? messages.common.empty}
-                    </td>
-                    <td className="px-6 py-4 font-mono text-xs text-fg-muted">
-                      {emp.employeeId ?? messages.common.empty}
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={emp.status} />
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {emp.canView ? (
-                        <Link
-                          href={`/employees/${emp.id}`}
-                          className="text-sm font-medium text-accent-fg transition hover:text-fg"
-                        >
-                          {t.viewProfile}
-                        </Link>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          caption={t.heading}
+          rows={rows}
+          rowKey={(emp) => emp.id}
+          empty={search ? t.noResultsFor(search) : t.none}
+          columns={[
+            {
+              key: "employee",
+              header: t.columns.employee,
+              className: "px-6 py-4",
+              cell: (emp) => (
+                <div className="flex items-center gap-3">
+                  <div aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-semibold text-accent-fg">
+                    {initials(emp.firstName, emp.lastName)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-fg">
+                      {emp.firstName} {emp.lastName}
+                    </p>
+                    <p className="break-words text-xs text-fg-subtle">{emp.email}</p>
+                  </div>
+                </div>
+              ),
+            },
+            { key: "job", header: t.columns.jobTitle, cell: (emp) => emp.jobTitle ?? emp.positionTitle ?? messages.common.empty },
+            { key: "department", header: t.columns.department, cell: (emp) => emp.department ?? messages.common.empty },
+            {
+              key: "number",
+              header: t.columns.employeeNumber,
+              className: "px-6 py-4 font-mono text-xs text-fg-muted",
+              cell: (emp) => emp.employeeId ?? messages.common.empty,
+            },
+            { key: "status", header: t.columns.status, className: "px-6 py-4", cell: (emp) => <Badge enumName="EmployeeStatus" value={emp.status} /> },
+            {
+              key: "profile",
+              header: t.columns.actions,
+              action: true,
+              className: "px-6 py-4 text-right",
+              cell: (emp) =>
+                emp.canView ? (
+                  <Link href={`/employees/${emp.id}`} className="inline-flex min-h-11 items-center text-sm font-medium text-accent-fg transition hover:text-fg">
+                    {t.viewProfile}
+                    <span className="sr-only">{t.ofEmployee(`${emp.firstName} ${emp.lastName}`)}</span>
+                    <span aria-hidden="true">&nbsp;→</span>
+                  </Link>
+                ) : null,
+            },
+          ]}
+        />
 
         {total > 0 && (
-          <div className="flex items-center justify-between border-t border-line px-6 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2 md:px-6">
             <p className="text-xs text-fg-subtle">
               {t.showing(showingFrom, showingTo, total)}
             </p>
@@ -232,7 +214,7 @@ export default async function EmployeesPage({
                   label={t.previous}
                 />
               ) : (
-                <span className="rounded-lg px-3 py-1.5 text-xs text-fg-subtle">
+                <span className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs text-fg-subtle">
                   {t.previous}
                 </span>
               )}
@@ -246,7 +228,7 @@ export default async function EmployeesPage({
                   label={t.next}
                 />
               ) : (
-                <span className="rounded-lg px-3 py-1.5 text-xs text-fg-subtle">
+                <span className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs text-fg-subtle">
                   {t.next}
                 </span>
               )}
@@ -275,26 +257,9 @@ function PaginationLink({
   return (
     <Link
       href={href}
-      className="rounded-lg border border-line px-3 py-1.5 text-xs text-fg-muted transition hover:border-accent hover:text-fg"
+      className="inline-flex min-h-11 items-center rounded-lg border border-line px-3 text-xs text-fg-muted transition hover:border-accent hover:text-fg"
     >
       {label}
     </Link>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    ACTIVE: "bg-success-subtle text-success-fg",
-    INACTIVE: "bg-surface-raised text-fg-muted",
-    ON_LEAVE: "bg-warning-subtle text-warning-fg",
-    TERMINATED: "bg-danger-subtle text-danger-fg",
-  };
-
-  return (
-    <span
-      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[status] ?? styles.INACTIVE}`}
-    >
-      {enumLabel("EmployeeStatus", status)}
-    </span>
   );
 }

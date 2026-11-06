@@ -8,12 +8,19 @@ import { RATE_LIMITS } from "@/lib/rate-limit";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { formatInstant } from "@/lib/format/dates";
 import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
+import { messages } from "@/lib/i18n/es-MX";
+import { ButtonLink } from "@/components/ui/button";
+import { StatCard, type StatTone } from "@/components/ui/stat-card";
 
-interface StatCard {
+// D43: one primary per view; "Gestionar roles" is navigation, so it is secondary
+// and the rate limits' "Guardar" is the view's primary. Texts from es-MX.
+const t = messages.adminCenter;
+
+interface Stat {
   label: string;
   value: number | string;
-  icon: string;
-  color: "accent" | "success" | "warning" | "info";
+  icon: "shield" | "users" | "key" | "person";
+  tone: StatTone;
 }
 
 interface ConfigRow {
@@ -82,39 +89,19 @@ export default async function AdminCenterPage() {
         : Promise.resolve({ data: [], error: null }),
     ]);
 
-  const stats: StatCard[] = [
-    {
-      label: "Roles de Permiso",
-      value: rolesRes.count ?? 0,
-      icon: "shield",
-      color: "accent",
-    },
-    {
-      label: "Grupos de Permiso",
-      value: groupsRes.count ?? 0,
-      icon: "users",
-      color: "success",
-    },
-    {
-      label: "Permisos Técnicos",
-      value: permsRes.count ?? 0,
-      icon: "key",
-      color: "warning",
-    },
-    {
-      label: "Usuarios Activos",
-      value: usersRes.count ?? 0,
-      icon: "person",
-      color: "info",
-    },
+  const stats: Stat[] = [
+    { label: t.stats.roles, value: rolesRes.count ?? 0, icon: "shield", tone: "accent" },
+    { label: t.stats.groups, value: groupsRes.count ?? 0, icon: "users", tone: "success" },
+    { label: t.stats.permissions, value: permsRes.count ?? 0, icon: "key", tone: "warning" },
+    { label: t.stats.users, value: usersRes.count ?? 0, icon: "person", tone: "info" },
   ];
 
   const configs = (configsRes.data ?? []) as ConfigRow[];
   const auditEntries = (auditRes.data ?? []) as AuditRow[];
   const rateLimits: RateLimitSetting[] = (
     [
-      ["write", "Acciones de escritura"],
-      ["api", "Rutas HTTP"],
+      ["write", t.rateLimits.write],
+      ["api", t.rateLimits.api],
     ] as const
   ).map(([action, label]) => {
     const own = (limitsRes.data ?? []).find((row) => row.action === action);
@@ -129,37 +116,24 @@ export default async function AdminCenterPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-fg">Admin Center</h1>
+          <h1 className="text-2xl font-bold text-fg">{t.heading}</h1>
           <p className="mt-1 text-sm text-fg-muted">
-            Panel de administración — Role-Based Permissions y configuración de
-            la plataforma
+            {t.subheading}
           </p>
         </div>
         {rolesPerm.allowed && (
-          <Link
-            href="/admin-center/manage-roles"
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
-          >
-            Gestionar Roles
-          </Link>
+          <ButtonLink href="/admin-center/manage-roles" variant="secondary">
+            {t.manageRoles}
+          </ButtonLink>
         )}
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
-          <div
-            key={s.label}
-            className="rounded-xl border border-line bg-surface p-5"
-          >
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-fg-muted">{s.label}</p>
-              <StatIcon name={s.icon} color={s.color} />
-            </div>
-            <p className="mt-2 text-3xl font-bold text-fg">{s.value}</p>
-          </div>
+          <StatCard key={s.label} label={s.label} value={s.value} tone={s.tone} icon={<StatIcon name={s.icon} />} />
         ))}
       </div>
 
@@ -168,18 +142,18 @@ export default async function AdminCenterPage() {
         {configPerm.allowed && (
           <div className="rounded-xl border border-line bg-surface p-6">
             <h2 className="mb-4 text-lg font-semibold text-fg">
-              Configuración del Sistema
+              {t.configHeading}
             </h2>
             <div className="space-y-3">
               {configs.map((c) => (
                 <div
                   key={c.key}
-                  className="flex items-center justify-between rounded-lg bg-surface-muted px-4 py-3"
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg bg-surface-muted px-4 py-3"
                 >
                   <span className="text-sm font-medium text-fg-muted">
                     {c.key}
                   </span>
-                  <span className="text-sm text-fg-muted">
+                  <span className="min-w-0 break-all text-sm text-fg-muted">
                     {typeof c.value_json === "string"
                       ? c.value_json
                       : JSON.stringify(c.value_json)}
@@ -188,7 +162,7 @@ export default async function AdminCenterPage() {
               ))}
               {configs.length === 0 && (
                 <p className="text-sm text-fg-subtle">
-                  Sin configuraciones registradas.
+                  {t.noConfig}
                 </p>
               )}
             </div>
@@ -199,7 +173,7 @@ export default async function AdminCenterPage() {
         {configPerm.allowed && (
           <div className="rounded-xl border border-line bg-surface p-6">
             <h2 className="mb-4 text-lg font-semibold text-fg">
-              Límites de solicitudes
+              {t.rateLimits.heading}
             </h2>
             <RateLimitSettings settings={rateLimits} />
           </div>
@@ -209,7 +183,7 @@ export default async function AdminCenterPage() {
         {auditPerm.allowed && (
           <div className="rounded-xl border border-line bg-surface p-6">
             <h2 className="mb-4 text-lg font-semibold text-fg">
-              Registro de Auditoría (Reciente)
+              {t.auditHeading}
             </h2>
             <div className="space-y-3">
               {auditEntries.map((a, i) => {
@@ -230,7 +204,7 @@ export default async function AdminCenterPage() {
                     <p className="mt-1 text-sm text-fg-muted">
                       {usr
                         ? `${(usr as Record<string, string>).first_name} ${(usr as Record<string, string>).last_name}`
-                        : "Sistema"}
+                        : t.system}
                       {a.entity ? ` — ${a.entity}` : ""}
                       {a.entity_id ? ` (${a.entity_id})` : ""}
                       {a.details_json &&
@@ -240,7 +214,7 @@ export default async function AdminCenterPage() {
                         : ""}
                     </p>
                     {a.diff && Object.keys(a.diff).length > 0 && (
-                      <pre className="mt-1 max-h-24 overflow-auto rounded-sm bg-surface px-2 py-1 text-xs text-fg-subtle">
+                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-surface px-2 py-1 text-xs text-fg-subtle">
                         {JSON.stringify(a.diff, null, 2)}
                       </pre>
                     )}
@@ -249,7 +223,7 @@ export default async function AdminCenterPage() {
               })}
               {auditEntries.length === 0 && (
                 <p className="text-sm text-fg-subtle">
-                  Sin entradas de auditoría.
+                  {t.noAudit}
                 </p>
               )}
             </div>
@@ -260,37 +234,37 @@ export default async function AdminCenterPage() {
       {/* Quick Links */}
       <div className="rounded-xl border border-line bg-surface p-6">
         <h2 className="mb-4 text-lg font-semibold text-fg">
-          Acceso Rápido
+          {t.quickLinks.heading}
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {rolesPerm.allowed && (
             <Link
               href="/admin-center/manage-roles"
-              className="flex items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
+              className="flex min-h-11 items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-subtle text-accent-fg">
+              <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-subtle text-accent-fg">
                 <ShieldSvg />
               </span>
-              Gestionar Roles y Permisos
+              {t.quickLinks.roles}
             </Link>
           )}
           <Link
             href="/org-chart"
-            className="flex items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
+            className="flex min-h-11 items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-success-subtle text-success-fg">
+            <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-success-subtle text-success-fg">
               <OrgSvg />
             </span>
-            Organigrama (Posiciones)
+            {t.quickLinks.orgChart}
           </Link>
           <Link
             href="/dashboard"
-            className="flex items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
+            className="flex min-h-11 items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-info-subtle text-info-fg">
+            <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-info-subtle text-info-fg">
               <HomeSvg />
             </span>
-            Dashboard Principal
+            {t.quickLinks.dashboard}
           </Link>
         </div>
       </div>
@@ -298,24 +272,11 @@ export default async function AdminCenterPage() {
   );
 }
 
-const STAT_ICON_TONE = {
-  accent: "bg-accent-subtle text-accent-fg",
-  success: "bg-success-subtle text-success-fg",
-  warning: "bg-warning-subtle text-warning-fg",
-  info: "bg-info-subtle text-info-fg",
-} as const;
-
-function StatIcon({ name, color }: { name: string; color: keyof typeof STAT_ICON_TONE }) {
-  return (
-    <span
-      className={`flex h-9 w-9 items-center justify-center rounded-lg ${STAT_ICON_TONE[color]}`}
-    >
-      {name === "shield" && <ShieldSvg />}
-      {name === "users" && <OrgSvg />}
-      {name === "key" && <KeySvg />}
-      {name === "person" && <PersonSvg />}
-    </span>
-  );
+function StatIcon({ name }: { name: Stat["icon"] }) {
+  if (name === "shield") return <ShieldSvg />;
+  if (name === "users") return <OrgSvg />;
+  if (name === "key") return <KeySvg />;
+  return <PersonSvg />;
 }
 
 function ShieldSvg() {

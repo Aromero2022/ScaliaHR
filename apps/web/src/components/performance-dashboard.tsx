@@ -4,9 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import PersonSearch from "@/components/person-search";
 import { createGoal, sendFeedback } from "@/app/(protected)/performance/actions";
-import { ENUM_LABELS, enumLabel } from "@/lib/i18n/es-MX";
+import { ENUM_LABELS, messages } from "@/lib/i18n/es-MX";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { InputField, SelectField, TextareaField } from "@/components/ui/field";
+import { StatCard } from "@/components/ui/stat-card";
+import { useToast } from "@/components/ui/toast";
 
 // D42: dates arrive formatted by the server (dueLabel, createdLabel); this client component never formats them.
+// D43: the goal and feedback forms are Dialogs; their success messages are toasts.
+
+const t = messages.performance;
 
 interface GoalRow {
   id: string;
@@ -42,6 +51,7 @@ interface Props {
   feedbackPageSize: number;
 }
 
+/** Progress ring and bar colors by goal state; the state's name is always shown as text (Badge). */
 const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
   NOT_STARTED: { color: "text-fg-muted", bg: "bg-surface-strong" },
   ON_TRACK: { color: "text-success-fg", bg: "bg-success" },
@@ -50,16 +60,9 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
   CANCELLED: { color: "text-danger-fg", bg: "bg-danger" },
 };
 
-const CATEGORY_CONFIG: Record<string, { color: string }> = {
-  GENERAL: { color: "text-fg-muted" },
-  RECOGNITION: { color: "text-success-fg" },
-  COACHING: { color: "text-warning-fg" },
-  DEVELOPMENT: { color: "text-accent-fg" },
-};
-
 export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, feedbackPage, feedbackPageSize }: Props) {
-  const [showGoalModal, setShowGoalModal] = useState(false);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"goals" | "feedback">(feedbackPage > 1 ? "feedback" : "goals");
   const feedbackPages = Math.max(1, Math.ceil(feedbackTotal / feedbackPageSize));
 
@@ -69,56 +72,45 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
 
   const onTrack = goals.filter((g) => g.status === "ON_TRACK").length;
   const atRisk = goals.filter((g) => g.status === "AT_RISK").length;
-  const completed = goals.filter((g) => g.status === "COMPLETED").length;
 
   return (
     <div className="space-y-6">
-      {/* Summary Stats */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatTile label="Objetivos" value={goals.length} tone="accent" />
-        <StatTile label="Progreso Promedio" value={`${avgProgress}%`} tone="info" />
-        <StatTile label="En Curso" value={onTrack} tone="success" />
-        <StatTile label="En Riesgo" value={atRisk} tone="warning" />
+        <StatCard label={t.stats.goals} value={goals.length} tone="accent" />
+        <StatCard label={t.stats.avgProgress} value={`${avgProgress}%`} tone="info" />
+        <StatCard label={t.stats.onTrack} value={onTrack} tone="success" />
+        <StatCard label={t.stats.atRisk} value={atRisk} tone="warning" />
       </div>
 
-      {/* Tab Switcher */}
       <div className="flex items-center gap-2 border-b border-line">
         <button
           onClick={() => setActiveTab("goals")}
-          className={`px-4 py-2.5 text-sm font-medium transition ${
-            activeTab === "goals"
-              ? "border-b-2 border-accent text-accent-fg"
-              : "text-fg-muted hover:text-fg"
+          aria-pressed={activeTab === "goals"}
+          className={`min-h-11 px-4 py-2.5 text-sm font-medium transition ${
+            activeTab === "goals" ? "border-b-2 border-accent text-accent-fg" : "text-fg-muted hover:text-fg"
           }`}
         >
-          Mis Objetivos ({goals.length})
+          {t.tabs.goals(goals.length)}
         </button>
         <button
           onClick={() => setActiveTab("feedback")}
-          className={`px-4 py-2.5 text-sm font-medium transition ${
-            activeTab === "feedback"
-              ? "border-b-2 border-accent text-accent-fg"
-              : "text-fg-muted hover:text-fg"
+          aria-pressed={activeTab === "feedback"}
+          className={`min-h-11 px-4 py-2.5 text-sm font-medium transition ${
+            activeTab === "feedback" ? "border-b-2 border-accent text-accent-fg" : "text-fg-muted hover:text-fg"
           }`}
         >
-          Feedback Continuo ({feedbackTotal})
+          {t.tabs.feedback(feedbackTotal)}
         </button>
       </div>
 
-      {/* Goals Tab */}
       {activeTab === "goals" && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button
-              onClick={() => setShowGoalModal(true)}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
-            >
-              + Nuevo Objetivo
-            </button>
+            <Button onClick={() => setGoalOpen(true)}>{t.newGoal}</Button>
           </div>
 
           {goals.length === 0 ? (
-            <EmptyState message="No tienes objetivos registrados." />
+            <EmptyState message={t.noGoals} />
           ) : (
             <div className="space-y-3">
               {goals.map((goal) => (
@@ -129,20 +121,14 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
         </div>
       )}
 
-      {/* Feedback Tab */}
       {activeTab === "feedback" && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button
-              onClick={() => setShowFeedbackModal(true)}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
-            >
-              + Enviar Feedback
-            </button>
+            <Button onClick={() => setFeedbackOpen(true)}>{t.sendFeedback}</Button>
           </div>
 
           {feedbacks.length === 0 ? (
-            <EmptyState message="No hay feedback registrado." />
+            <EmptyState message={t.noFeedback} />
           ) : (
             <div className="space-y-3">
               {feedbacks.map((fb) => (
@@ -153,7 +139,9 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
           {feedbackPages > 1 && (
             <div className="flex items-center justify-between text-sm text-fg-muted">
               {feedbackPage > 1 ? (
-                <Link href={`/performance?fb=${feedbackPage - 1}`} className="hover:text-fg">← Anteriores</Link>
+                <Link href={`/performance?fb=${feedbackPage - 1}`} className="inline-flex min-h-11 items-center hover:text-fg">
+                  {t.previous}
+                </Link>
               ) : (
                 <span />
               )}
@@ -161,7 +149,9 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
                 {feedbackPage} / {feedbackPages}
               </span>
               {feedbackPage < feedbackPages ? (
-                <Link href={`/performance?fb=${feedbackPage + 1}`} className="hover:text-fg">Siguientes →</Link>
+                <Link href={`/performance?fb=${feedbackPage + 1}`} className="inline-flex min-h-11 items-center hover:text-fg">
+                  {t.next}
+                </Link>
               ) : (
                 <span />
               )}
@@ -170,27 +160,8 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
         </div>
       )}
 
-      {showGoalModal && <GoalModal onClose={() => setShowGoalModal(false)} />}
-      {showFeedbackModal && (
-        <FeedbackModal onClose={() => setShowFeedbackModal(false)} />
-      )}
-    </div>
-  );
-}
-
-const STAT_TONE = {
-  accent: "text-accent-fg",
-  info: "text-info-fg",
-  success: "text-success-fg",
-  warning: "text-warning-fg",
-} as const;
-
-function StatTile({ label, value, tone }: { label: string; value: number | string; tone: keyof typeof STAT_TONE }) {
-  const textClass = STAT_TONE[tone];
-  return (
-    <div className="rounded-xl border border-line bg-surface p-4">
-      <p className="text-xs font-medium text-fg-muted">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${textClass}`}>{value}</p>
+      <GoalDialog open={goalOpen} onClose={() => setGoalOpen(false)} />
+      <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>
   );
 }
@@ -203,7 +174,7 @@ function ProgressRing({ percentage, status }: { percentage: number; status: stri
 
   return (
     <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
-      <svg className="h-16 w-16 -rotate-90" viewBox="0 0 64 64">
+      <svg aria-hidden="true" className="h-16 w-16 -rotate-90" viewBox="0 0 64 64">
         <circle cx="32" cy="32" r={radius} fill="none" stroke="currentColor" strokeWidth="4" className="text-surface-strong" />
         <circle
           cx="32" cy="32" r={radius} fill="none"
@@ -226,9 +197,7 @@ function GoalCard({ goal }: { goal: GoalRow }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="truncate font-medium text-fg">{goal.title}</h3>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${config.color} bg-surface-raised`}>
-            {enumLabel("GoalStatus", goal.status)}
-          </span>
+          <Badge enumName="GoalStatus" value={goal.status} className="shrink-0" />
         </div>
         {goal.description && (
           <p className="mt-1 text-sm text-fg-muted line-clamp-2">{goal.description}</p>
@@ -236,15 +205,14 @@ function GoalCard({ goal }: { goal: GoalRow }) {
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-subtle">
           {goal.metric && (
             <span>
-              Métrica: <span className="text-fg-muted">{goal.metric}</span>
-              {goal.target_value != null && ` — Objetivo: ${goal.target_value}`}
-              {goal.actual_value != null && ` — Actual: ${goal.actual_value}`}
+              {t.goal.metric} <span className="text-fg-muted">{goal.metric}</span>
+              {goal.target_value != null && t.goal.target(goal.target_value)}
+              {goal.actual_value != null && t.goal.actual(goal.actual_value)}
             </span>
           )}
-          {goal.weight != null && <span>Peso: {Math.round(goal.weight * 100)}%</span>}
-          {goal.dueLabel && <span>Vence: {goal.dueLabel}</span>}
+          {goal.weight != null && <span>{t.goal.weight(Math.round(goal.weight * 100))}</span>}
+          {goal.dueLabel && <span>{t.goal.due(goal.dueLabel)}</span>}
         </div>
-        {/* Progress Bar */}
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-raised">
           <div
             className={`h-full rounded-full transition-all ${config.bg}`}
@@ -257,33 +225,28 @@ function GoalCard({ goal }: { goal: GoalRow }) {
 }
 
 function FeedbackCard({ feedback }: { feedback: FeedbackRow }) {
-  const catConfig = CATEGORY_CONFIG[feedback.category] || CATEGORY_CONFIG.GENERAL;
-  const authorName = feedback.author
-    ? `${feedback.author.first_name} ${feedback.author.last_name}`
-    : "Desconocido";
-  const subjectName = feedback.subject
-    ? `${feedback.subject.first_name} ${feedback.subject.last_name}`
-    : "Desconocido";
+  const authorName = feedback.author ? `${feedback.author.first_name} ${feedback.author.last_name}` : t.feedback.unknown;
+  const subjectName = feedback.subject ? `${feedback.subject.first_name} ${feedback.subject.last_name}` : t.feedback.unknown;
 
   return (
     <div className="rounded-xl border border-line bg-surface p-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className={`rounded-full bg-surface-raised px-2.5 py-0.5 text-[10px] font-medium ${catConfig.color}`}>
-            {enumLabel("FeedbackCategory", feedback.category)}
-          </span>
-          <span className="rounded-full bg-surface-raised px-2.5 py-0.5 text-[10px] font-medium text-fg-muted">
-            {enumLabel("FeedbackVisibility", feedback.visibility)}
-          </span>
+          <Badge enumName="FeedbackCategory" value={feedback.category} />
+          <Badge enumName="FeedbackVisibility" value={feedback.visibility} />
         </div>
         <span className="text-xs text-fg-subtle">{feedback.createdLabel}</span>
       </div>
       <p className="mt-3 text-sm text-fg-muted">{feedback.content}</p>
       <div className="mt-3 flex items-center gap-1 text-xs text-fg-subtle">
         {feedback.is_author ? (
-          <span>Enviado a <span className="text-fg-muted">{subjectName}</span></span>
+          <span>
+            {t.feedback.sentTo} <span className="text-fg-muted">{subjectName}</span>
+          </span>
         ) : (
-          <span>De <span className="text-fg-muted">{authorName}</span></span>
+          <span>
+            {t.feedback.from} <span className="text-fg-muted">{authorName}</span>
+          </span>
         )}
       </div>
     </div>
@@ -298,196 +261,120 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
-function GoalModal({ onClose }: { onClose: () => void }) {
+function GoalDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const d = t.goalDialog;
+  const toast = useToast();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPending(true);
     setError(null);
-    const fd = new FormData(e.currentTarget);
-    const result = await createGoal(fd);
+    const result = await createGoal(new FormData(e.currentTarget));
     setPending(false);
     if (result.error) {
       setError(result.error);
-    } else {
-      setSuccess(true);
+      return;
     }
+    onClose();
+    toast.success(d.created);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6 shadow-2xl">
-        <h3 className="text-lg font-bold text-fg">Nuevo Objetivo</h3>
-
-        {success ? (
-          <div className="mt-6 rounded-lg bg-success-subtle p-4 text-center">
-            <p className="text-sm font-medium text-success-fg">Objetivo creado correctamente</p>
-            <button onClick={onClose} className="mt-4 rounded-lg bg-surface-raised px-4 py-2 text-sm text-fg-muted hover:bg-surface-hover">
-              Cerrar
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-            <Field label="Título *" name="title" required />
-            <Field label="Descripción" name="description" textarea />
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Métrica" name="metric" placeholder="Ej. Días promedio" />
-              <Field label="Valor Objetivo" name="target_value" type="number" step="any" />
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <Field label="Peso (0-1)" name="weight" type="number" step="0.05" placeholder="0.25" />
-              <Field label="Fecha Inicio *" name="period_start" type="date" required />
-              <Field label="Fecha Fin *" name="period_end" type="date" required />
-            </div>
-            <Field label="Fecha Límite" name="due_date" type="date" />
-            {error && <p className="text-sm text-danger-fg">{error}</p>}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={pending}
-                className="flex-1 rounded-lg bg-accent py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:opacity-50"
-              >
-                {pending ? "Guardando..." : "Crear Objetivo"}
-              </button>
-              <button type="button" onClick={onClose} className="rounded-lg bg-surface-raised px-4 py-2 text-sm text-fg-muted hover:bg-surface-hover">
-                Cancelar
-              </button>
-            </div>
-          </form>
+    <Dialog open={open} onClose={onClose} title={d.title}>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <InputField label={d.fields.title} name="title" required />
+        <TextareaField label={d.fields.description} name="description" rows={2} />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <InputField label={d.fields.metric} name="metric" placeholder={d.fields.metricPlaceholder} />
+          <InputField label={d.fields.target} name="target_value" type="number" step="any" />
+        </div>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <InputField label={d.fields.weight} name="weight" type="number" step="0.05" placeholder="0.25" />
+          <InputField label={d.fields.start} name="period_start" type="date" required />
+          <InputField label={d.fields.end} name="period_end" type="date" required />
+        </div>
+        <InputField label={d.fields.due} name="due_date" type="date" />
+        {error && (
+          <p role="alert" className="text-sm text-danger-fg">
+            {error}
+          </p>
         )}
-      </div>
-    </div>
+        <div className="flex flex-wrap gap-3 pt-1">
+          <Button type="submit" loading={pending} className="flex-1">
+            {pending ? d.submitting : d.submit}
+          </Button>
+          <Button variant="secondary" onClick={onClose}>
+            {messages.common.cancel}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
-function FeedbackModal({ onClose }: { onClose: () => void }) {
+function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const d = t.feedbackDialog;
+  const toast = useToast();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPending(true);
     setError(null);
-    const fd = new FormData(e.currentTarget);
-    const result = await sendFeedback(fd);
+    const result = await sendFeedback(new FormData(e.currentTarget));
     setPending(false);
     if (result.error) {
       setError(result.error);
-    } else {
-      setSuccess(true);
+      return;
     }
+    onClose();
+    toast.success(d.sent);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6 shadow-2xl">
-        <h3 className="text-lg font-bold text-fg">Enviar Feedback</h3>
-
-        {success ? (
-          <div className="mt-6 rounded-lg bg-success-subtle p-4 text-center">
-            <p className="text-sm font-medium text-success-fg">Feedback enviado correctamente</p>
-            <button onClick={onClose} className="mt-4 rounded-lg bg-surface-raised px-4 py-2 text-sm text-fg-muted hover:bg-surface-hover">
-              Cerrar
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-fg-muted">Destinatario *</label>
-              <PersonSearch name="subject_id" label="Buscar destinatario" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-fg-muted">Contenido *</label>
-              <textarea
-                name="content"
-                required
-                rows={3}
-                className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-focus focus:ring-1 focus:ring-focus"
-                placeholder="Escribe tu feedback..."
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-fg-muted">Visibilidad</label>
-                <select
-                  name="visibility"
-                  className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg outline-none focus:border-focus"
-                >
-                  {Object.entries(ENUM_LABELS.FeedbackVisibility).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-muted">Categoría</label>
-                <select
-                  name="category"
-                  className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg outline-none focus:border-focus"
-                >
-                  {Object.entries(ENUM_LABELS.FeedbackCategory).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            {error && <p className="text-sm text-danger-fg">{error}</p>}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={pending}
-                className="flex-1 rounded-lg bg-accent py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:opacity-50"
-              >
-                {pending ? "Enviando..." : "Enviar Feedback"}
-              </button>
-              <button type="button" onClick={onClose} className="rounded-lg bg-surface-raised px-4 py-2 text-sm text-fg-muted hover:bg-surface-hover">
-                Cancelar
-              </button>
-            </div>
-          </form>
+    <Dialog open={open} onClose={onClose} title={d.title}>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <p className="mb-2 block text-sm font-medium text-fg-muted">
+            {d.recipient}
+            <span aria-hidden="true" className="text-danger-fg"> *</span>
+          </p>
+          <PersonSearch name="subject_id" label={d.recipientSearch} />
+        </div>
+        <TextareaField label={d.content} name="content" required rows={3} placeholder={d.contentPlaceholder} />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <SelectField label={d.visibility} name="visibility">
+            {Object.entries(ENUM_LABELS.FeedbackVisibility).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField label={d.category} name="category">
+            {Object.entries(ENUM_LABELS.FeedbackCategory).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-danger-fg">
+            {error}
+          </p>
         )}
-      </div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  name,
-  type = "text",
-  required,
-  placeholder,
-  textarea,
-  step,
-}: {
-  label: string;
-  name: string;
-  type?: string;
-  required?: boolean;
-  placeholder?: string;
-  textarea?: boolean;
-  step?: string;
-}) {
-  const cls =
-    "mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-focus focus:ring-1 focus:ring-focus";
-  return (
-    <div>
-      <label className="block text-sm font-medium text-fg-muted">{label}</label>
-      {textarea ? (
-        <textarea name={name} rows={2} className={cls} placeholder={placeholder} />
-      ) : (
-        <input
-          type={type}
-          name={name}
-          required={required}
-          placeholder={placeholder}
-          step={step}
-          className={cls}
-        />
-      )}
-    </div>
+        <div className="flex flex-wrap gap-3 pt-1">
+          <Button type="submit" loading={pending} className="flex-1">
+            {pending ? d.submitting : d.submit}
+          </Button>
+          <Button variant="secondary" onClick={onClose}>
+            {messages.common.cancel}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
