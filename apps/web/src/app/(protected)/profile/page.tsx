@@ -86,7 +86,7 @@ export default async function ProfilePage() {
       {/* Details card */}
       <section className="rounded-xl border border-line bg-surface p-6">
         <h2 className="mb-4 text-lg font-semibold text-fg">{t.personalData}</h2>
-        <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+        <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
           <Field label={fields.email} value={profile.email} />
           <Field label={fields.employeeNumber} value={profile.employee_id ?? messages.common.empty} />
           <Field label={fields.status} value={enumLabel("EmployeeStatus", profile.status)} />
@@ -108,7 +108,7 @@ export default async function ProfilePage() {
         <h2 className="mb-4 text-lg font-semibold text-fg">
           {t.jobInformation}
         </h2>
-        <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+        <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
           <Field label={fields.title} value={currentJob?.job_title ?? messages.common.empty} />
           <Field label={fields.department} value={dept?.name ?? messages.common.empty} />
         </dl>
@@ -161,7 +161,7 @@ function Field({ label, value }: { label: string; value: string }) {
       <dt className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
         {label}
       </dt>
-      <dd className="mt-1 text-sm text-fg">{value}</dd>
+      <dd className="mt-1 text-sm wrap-anywhere text-fg">{value}</dd>
     </div>
   );
 }

@@ -43,7 +43,7 @@ export default function LoginForm({ showCompanyCode, demoHint = null }: { showCo
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight text-fg">
@@ -110,6 +110,6 @@ export default function LoginForm({ showCompanyCode, demoHint = null }: { showCo
           )}
         </form>
       </div>
-    </div>
+    </main>
   );
 }

@@ -131,13 +131,13 @@ export default async function AdminCenterPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4">
         {stats.map((s) => (
           <StatCard key={s.label} label={s.label} value={s.value} tone={s.tone} icon={<StatIcon name={s.icon} />} />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,24rem),1fr))] gap-6">
         {/* System Configuration — requires admin.manage_config:edit */}
         {configPerm.allowed && (
           <div className="rounded-xl border border-line bg-surface p-6">
@@ -236,13 +236,13 @@ export default async function AdminCenterPage() {
         <h2 className="mb-4 text-lg font-semibold text-fg">
           {t.quickLinks.heading}
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-3">
           {rolesPerm.allowed && (
             <Link
               href="/admin-center/manage-roles"
               className="flex min-h-11 items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
             >
-              <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-subtle text-accent-fg">
+              <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-subtle text-accent-fg">
                 <ShieldSvg />
               </span>
               {t.quickLinks.roles}
@@ -252,7 +252,7 @@ export default async function AdminCenterPage() {
             href="/org-chart"
             className="flex min-h-11 items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
           >
-            <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-success-subtle text-success-fg">
+            <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-success-subtle text-success-fg">
               <OrgSvg />
             </span>
             {t.quickLinks.orgChart}
@@ -261,7 +261,7 @@ export default async function AdminCenterPage() {
             href="/dashboard"
             className="flex min-h-11 items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
           >
-            <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-info-subtle text-info-fg">
+            <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-info-subtle text-info-fg">
               <HomeSvg />
             </span>
             {t.quickLinks.dashboard}

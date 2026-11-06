@@ -184,7 +184,7 @@ export default async function EmployeeDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-subtle text-lg font-bold text-accent-fg">
             {initials}
@@ -209,7 +209,7 @@ export default async function EmployeeDetailPage({
         </h2>
         {personalCurrent ? (
           <>
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+            <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
               <Field label={fields.firstName} value={personalCurrent.first_name} />
               <Field label={fields.lastName} value={personalCurrent.last_name} />
               <Field label={fields.email} value={employee.email as string} />
@@ -228,7 +228,7 @@ export default async function EmployeeDetailPage({
                 <h3 className="mb-3 text-sm font-medium text-fg-muted">
                   {t.address}
                 </h3>
-                <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
                   <Field label={fields.street} value={personalCurrent.address_line1 ?? empty} />
                   <Field label={fields.street2} value={personalCurrent.address_line2 ?? empty} />
                   <Field label={fields.city} value={personalCurrent.city ?? empty} />
@@ -243,7 +243,7 @@ export default async function EmployeeDetailPage({
                 <h3 className="mb-3 text-sm font-medium text-fg-muted">
                   {t.emergencyContact}
                 </h3>
-                <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
                   <Field label={fields.firstName} value={personalCurrent.emergency_contact_name ?? empty} />
                   <Field label={fields.phone} value={personalCurrent.emergency_contact_phone ?? empty} />
                 </dl>
@@ -267,7 +267,7 @@ export default async function EmployeeDetailPage({
         </h2>
         {jobCurrent ? (
           <>
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+            <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
               <Field label={fields.jobTitle} value={jobCurrent.job_title ?? empty} />
               <Field
                 label={fields.position}
@@ -305,7 +305,7 @@ export default async function EmployeeDetailPage({
           </h2>
           {compCurrent ? (
             <>
-              <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+              <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
                 <Field
                   label={fields.baseSalary}
                   value={fmtMoney(compCurrent.base_salary, compCurrent.currency)}
@@ -345,7 +345,7 @@ function Field({ label, value }: { label: string; value: string }) {
       <dt className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
         {label}
       </dt>
-      <dd className="mt-1 text-sm text-fg">{value}</dd>
+      <dd className="mt-1 text-sm wrap-anywhere text-fg">{value}</dd>
     </div>
   );
 }
