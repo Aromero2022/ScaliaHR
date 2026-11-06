@@ -1752,6 +1752,13 @@ MIT (Principle 8). Phase 9b, PR 4.
     "Forma de trabajo");
   - `pg-boss` is ignored: migration D17 creates its schema for this exact
     version, so an upgrade needs a new migration.
+  - `react-native`, `react-native-*`, `expo` and `expo-*` are ignored. Their
+    versions are set by the Expo SDK (`apps/mobile`, SDK 52) and move with
+    `npx expo install --fix` when the SDK changes, never by Dependabot.
+    Dependabot once proposed `react-native` 0.77 → 0.88 inside the
+    minor-and-patch group: 0.88 needs React 19.3 (`apps/mobile` has 18.3.1)
+    and is outside SDK 52, and CI does not build the mobile app, so it would
+    have passed green.
   - Its PRs run the same CI as any other.
 - **CI token:** `ci.yml` sets `permissions: contents: read` for `GITHUB_TOKEN`
   at the workflow root. No job needs more: checkout only reads, and the caches
@@ -1774,7 +1781,8 @@ MIT (Principle 8). Phase 9b, PR 4.
 - GitHub's own secret scanning and push protection are repository settings,
   outside this repo; turning them on is the owner's call.
 - Ignoring `pg-boss` also silences its security updates. It is checked by hand
-  with `npm audit` in every phase.
+  with `npm audit` in every phase. The same holds for the Expo-controlled
+  packages.
 
 ---
 

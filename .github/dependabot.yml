@@ -19,6 +19,12 @@ updates:
       # pg-boss's tables are created by migration D17 for this exact version and
       # nobody runs its DDL at runtime: an upgrade needs a new migration.
       - dependency-name: "pg-boss"
+      # Las versiones las fija el SDK de Expo (apps/mobile, SDK 52); se suben con
+      # `npx expo install --fix` al cambiar de SDK, nunca por Dependabot.
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
+      - dependency-name: "expo"
+      - dependency-name: "expo-*"
 
   # "/" covers .github/workflows and a root action.yml only; the glob adds the
   # local composite actions (.github/actions/supabase-images uses actions/cache).
