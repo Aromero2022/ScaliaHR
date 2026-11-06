@@ -1793,6 +1793,10 @@ MIT (Principle 8). Phase 9b, PR 4.
   its JWT expires (`jwt_expiry` 900 s). That was already the case for every
   direct call to the Data API, which only checks the JWT, and the pages already
   read claims with `getClaims()`.
+- **Accepted for now.** Offboarding (Phase 14, roadmap) must cut access at
+  once: a per-user revocation mark read in the middleware (cacheable like
+  D35) or a shorter `jwt_expiry`, with a test that a terminated user gets a
+  401 or a redirect on the next request.
 - The middleware no longer reads the claims twice: one `getClaims()` serves the
   session check, the tenant id header (D27), the tenant check (D21) and the MFA
   step.
@@ -1816,6 +1820,9 @@ cached only within one request. Phase 9b, PR 5.
     each process, so the 5 s TTL is the bound. A shared store (Redis, Phase 23)
     would implement the same interface and make invalidation reach every
     instance.
+  - **Pending for Phase 12:** nothing calls `invalidate` yet. The platform
+    console calls `tenantAccessCache().invalidate(tenantId)` when it suspends
+    a tenant (roadmap, Phase 12).
 - **Module flags.** `getModuleFlags` uses `unstable_cache` per tenant (tag
   `tenant:<id>:modules`, 60 s).
   - It reads through `public.tenant_module_flags(uuid)`, a SECURITY DEFINER
@@ -1823,8 +1830,10 @@ cached only within one request. Phase 9b, PR 5.
     tenant. The cache is filled outside the request, so it cannot use the
     user's session.
   - Callers pass the tenant id of the verified token.
-  - A change of flags (platform console, Phase 12) calls
-    `revalidateTag(moduleFlagsTag(id))`. Until then the 60 s TTL bounds it.
+  - **Pending for Phase 12:** nothing invalidates the flags yet. The platform
+    console calls `revalidateTag(moduleFlagsTag(tenantId))` when it turns a
+    module on or off (roadmap, Phase 12). Until then a module turned off stays
+    visible for up to 60 s.
 - **RBP stays out of any cross-request cache.** D14 and the roadmap require
   that a revoked permission stops working at once. That needs an invalidation
   this design does not have, so the permission context is still read on every

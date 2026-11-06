@@ -203,6 +203,7 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Navegación completa con teclado.
 - Zoom al 200 % sin romper el layout.
 - prefers-reduced-motion respetado (framer-motion con useReducedMotion). framer-motion todavía no está en el repo; se agrega en esta fase.
+- PersonSearch (D38) como combobox accesible: role=combobox, listbox con aria-activedescendant, navegación con teclado y anuncio de resultados.
 
 ### Biblioteca base
 
@@ -287,6 +288,7 @@ Catálogo de planes y módulos, alta de clientes por autoservicio con periodo de
 - Canales de release con flags (universales, opt-in, por módulo D12) y clientes preview.
 - Conversión de demo a cliente con licencia: activa el export por tenant y los compromisos de RPO/RTO del contrato.
 - Facturación y cobro por adaptador (local/prueba): la activación y suspensión por pago se prueban con la implementación de prueba; el proveedor real se contrata en la Fase 23.
+- Al prender o apagar un módulo, llamar revalidateTag(moduleFlagsTag(tenantId)); al suspender un tenant, llamar tenantAccessCache().invalidate(tenantId). Sin esto, un módulo apagado sigue visible hasta 60 s y un tenant suspendido entra hasta 5 s (D35).
 
 ---
 
@@ -321,6 +323,7 @@ Depende de: Workflows (10), Admin Center (11), worker y lib/email (9a), API (13)
 
 - Baja en EC con motivo y fecha efectiva.
 - Tareas de devolución de equipo y revocación de accesos (sesiones, LMS, integraciones).
+- Desde D34 un JWT revocado sigue pasando el middleware hasta que expira (jwt_expiry 900 s). La baja debe cortar el acceso de inmediato: marca de revocación por usuario leída en el middleware (cacheable como D35) o jwt_expiry menor, con prueba de que un usuario dado de baja recibe 401/redirect en el siguiente request.
 - Entrevista de salida y transferencia de conocimiento.
 - Datos de finiquito hacia nómina vía API; integración con nómina por adaptador (local/prueba).
 - Tarea de baja en IMSS.
@@ -384,6 +387,7 @@ Depende de: Workflows (10), Admin Center (11), worker y lib/email (9a), API (13)
 ### Rendimiento
 
 - Prueba de carga con k6 en staging: 1,000 usuarios concurrentes en un tenant y varios tenants a la vez; objetivo p95 < 500 ms.
+- Dimensionar réplicas del web con el resultado de D36: un proceso aguanta unos 180 usuarios con 2–6 s entre páginas; los caches en memoria (D35) pasan a un store compartido.
 
 ### Respaldos
 
