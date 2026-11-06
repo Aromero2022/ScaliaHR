@@ -18,7 +18,7 @@ export default function RateLimitSettings({ settings }: { settings: RateLimitSet
       {settings.map((s) => (
         <RateLimitRow key={s.action} setting={s} />
       ))}
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-fg-subtle">
         Los límites de inicio de sesión, MFA y alta de empresa los fija la plataforma.
       </p>
     </div>
@@ -42,14 +42,14 @@ function RateLimitRow({ setting }: { setting: RateLimitSetting }) {
   }
 
   const input =
-    "w-20 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-white focus:border-indigo-500 focus:outline-none";
+    "w-20 rounded-lg border border-control bg-surface-raised px-2 py-1 text-sm text-fg focus:border-focus focus:outline-none";
 
   return (
-    <form onSubmit={save} className="rounded-lg bg-slate-800/50 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+    <form onSubmit={save} className="rounded-lg bg-surface-muted px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-fg-muted">
         <span className="mr-auto font-medium">
           {setting.label}
-          {setting.isDefault && <span className="ml-2 text-xs text-slate-500">(predeterminado)</span>}
+          {setting.isDefault && <span className="ml-2 text-xs text-fg-subtle">(predeterminado)</span>}
         </span>
         <label className="flex items-center gap-1">
           <input
@@ -80,13 +80,13 @@ function RateLimitRow({ setting }: { setting: RateLimitSetting }) {
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
+          className="rounded-lg bg-accent px-3 py-1 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:opacity-50"
         >
           {saving ? "Guardando..." : "Guardar"}
         </button>
       </div>
-      {status.error && <p className="mt-2 text-xs text-red-300">{status.error}</p>}
-      {status.saved && <p className="mt-2 text-xs text-emerald-400">Guardado.</p>}
+      {status.error && <p className="mt-2 text-xs text-danger-fg">{status.error}</p>}
+      {status.saved && <p className="mt-2 text-xs text-success-fg">Guardado.</p>}
     </form>
   );
 }

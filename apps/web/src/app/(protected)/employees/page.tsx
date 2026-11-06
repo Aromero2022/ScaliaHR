@@ -60,10 +60,10 @@ export default async function EmployeesPage({
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Empleados</h1>
+          <h1 className="text-2xl font-bold text-fg">Empleados</h1>
         </div>
-        <div className="rounded-xl border border-red-800 bg-red-950/50 p-6 text-center">
-          <p className="text-sm text-red-300">
+        <div className="rounded-xl border border-danger-line bg-danger-subtle p-6 text-center">
+          <p className="text-sm text-danger-fg">
             {message}
           </p>
         </div>
@@ -135,8 +135,8 @@ export default async function EmployeesPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Empleados</h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <h1 className="text-2xl font-bold text-fg">Empleados</h1>
+          <p className="mt-1 text-sm text-fg-muted">
             Directorio de empleados activos — Employee Central
           </p>
         </div>
@@ -145,11 +145,11 @@ export default async function EmployeesPage({
         </Suspense>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+      <div className="overflow-hidden rounded-xl border border-line bg-surface">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-800 text-xs font-medium uppercase tracking-wider text-slate-500">
+              <tr className="border-b border-line text-xs font-medium uppercase tracking-wider text-fg-subtle">
                 <th className="px-6 py-3">Empleado</th>
                 <th className="px-6 py-3">Puesto</th>
                 <th className="px-6 py-3">Departamento</th>
@@ -158,12 +158,12 @@ export default async function EmployeesPage({
                 <th className="px-6 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/50">
+            <tbody className="divide-y divide-line">
               {rows.length === 0 ? (
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-6 py-12 text-center text-slate-500"
+                    className="px-6 py-12 text-center text-fg-subtle"
                   >
                     {search
                       ? `No se encontraron empleados para "${search}".`
@@ -174,28 +174,28 @@ export default async function EmployeesPage({
                 rows.map((emp) => (
                   <tr
                     key={emp.id}
-                    className="transition hover:bg-slate-800/40"
+                    className="transition hover:bg-surface-hover"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-600/20 text-xs font-semibold text-indigo-400">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-semibold text-accent-fg">
                           {initials(emp.firstName, emp.lastName)}
                         </div>
                         <div>
-                          <p className="font-medium text-slate-200">
+                          <p className="font-medium text-fg">
                             {emp.firstName} {emp.lastName}
                           </p>
-                          <p className="text-xs text-slate-500">{emp.email}</p>
+                          <p className="text-xs text-fg-subtle">{emp.email}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-slate-300">
+                    <td className="px-6 py-4 text-fg-muted">
                       {emp.jobTitle ?? emp.positionTitle ?? "—"}
                     </td>
-                    <td className="px-6 py-4 text-slate-300">
+                    <td className="px-6 py-4 text-fg-muted">
                       {emp.department ?? "—"}
                     </td>
-                    <td className="px-6 py-4 font-mono text-xs text-slate-400">
+                    <td className="px-6 py-4 font-mono text-xs text-fg-muted">
                       {emp.employeeId ?? "—"}
                     </td>
                     <td className="px-6 py-4">
@@ -205,7 +205,7 @@ export default async function EmployeesPage({
                       {emp.canView ? (
                         <Link
                           href={`/employees/${emp.id}`}
-                          className="text-sm font-medium text-indigo-400 transition hover:text-indigo-300"
+                          className="text-sm font-medium text-accent-fg transition hover:text-fg"
                         >
                           Ver perfil →
                         </Link>
@@ -219,8 +219,8 @@ export default async function EmployeesPage({
         </div>
 
         {total > 0 && (
-          <div className="flex items-center justify-between border-t border-slate-800 px-6 py-3">
-            <p className="text-xs text-slate-500">
+          <div className="flex items-center justify-between border-t border-line px-6 py-3">
+            <p className="text-xs text-fg-subtle">
               Mostrando {showingFrom}–{showingTo} de {total}
             </p>
             <div className="flex gap-2">
@@ -231,11 +231,11 @@ export default async function EmployeesPage({
                   label="← Anterior"
                 />
               ) : (
-                <span className="rounded-lg px-3 py-1.5 text-xs text-slate-600">
+                <span className="rounded-lg px-3 py-1.5 text-xs text-fg-subtle">
                   ← Anterior
                 </span>
               )}
-              <span className="rounded-lg px-3 py-1.5 text-xs text-slate-400">
+              <span className="rounded-lg px-3 py-1.5 text-xs text-fg-muted">
                 {page} / {totalPages}
               </span>
               {page < totalPages ? (
@@ -245,7 +245,7 @@ export default async function EmployeesPage({
                   label="Siguiente →"
                 />
               ) : (
-                <span className="rounded-lg px-3 py-1.5 text-xs text-slate-600">
+                <span className="rounded-lg px-3 py-1.5 text-xs text-fg-subtle">
                   Siguiente →
                 </span>
               )}
@@ -274,7 +274,7 @@ function PaginationLink({
   return (
     <Link
       href={href}
-      className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:border-indigo-500 hover:text-indigo-400"
+      className="rounded-lg border border-line px-3 py-1.5 text-xs text-fg-muted transition hover:border-accent hover:text-fg"
     >
       {label}
     </Link>
@@ -283,10 +283,10 @@ function PaginationLink({
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    ACTIVE: "bg-emerald-900/50 text-emerald-400",
-    INACTIVE: "bg-slate-800 text-slate-400",
-    ON_LEAVE: "bg-amber-900/50 text-amber-400",
-    TERMINATED: "bg-red-900/50 text-red-400",
+    ACTIVE: "bg-success-subtle text-success-fg",
+    INACTIVE: "bg-surface-raised text-fg-muted",
+    ON_LEAVE: "bg-warning-subtle text-warning-fg",
+    TERMINATED: "bg-danger-subtle text-danger-fg",
   };
 
   return (

@@ -40,18 +40,18 @@ interface Props {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  NOT_STARTED: { label: "Sin Iniciar", color: "text-slate-400", bg: "bg-slate-500" },
-  ON_TRACK: { label: "En Curso", color: "text-emerald-400", bg: "bg-emerald-500" },
-  AT_RISK: { label: "En Riesgo", color: "text-amber-400", bg: "bg-amber-500" },
-  COMPLETED: { label: "Completado", color: "text-sky-400", bg: "bg-sky-500" },
-  CANCELLED: { label: "Cancelado", color: "text-red-400", bg: "bg-red-500" },
+  NOT_STARTED: { label: "Sin Iniciar", color: "text-fg-muted", bg: "bg-surface-strong" },
+  ON_TRACK: { label: "En Curso", color: "text-success-fg", bg: "bg-success" },
+  AT_RISK: { label: "En Riesgo", color: "text-warning-fg", bg: "bg-warning" },
+  COMPLETED: { label: "Completado", color: "text-info-fg", bg: "bg-info" },
+  CANCELLED: { label: "Cancelado", color: "text-danger-fg", bg: "bg-danger" },
 };
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
-  GENERAL: { label: "General", color: "text-slate-400" },
-  RECOGNITION: { label: "Reconocimiento", color: "text-emerald-400" },
-  COACHING: { label: "Coaching", color: "text-amber-400" },
-  DEVELOPMENT: { label: "Desarrollo", color: "text-indigo-400" },
+  GENERAL: { label: "General", color: "text-fg-muted" },
+  RECOGNITION: { label: "Reconocimiento", color: "text-success-fg" },
+  COACHING: { label: "Coaching", color: "text-warning-fg" },
+  DEVELOPMENT: { label: "Desarrollo", color: "text-accent-fg" },
 };
 
 export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, feedbackPage, feedbackPageSize }: Props) {
@@ -72,20 +72,20 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
     <div className="space-y-6">
       {/* Summary Stats */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatTile label="Objetivos" value={goals.length} accent="indigo" />
-        <StatTile label="Progreso Promedio" value={`${avgProgress}%`} accent="sky" />
-        <StatTile label="En Curso" value={onTrack} accent="emerald" />
-        <StatTile label="En Riesgo" value={atRisk} accent="amber" />
+        <StatTile label="Objetivos" value={goals.length} tone="accent" />
+        <StatTile label="Progreso Promedio" value={`${avgProgress}%`} tone="info" />
+        <StatTile label="En Curso" value={onTrack} tone="success" />
+        <StatTile label="En Riesgo" value={atRisk} tone="warning" />
       </div>
 
       {/* Tab Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-800">
+      <div className="flex items-center gap-2 border-b border-line">
         <button
           onClick={() => setActiveTab("goals")}
           className={`px-4 py-2.5 text-sm font-medium transition ${
             activeTab === "goals"
-              ? "border-b-2 border-indigo-500 text-indigo-400"
-              : "text-slate-400 hover:text-slate-200"
+              ? "border-b-2 border-accent text-accent-fg"
+              : "text-fg-muted hover:text-fg"
           }`}
         >
           Mis Objetivos ({goals.length})
@@ -94,8 +94,8 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
           onClick={() => setActiveTab("feedback")}
           className={`px-4 py-2.5 text-sm font-medium transition ${
             activeTab === "feedback"
-              ? "border-b-2 border-indigo-500 text-indigo-400"
-              : "text-slate-400 hover:text-slate-200"
+              ? "border-b-2 border-accent text-accent-fg"
+              : "text-fg-muted hover:text-fg"
           }`}
         >
           Feedback Continuo ({feedbackTotal})
@@ -108,7 +108,7 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
           <div className="flex justify-end">
             <button
               onClick={() => setShowGoalModal(true)}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
             >
               + Nuevo Objetivo
             </button>
@@ -132,7 +132,7 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
           <div className="flex justify-end">
             <button
               onClick={() => setShowFeedbackModal(true)}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
             >
               + Enviar Feedback
             </button>
@@ -148,9 +148,9 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
             </div>
           )}
           {feedbackPages > 1 && (
-            <div className="flex items-center justify-between text-sm text-slate-400">
+            <div className="flex items-center justify-between text-sm text-fg-muted">
               {feedbackPage > 1 ? (
-                <Link href={`/performance?fb=${feedbackPage - 1}`} className="hover:text-white">← Anteriores</Link>
+                <Link href={`/performance?fb=${feedbackPage - 1}`} className="hover:text-fg">← Anteriores</Link>
               ) : (
                 <span />
               )}
@@ -158,7 +158,7 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
                 {feedbackPage} / {feedbackPages}
               </span>
               {feedbackPage < feedbackPages ? (
-                <Link href={`/performance?fb=${feedbackPage + 1}`} className="hover:text-white">Siguientes →</Link>
+                <Link href={`/performance?fb=${feedbackPage + 1}`} className="hover:text-fg">Siguientes →</Link>
               ) : (
                 <span />
               )}
@@ -175,12 +175,18 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
   );
 }
 
-function StatTile({ label, value, accent }: { label: string; value: number | string; accent: string }) {
-  const bgClass = `bg-${accent}-600/20`;
-  const textClass = `text-${accent}-400`;
+const STAT_TONE = {
+  accent: "text-accent-fg",
+  info: "text-info-fg",
+  success: "text-success-fg",
+  warning: "text-warning-fg",
+} as const;
+
+function StatTile({ label, value, tone }: { label: string; value: number | string; tone: keyof typeof STAT_TONE }) {
+  const textClass = STAT_TONE[tone];
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-      <p className="text-xs font-medium text-slate-400">{label}</p>
+    <div className="rounded-xl border border-line bg-surface p-4">
+      <p className="text-xs font-medium text-fg-muted">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${textClass}`}>{value}</p>
     </div>
   );
@@ -195,7 +201,7 @@ function ProgressRing({ percentage, status }: { percentage: number; status: stri
   return (
     <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
       <svg className="h-16 w-16 -rotate-90" viewBox="0 0 64 64">
-        <circle cx="32" cy="32" r={radius} fill="none" stroke="currentColor" strokeWidth="4" className="text-slate-800" />
+        <circle cx="32" cy="32" r={radius} fill="none" stroke="currentColor" strokeWidth="4" className="text-surface-strong" />
         <circle
           cx="32" cy="32" r={radius} fill="none"
           stroke="currentColor" strokeWidth="4" strokeLinecap="round"
@@ -203,7 +209,7 @@ function ProgressRing({ percentage, status }: { percentage: number; status: stri
           className={config.color}
         />
       </svg>
-      <span className="absolute text-xs font-bold text-white">{percentage}%</span>
+      <span className="absolute text-xs font-bold text-fg">{percentage}%</span>
     </div>
   );
 }
@@ -215,22 +221,22 @@ function GoalCard({ goal }: { goal: GoalRow }) {
     : null;
 
   return (
-    <div className="flex items-start gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-5">
+    <div className="flex items-start gap-4 rounded-xl border border-line bg-surface p-5">
       <ProgressRing percentage={goal.progress_percentage} status={goal.status} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h3 className="truncate font-medium text-white">{goal.title}</h3>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${config.color} bg-slate-800`}>
+          <h3 className="truncate font-medium text-fg">{goal.title}</h3>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${config.color} bg-surface-raised`}>
             {config.label}
           </span>
         </div>
         {goal.description && (
-          <p className="mt-1 text-sm text-slate-400 line-clamp-2">{goal.description}</p>
+          <p className="mt-1 text-sm text-fg-muted line-clamp-2">{goal.description}</p>
         )}
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-subtle">
           {goal.metric && (
             <span>
-              Métrica: <span className="text-slate-300">{goal.metric}</span>
+              Métrica: <span className="text-fg-muted">{goal.metric}</span>
               {goal.target_value != null && ` — Objetivo: ${goal.target_value}`}
               {goal.actual_value != null && ` — Actual: ${goal.actual_value}`}
             </span>
@@ -239,7 +245,7 @@ function GoalCard({ goal }: { goal: GoalRow }) {
           {dueStr && <span>Vence: {dueStr}</span>}
         </div>
         {/* Progress Bar */}
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-raised">
           <div
             className={`h-full rounded-full transition-all ${config.bg}`}
             style={{ width: `${Math.min(goal.progress_percentage, 100)}%` }}
@@ -263,24 +269,24 @@ function FeedbackCard({ feedback }: { feedback: FeedbackRow }) {
   });
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-5">
+    <div className="rounded-xl border border-line bg-surface p-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`rounded-full bg-slate-800 px-2.5 py-0.5 text-[10px] font-medium ${catConfig.color}`}>
+          <span className={`rounded-full bg-surface-raised px-2.5 py-0.5 text-[10px] font-medium ${catConfig.color}`}>
             {catConfig.label}
           </span>
-          <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[10px] font-medium text-slate-400">
+          <span className="rounded-full bg-surface-raised px-2.5 py-0.5 text-[10px] font-medium text-fg-muted">
             {feedback.visibility === "PUBLIC" ? "Público" : feedback.visibility === "MANAGER_ONLY" ? "Solo Gerente" : "Privado"}
           </span>
         </div>
-        <span className="text-xs text-slate-500">{dateStr}</span>
+        <span className="text-xs text-fg-subtle">{dateStr}</span>
       </div>
-      <p className="mt-3 text-sm text-slate-300">{feedback.content}</p>
-      <div className="mt-3 flex items-center gap-1 text-xs text-slate-500">
+      <p className="mt-3 text-sm text-fg-muted">{feedback.content}</p>
+      <div className="mt-3 flex items-center gap-1 text-xs text-fg-subtle">
         {feedback.is_author ? (
-          <span>Enviado a <span className="text-slate-300">{subjectName}</span></span>
+          <span>Enviado a <span className="text-fg-muted">{subjectName}</span></span>
         ) : (
-          <span>De <span className="text-slate-300">{authorName}</span></span>
+          <span>De <span className="text-fg-muted">{authorName}</span></span>
         )}
       </div>
     </div>
@@ -289,8 +295,8 @@ function FeedbackCard({ feedback }: { feedback: FeedbackRow }) {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 px-6 py-12 text-center">
-      <p className="text-sm text-slate-500">{message}</p>
+    <div className="rounded-xl border border-line bg-surface px-6 py-12 text-center">
+      <p className="text-sm text-fg-subtle">{message}</p>
     </div>
   );
 }
@@ -315,14 +321,14 @@ function GoalModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-        <h3 className="text-lg font-bold text-white">Nuevo Objetivo</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+        <h3 className="text-lg font-bold text-fg">Nuevo Objetivo</h3>
 
         {success ? (
-          <div className="mt-6 rounded-lg bg-emerald-500/10 p-4 text-center">
-            <p className="text-sm font-medium text-emerald-400">Objetivo creado correctamente</p>
-            <button onClick={onClose} className="mt-4 rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700">
+          <div className="mt-6 rounded-lg bg-success-subtle p-4 text-center">
+            <p className="text-sm font-medium text-success-fg">Objetivo creado correctamente</p>
+            <button onClick={onClose} className="mt-4 rounded-lg bg-surface-raised px-4 py-2 text-sm text-fg-muted hover:bg-surface-hover">
               Cerrar
             </button>
           </div>
@@ -340,16 +346,16 @@ function GoalModal({ onClose }: { onClose: () => void }) {
               <Field label="Fecha Fin *" name="period_end" type="date" required />
             </div>
             <Field label="Fecha Límite" name="due_date" type="date" />
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && <p className="text-sm text-danger-fg">{error}</p>}
             <div className="flex gap-3 pt-2">
               <button
                 type="submit"
                 disabled={pending}
-                className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-accent py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:opacity-50"
               >
                 {pending ? "Guardando..." : "Crear Objetivo"}
               </button>
-              <button type="button" onClick={onClose} className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700">
+              <button type="button" onClick={onClose} className="rounded-lg bg-surface-raised px-4 py-2 text-sm text-fg-muted hover:bg-surface-hover">
                 Cancelar
               </button>
             </div>
@@ -380,39 +386,39 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-        <h3 className="text-lg font-bold text-white">Enviar Feedback</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+        <h3 className="text-lg font-bold text-fg">Enviar Feedback</h3>
 
         {success ? (
-          <div className="mt-6 rounded-lg bg-emerald-500/10 p-4 text-center">
-            <p className="text-sm font-medium text-emerald-400">Feedback enviado correctamente</p>
-            <button onClick={onClose} className="mt-4 rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700">
+          <div className="mt-6 rounded-lg bg-success-subtle p-4 text-center">
+            <p className="text-sm font-medium text-success-fg">Feedback enviado correctamente</p>
+            <button onClick={onClose} className="mt-4 rounded-lg bg-surface-raised px-4 py-2 text-sm text-fg-muted hover:bg-surface-hover">
               Cerrar
             </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="mt-4 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300">Destinatario *</label>
+              <label className="block text-sm font-medium text-fg-muted">Destinatario *</label>
               <PersonSearch name="subject_id" label="Buscar destinatario" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300">Contenido *</label>
+              <label className="block text-sm font-medium text-fg-muted">Contenido *</label>
               <textarea
                 name="content"
                 required
                 rows={3}
-                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-focus focus:ring-1 focus:ring-focus"
                 placeholder="Escribe tu feedback..."
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300">Visibilidad</label>
+                <label className="block text-sm font-medium text-fg-muted">Visibilidad</label>
                 <select
                   name="visibility"
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                  className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg outline-none focus:border-focus"
                 >
                   <option value="PRIVATE">Privado</option>
                   <option value="MANAGER_ONLY">Solo Gerente</option>
@@ -420,10 +426,10 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300">Categoría</label>
+                <label className="block text-sm font-medium text-fg-muted">Categoría</label>
                 <select
                   name="category"
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                  className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg outline-none focus:border-focus"
                 >
                   <option value="GENERAL">General</option>
                   <option value="RECOGNITION">Reconocimiento</option>
@@ -432,16 +438,16 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
                 </select>
               </div>
             </div>
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && <p className="text-sm text-danger-fg">{error}</p>}
             <div className="flex gap-3 pt-2">
               <button
                 type="submit"
                 disabled={pending}
-                className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-accent py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:opacity-50"
               >
                 {pending ? "Enviando..." : "Enviar Feedback"}
               </button>
-              <button type="button" onClick={onClose} className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700">
+              <button type="button" onClick={onClose} className="rounded-lg bg-surface-raised px-4 py-2 text-sm text-fg-muted hover:bg-surface-hover">
                 Cancelar
               </button>
             </div>
@@ -470,10 +476,10 @@ function Field({
   step?: string;
 }) {
   const cls =
-    "mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
+    "mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-focus focus:ring-1 focus:ring-focus";
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-300">{label}</label>
+      <label className="block text-sm font-medium text-fg-muted">{label}</label>
       {textarea ? (
         <textarea name={name} rows={2} className={cls} placeholder={placeholder} />
       ) : (

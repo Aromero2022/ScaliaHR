@@ -40,20 +40,20 @@ export default function RoleManager({ roles, groups }: Props) {
   return (
     <div className="space-y-6">
       {/* Roles Table */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50">
-        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-          <h2 className="text-lg font-semibold text-white">
+      <div className="rounded-xl border border-line bg-surface">
+        <div className="flex items-center justify-between border-b border-line px-6 py-4">
+          <h2 className="text-lg font-semibold text-fg">
             Roles de Permiso ({roles.length})
           </h2>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
           >
             + Nuevo Rol
           </button>
         </div>
 
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-line">
           {roles.map((role) => {
             const isExpanded = expandedRole === role.id;
             return (
@@ -62,12 +62,12 @@ export default function RoleManager({ roles, groups }: Props) {
                   onClick={() =>
                     setExpandedRole(isExpanded ? null : role.id)
                   }
-                  className="flex w-full items-center gap-4 px-6 py-4 text-left transition hover:bg-slate-800/30"
+                  className="flex w-full items-center gap-4 px-6 py-4 text-left transition hover:bg-surface-hover"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised">
                     {role.is_admin_role ? (
                       <svg
-                        className="h-5 w-5 text-amber-400"
+                        className="h-5 w-5 text-warning-fg"
                         fill="none"
                         viewBox="0 0 24 24"
                         strokeWidth={1.5}
@@ -81,7 +81,7 @@ export default function RoleManager({ roles, groups }: Props) {
                       </svg>
                     ) : (
                       <svg
-                        className="h-5 w-5 text-slate-400"
+                        className="h-5 w-5 text-fg-muted"
                         fill="none"
                         viewBox="0 0 24 24"
                         strokeWidth={1.5}
@@ -98,21 +98,21 @@ export default function RoleManager({ roles, groups }: Props) {
 
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-white">
+                      <span className="font-medium text-fg">
                         {role.name}
                       </span>
                       {role.is_admin_role && (
-                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
+                        <span className="rounded-full bg-warning-subtle px-2 py-0.5 text-[10px] font-medium text-warning-fg">
                           ADMIN
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-fg-muted">
                       {role.description ?? "Sin descripción"}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-4 text-sm text-slate-500">
+                  <div className="flex items-center gap-4 text-sm text-fg-subtle">
                     <span>{role.permissions.length} permisos</span>
                     <span>{role.grants.length} asignaciones</span>
                     <svg
@@ -132,24 +132,24 @@ export default function RoleManager({ roles, groups }: Props) {
                 </button>
 
                 {isExpanded && (
-                  <div className="border-t border-slate-800/50 bg-slate-950/30 px-6 py-4">
+                  <div className="border-t border-line bg-canvas px-6 py-4">
                     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                       {/* Permissions */}
                       <div>
-                        <h3 className="mb-3 text-sm font-semibold text-slate-300">
+                        <h3 className="mb-3 text-sm font-semibold text-fg-muted">
                           Permisos Técnicos
                         </h3>
                         <div className="flex flex-wrap gap-2">
                           {role.permissions.map((p) => (
                             <span
                               key={`${p.permission_key}:${p.action}`}
-                              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-mono text-slate-300"
+                              className="rounded-lg bg-surface-raised px-3 py-1.5 text-xs font-mono text-fg-muted"
                             >
                               {p.permission_key}:{p.action}
                             </span>
                           ))}
                           {role.permissions.length === 0 && (
-                            <span className="text-sm text-slate-500">
+                            <span className="text-sm text-fg-subtle">
                               Sin permisos asignados
                             </span>
                           )}
@@ -158,35 +158,35 @@ export default function RoleManager({ roles, groups }: Props) {
 
                       {/* Grants (v2) */}
                       <div>
-                        <h3 className="mb-3 text-sm font-semibold text-slate-300">
+                        <h3 className="mb-3 text-sm font-semibold text-fg-muted">
                           Asignaciones (Role Grants)
                         </h3>
                         <div className="space-y-2">
                           {role.grants.map((g) => (
                             <div
                               key={g.id}
-                              className="rounded-lg bg-slate-800 px-3 py-2"
+                              className="rounded-lg bg-surface-raised px-3 py-2"
                             >
                               <div className="flex items-center gap-2 text-xs">
-                                <span className="text-emerald-400">
+                                <span className="text-success-fg">
                                   Grupo otorgado:
                                 </span>
-                                <span className="font-medium text-slate-200">
+                                <span className="font-medium text-fg">
                                   {g.granted_group?.name ?? "—"}
                                 </span>
                               </div>
                               <div className="mt-1 flex items-center gap-2 text-xs">
-                                <span className="text-sky-400">
+                                <span className="text-info-fg">
                                   Población objetivo:
                                 </span>
-                                <span className="font-medium text-slate-200">
+                                <span className="font-medium text-fg">
                                   {g.target_population}
                                 </span>
                               </div>
                             </div>
                           ))}
                           {role.grants.length === 0 && (
-                            <span className="text-sm text-slate-500">
+                            <span className="text-sm text-fg-subtle">
                               Sin asignaciones
                             </span>
                           )}
@@ -201,7 +201,7 @@ export default function RoleManager({ roles, groups }: Props) {
 
           {roles.length === 0 && (
             <div className="px-6 py-8 text-center">
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-fg-subtle">
                 No hay roles de permiso configurados.
               </p>
             </div>
@@ -210,18 +210,18 @@ export default function RoleManager({ roles, groups }: Props) {
       </div>
 
       {/* Permission Groups Table */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50">
-        <div className="border-b border-slate-800 px-6 py-4">
-          <h2 className="text-lg font-semibold text-white">
+      <div className="rounded-xl border border-line bg-surface">
+        <div className="border-b border-line px-6 py-4">
+          <h2 className="text-lg font-semibold text-fg">
             Grupos de Permiso ({groups.length})
           </h2>
         </div>
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-line">
           {groups.map((g) => (
             <div key={g.id} className="flex items-center gap-4 px-6 py-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600/20">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-success-subtle">
                 <svg
-                  className="h-5 w-5 text-emerald-400"
+                  className="h-5 w-5 text-success-fg"
                   fill="none"
                   viewBox="0 0 24 24"
                   strokeWidth={1.5}
@@ -235,19 +235,19 @@ export default function RoleManager({ roles, groups }: Props) {
                 </svg>
               </div>
               <div className="flex-1">
-                <p className="font-medium text-white">{g.name}</p>
-                <p className="text-sm text-slate-400">
+                <p className="font-medium text-fg">{g.name}</p>
+                <p className="text-sm text-fg-muted">
                   {g.description ?? "Sin descripción"}
                 </p>
               </div>
-              <div className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-mono text-slate-400">
+              <div className="rounded-lg bg-surface-raised px-3 py-1.5 text-xs font-mono text-fg-muted">
                 membresía vía group_members
               </div>
             </div>
           ))}
           {groups.length === 0 && (
             <div className="px-6 py-8 text-center">
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-fg-subtle">
                 No hay grupos de permiso configurados.
               </p>
             </div>
@@ -275,24 +275,24 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-        <h3 className="text-lg font-bold text-white">Crear Nuevo Rol</h3>
-        <p className="mt-1 text-sm text-slate-400">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+        <h3 className="text-lg font-bold text-fg">Crear Nuevo Rol</h3>
+        <p className="mt-1 text-sm text-fg-muted">
           Simulación — los datos no se persisten en esta versión MVP
         </p>
 
         {submitted ? (
-          <div className="mt-6 rounded-lg bg-emerald-500/10 p-4 text-center">
-            <p className="text-sm font-medium text-emerald-400">
+          <div className="mt-6 rounded-lg bg-success-subtle p-4 text-center">
+            <p className="text-sm font-medium text-success-fg">
               Rol &quot;{roleName}&quot; creado (simulación)
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-fg-muted">
               {isAdmin ? "Admin" : "Estándar"} — {roleDesc || "Sin descripción"}
             </p>
             <button
               onClick={onClose}
-              className="mt-4 rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 transition hover:bg-slate-700"
+              className="mt-4 rounded-lg bg-surface-raised px-4 py-2 text-sm text-fg-muted transition hover:bg-surface-hover"
             >
               Cerrar
             </button>
@@ -300,7 +300,7 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
         ) : (
           <form onSubmit={handleSubmit} className="mt-4 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300">
+              <label className="block text-sm font-medium text-fg-muted">
                 Nombre del Rol
               </label>
               <input
@@ -308,19 +308,19 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
                 required
                 value={roleName}
                 onChange={(e) => setRoleName(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-focus focus:ring-1 focus:ring-focus"
                 placeholder="Ej. Recruitment Manager"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300">
+              <label className="block text-sm font-medium text-fg-muted">
                 Descripción
               </label>
               <textarea
                 value={roleDesc}
                 onChange={(e) => setRoleDesc(e.target.value)}
                 rows={2}
-                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-focus focus:ring-1 focus:ring-focus"
                 placeholder="Descripción del rol..."
               />
             </div>
@@ -329,23 +329,23 @@ function CreateRoleModal({ onClose }: { onClose: () => void }) {
                 type="checkbox"
                 checked={isAdmin}
                 onChange={(e) => setIsAdmin(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500"
+                className="h-4 w-4 rounded-sm border-control bg-surface-raised text-accent-fg focus:ring-focus"
               />
-              <span className="text-sm text-slate-300">
+              <span className="text-sm text-fg-muted">
                 Rol de Administrador
               </span>
             </label>
             <div className="flex gap-3 pt-2">
               <button
                 type="submit"
-                className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
+                className="flex-1 rounded-lg bg-accent py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
               >
                 Crear Rol
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 transition hover:bg-slate-700"
+                className="rounded-lg bg-surface-raised px-4 py-2 text-sm text-fg-muted transition hover:bg-surface-hover"
               >
                 Cancelar
               </button>

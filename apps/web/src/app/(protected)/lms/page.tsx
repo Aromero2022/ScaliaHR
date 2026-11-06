@@ -24,25 +24,25 @@ export default async function LmsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-2xl font-bold text-fg">
           Formación (LMS)
         </h1>
-        <p className="mt-1 text-slate-400">
+        <p className="mt-1 text-fg-muted">
           Plataforma de aprendizaje integrada con Moodle
         </p>
       </div>
 
-      <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-6">
-        <h2 className="text-lg font-semibold text-white">
+      <div className="rounded-lg border border-line bg-surface-muted p-6">
+        <h2 className="text-lg font-semibold text-fg">
           Acceder a la plataforma
         </h2>
-        <p className="mt-2 text-sm text-slate-400">
+        <p className="mt-2 text-sm text-fg-muted">
           Se abrirá Moodle en una nueva ventana con tu sesión activa.
           Tus cursos y avances están asociados a tu organización.
         </p>
         <Link
           href="/lms/launch"
-          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-500"
+          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
         >
           <svg
             className="h-5 w-5"

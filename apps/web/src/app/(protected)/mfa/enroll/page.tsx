@@ -83,39 +83,39 @@ export default function MfaEnrollPage() {
 
   return (
     <div className="mx-auto max-w-md space-y-6 py-12">
-      <h1 className="text-2xl font-bold text-white">
+      <h1 className="text-2xl font-bold text-fg">
         Configurar autenticación de dos factores
       </h1>
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-fg-muted">
         Escanea el código QR con tu aplicación de autenticación (Google
         Authenticator, Authy, 1Password, etc.)
       </p>
 
       {qrCode && (
-        <div className="flex justify-center rounded-xl border border-slate-800 bg-white p-6">
+        <div className="flex justify-center rounded-xl border border-line bg-qr-surface p-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={qrCode} alt="QR Code" width={200} height={200} />
         </div>
       )}
 
       {secret && (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-          <p className="mb-1 text-xs text-slate-500">
+        <div className="rounded-lg border border-line bg-surface p-4">
+          <p className="mb-1 text-xs text-fg-subtle">
             Si no puedes escanear, ingresa manualmente:
           </p>
-          <code className="select-all text-sm text-indigo-400">{secret}</code>
+          <code className="select-all text-sm text-accent-fg">{secret}</code>
         </div>
       )}
 
       <form onSubmit={handleVerify} className="space-y-4">
         {error && (
-          <div className="rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
+          <div className="rounded-lg border border-danger-line bg-danger-subtle px-4 py-3 text-sm text-danger-fg">
             {error}
           </div>
         )}
 
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-slate-300">
+          <span className="mb-1 block text-sm font-medium text-fg-muted">
             Código de verificación
           </span>
           <input
@@ -126,7 +126,7 @@ export default function MfaEnrollPage() {
             required
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-lg border border-control bg-surface-raised px-4 py-2.5 text-fg placeholder:text-fg-subtle focus:border-focus focus:ring-1 focus:ring-focus focus:outline-none"
             placeholder="000000"
             autoComplete="one-time-code"
           />
@@ -135,7 +135,7 @@ export default function MfaEnrollPage() {
         <button
           type="submit"
           disabled={loading || code.length !== 6}
-          className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+          className="w-full rounded-lg bg-accent px-4 py-2.5 font-semibold text-on-accent transition hover:bg-accent-hover disabled:opacity-50"
         >
           {loading ? "Verificando..." : "Activar MFA"}
         </button>

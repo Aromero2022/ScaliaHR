@@ -1,1 +1,133 @@
 @import "tailwindcss";
+
+/*
+ * D40 — the Tailwind contract. Utilities read semantic tokens only; their
+ * values are the --theme-* variables that themeCss() renders from the preset
+ * (src/lib/theme). The default palette is gone, so bg-slate-800 or text-white
+ * generate no CSS at all.
+ */
+@theme {
+  --color-*: initial;
+
+  /* Spacing: Tailwind's 4 px step, plus the form spacing of D19. */
+  --spacing: 0.25rem;
+  --spacing-form-help: 0.25rem;
+  --spacing-form-label: 0.5rem;
+  --spacing-form-field: 1.25rem;
+  --spacing-form-section: 1.5rem;
+
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Motion: durations drop to 0 with prefers-reduced-motion (base layer below). */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --default-transition-duration: var(--motion-base);
+  --default-transition-timing-function: var(--ease-standard);
+}
+
+@theme inline {
+  --color-canvas: var(--theme-canvas);
+  --color-surface: var(--theme-surface);
+  --color-surface-muted: var(--theme-surface-muted);
+  --color-surface-raised: var(--theme-surface-raised);
+  --color-surface-hover: var(--theme-surface-hover);
+  --color-surface-strong: var(--theme-surface-strong);
+  --color-overlay: var(--theme-overlay);
+  --color-qr-surface: var(--theme-qr-surface);
+
+  --color-fg: var(--theme-fg);
+  --color-fg-muted: var(--theme-fg-muted);
+  --color-fg-subtle: var(--theme-fg-subtle);
+
+  --color-line: var(--theme-line);
+  --color-control: var(--theme-control);
+  --color-focus: var(--theme-focus);
+
+  --color-accent: var(--theme-accent);
+  --color-accent-hover: var(--theme-accent-hover);
+  --color-accent-fg: var(--theme-accent-fg);
+  --color-accent-subtle: var(--theme-accent-subtle);
+  --color-accent-line: var(--theme-accent-line);
+  --color-on-accent: var(--theme-on-accent);
+
+  --color-success: var(--theme-success);
+  --color-success-hover: var(--theme-success-hover);
+  --color-success-fg: var(--theme-success-fg);
+  --color-success-subtle: var(--theme-success-subtle);
+  --color-success-line: var(--theme-success-line);
+  --color-on-success: var(--theme-on-success);
+
+  --color-warning: var(--theme-warning);
+  --color-warning-hover: var(--theme-warning-hover);
+  --color-warning-fg: var(--theme-warning-fg);
+  --color-warning-subtle: var(--theme-warning-subtle);
+  --color-warning-line: var(--theme-warning-line);
+  --color-on-warning: var(--theme-on-warning);
+
+  --color-danger: var(--theme-danger);
+  --color-danger-hover: var(--theme-danger-hover);
+  --color-danger-fg: var(--theme-danger-fg);
+  --color-danger-subtle: var(--theme-danger-subtle);
+  --color-danger-line: var(--theme-danger-line);
+  --color-on-danger: var(--theme-on-danger);
+
+  --color-info: var(--theme-info);
+  --color-info-hover: var(--theme-info-hover);
+  --color-info-fg: var(--theme-info-fg);
+  --color-info-subtle: var(--theme-info-subtle);
+  --color-info-line: var(--theme-info-line);
+  --color-on-info: var(--theme-on-info);
+
+  --color-category-1-fg: var(--theme-category-1-fg);
+  --color-category-1-subtle: var(--theme-category-1-subtle);
+  --color-category-1-line: var(--theme-category-1-line);
+  --color-category-2-fg: var(--theme-category-2-fg);
+  --color-category-2-subtle: var(--theme-category-2-subtle);
+  --color-category-2-line: var(--theme-category-2-line);
+  --color-category-3-fg: var(--theme-category-3-fg);
+  --color-category-3-subtle: var(--theme-category-3-subtle);
+  --color-category-3-line: var(--theme-category-3-line);
+
+  --radius-xs: var(--theme-radius-xs);
+  --radius-sm: var(--theme-radius-sm);
+  --radius-md: var(--theme-radius-md);
+  --radius-lg: var(--theme-radius-lg);
+  --radius-xl: var(--theme-radius-xl);
+  --radius-2xl: var(--theme-radius-2xl);
+
+  --shadow-2xs: var(--theme-shadow-2xs);
+  --shadow-xs: var(--theme-shadow-xs);
+  --shadow-sm: var(--theme-shadow-sm);
+  --shadow-md: var(--theme-shadow-md);
+  --shadow-lg: var(--theme-shadow-lg);
+  --shadow-xl: var(--theme-shadow-xl);
+  --shadow-2xl: var(--theme-shadow-2xl);
+
+  --font-sans: var(--theme-font-sans);
+}
+
+@layer base {
+  :root {
+    --motion-fast: 120ms;
+    --motion-base: 150ms;
+    --motion-slow: 300ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --motion-fast: 0ms;
+      --motion-base: 0ms;
+      --motion-slow: 0ms;
+    }
+  }
+
+  html {
+    background-color: var(--theme-canvas);
+    color: var(--theme-fg);
+  }
+
+  /* Visible focus for anything that gets keyboard focus (WCAG 2.4.7). */
+  :focus-visible {
+    outline: 2px solid var(--theme-focus);
+    outline-offset: 2px;
+  }
+}

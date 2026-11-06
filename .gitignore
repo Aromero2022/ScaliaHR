@@ -26,3 +26,6 @@ supabase/.temp/
 supabase/.branches/
 # k6 load test output (D36): accounts and results.
 load/.out/
+# Playwright reports and traces (e2e runs, D40).
+playwright-report/
+test-results/

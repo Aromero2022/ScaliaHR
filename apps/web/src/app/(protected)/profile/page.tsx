@@ -18,7 +18,7 @@ export default async function ProfilePage() {
 
   if (!profile) {
     return (
-      <div className="text-slate-400">
+      <div className="text-fg-muted">
         No se encontró perfil de usuario.
       </div>
     );
@@ -51,23 +51,23 @@ export default async function ProfilePage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white">Mi Perfil</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="text-2xl font-bold text-fg">Mi Perfil</h1>
+        <p className="mt-1 text-sm text-fg-muted">
           Información personal y profesional
         </p>
       </div>
 
       {/* Avatar + headline */}
       <div className="flex items-center gap-5">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-indigo-600 text-xl font-bold text-white">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-xl font-bold text-on-accent">
           {profile.first_name[0]}
           {profile.last_name[0]}
         </div>
         <div>
-          <p className="text-lg font-semibold text-white">
+          <p className="text-lg font-semibold text-fg">
             {profile.first_name} {profile.last_name}
           </p>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-fg-muted">
             {currentJob?.job_title ?? "Sin puesto"} &middot;{" "}
             {dept?.name ?? "Sin departamento"}
           </p>
@@ -75,8 +75,8 @@ export default async function ProfilePage() {
       </div>
 
       {/* Details card */}
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">Datos Personales</h2>
+      <section className="rounded-xl border border-line bg-surface p-6">
+        <h2 className="mb-4 text-lg font-semibold text-fg">Datos Personales</h2>
         <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
           <Field label="Email" value={profile.email} />
           <Field label="Employee ID" value={profile.employee_id ?? "—"} />
@@ -102,8 +102,8 @@ export default async function ProfilePage() {
       </section>
 
       {/* Job Info card */}
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">
+      <section className="rounded-xl border border-line bg-surface p-6">
+        <h2 className="mb-4 text-lg font-semibold text-fg">
           Información del Puesto
         </h2>
         <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
@@ -113,8 +113,8 @@ export default async function ProfilePage() {
       </section>
 
       {/* 9-Box scores */}
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">
+      <section className="rounded-xl border border-line bg-surface p-6">
+        <h2 className="mb-4 text-lg font-semibold text-fg">
           Talent Review (9-Box)
         </h2>
         <div className="flex gap-12">
@@ -124,8 +124,8 @@ export default async function ProfilePage() {
       </section>
 
       {/* Feedback */}
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">
+      <section className="rounded-xl border border-line bg-surface p-6">
+        <h2 className="mb-4 text-lg font-semibold text-fg">
           Feedback Recibido
         </h2>
         {feedback && feedback.length > 0 ? (
@@ -133,22 +133,22 @@ export default async function ProfilePage() {
             {feedback.map((f) => (
               <li
                 key={f.id}
-                className="rounded-lg border border-slate-800 px-4 py-3"
+                className="rounded-lg border border-line px-4 py-3"
               >
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-400">
+                  <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs font-medium text-fg-muted">
                     {f.category}
                   </span>
-                  <span className="text-xs text-slate-600">
+                  <span className="text-xs text-fg-subtle">
                     {new Date(f.created_at).toLocaleDateString("es-ES")}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-slate-300">{f.content}</p>
+                <p className="mt-1 text-sm text-fg-muted">{f.content}</p>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-slate-500">No hay feedback registrado.</p>
+          <p className="text-sm text-fg-subtle">No hay feedback registrado.</p>
         )}
       </section>
     </div>
@@ -158,10 +158,10 @@ export default async function ProfilePage() {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wider text-slate-500">
+      <dt className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
         {label}
       </dt>
-      <dd className="mt-1 text-sm text-slate-200">{value}</dd>
+      <dd className="mt-1 text-sm text-fg">{value}</dd>
     </div>
   );
 }
@@ -175,10 +175,10 @@ function ScoreCircle({
 }) {
   return (
     <div className="text-center">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border-2 border-indigo-500/40 text-xl font-bold text-indigo-400">
+      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border-2 border-accent-line text-xl font-bold text-accent-fg">
         {value ?? "—"}
       </div>
-      <p className="mt-2 text-xs font-medium text-slate-400">{label}</p>
+      <p className="mt-2 text-xs font-medium text-fg-muted">{label}</p>
     </div>
   );
 }

@@ -33,8 +33,9 @@ export function contentSecurityPolicy(nonce: string, options: CspOptions = {}): 
     "default-src 'self'",
     ["script-src 'self'", `'nonce-${nonce}'`, "'strict-dynamic'", ...(dev ? ["'unsafe-eval'"] : [])].join(" "),
     // Styles keep 'unsafe-inline': React and Next.js write inline style attributes.
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    // Fonts are self-hosted with next/font (D40): no font or style host outside 'self'.
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     "img-src 'self' data: blob:",
     ["connect-src 'self' https://*.supabase.co wss://*.supabase.co", ...supabaseConnectSources(supabaseUrl)].join(" "),
     "frame-ancestors 'none'",

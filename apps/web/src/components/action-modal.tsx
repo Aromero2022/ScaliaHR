@@ -148,7 +148,7 @@ export default function ActionModal({
     <>
       <button
         onClick={() => setOpen(true)}
-        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
+        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
       >
         Tomar Acción
       </button>
@@ -157,14 +157,14 @@ export default function ActionModal({
         ref={dialogRef}
         onClick={handleBackdropClick}
         onClose={close}
-        className="m-auto max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-0 text-slate-200 shadow-2xl backdrop:bg-black/60"
+        className="m-auto max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-surface p-0 text-fg shadow-2xl backdrop:bg-overlay"
       >
         <div className="p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold text-fg">
               Tomar Acción — {employeeName}
             </h2>
-            <button onClick={close} className="text-slate-500 hover:text-slate-300">
+            <button onClick={close} className="text-fg-subtle hover:text-fg">
               ✕
             </button>
           </div>
@@ -173,8 +173,8 @@ export default function ActionModal({
             <div
               className={`mb-4 rounded-lg px-4 py-2 text-sm ${
                 feedback.ok
-                  ? "border border-emerald-800 bg-emerald-900/40 text-emerald-300"
-                  : "border border-red-800 bg-red-900/40 text-red-300"
+                  ? "border border-success-line bg-success-subtle text-success-fg"
+                  : "border border-danger-line bg-danger-subtle text-danger-fg"
               }`}
             >
               {feedback.msg}
@@ -183,7 +183,7 @@ export default function ActionModal({
 
           {!actionType && (
             <div className="space-y-2">
-              <p className="mb-3 text-sm text-slate-400">Seleccione el tipo de acción:</p>
+              <p className="mb-3 text-sm text-fg-muted">Seleccione el tipo de acción:</p>
               <ActionChoice
                 label="Cambio de Puesto / Job Change"
                 desc="Modificar posición, departamento, manager o ubicación"
@@ -207,11 +207,11 @@ export default function ActionModal({
               <button
                 type="button"
                 onClick={() => setActionType(null)}
-                className="text-xs text-indigo-400 hover:underline"
+                className="text-xs text-accent-fg hover:underline"
               >
                 ← Volver
               </button>
-              <h3 className="font-medium text-white">Cambio de Puesto</h3>
+              <h3 className="font-medium text-fg">Cambio de Puesto</h3>
               <InputField name="startDate" label="Fecha Efectiva" type="date" defaultValue={today} required />
               <InputField name="jobTitle" label="Título del Puesto" required />
               <SelectField name="positionId" label="Posición" options={positions} />
@@ -229,11 +229,11 @@ export default function ActionModal({
               <button
                 type="button"
                 onClick={() => setActionType(null)}
-                className="text-xs text-indigo-400 hover:underline"
+                className="text-xs text-accent-fg hover:underline"
               >
                 ← Volver
               </button>
-              <h3 className="font-medium text-white">Cambio de Compensación</h3>
+              <h3 className="font-medium text-fg">Cambio de Compensación</h3>
               <InputField name="startDate" label="Fecha Efectiva" type="date" defaultValue={today} required />
               <InputField name="baseSalary" label="Salario Base" type="number" required />
               <div className="grid grid-cols-2 gap-3">
@@ -269,11 +269,11 @@ export default function ActionModal({
               <button
                 type="button"
                 onClick={() => setActionType(null)}
-                className="text-xs text-indigo-400 hover:underline"
+                className="text-xs text-accent-fg hover:underline"
               >
                 ← Volver
               </button>
-              <h3 className="font-medium text-white">Datos Personales</h3>
+              <h3 className="font-medium text-fg">Datos Personales</h3>
               <InputField name="startDate" label="Fecha Efectiva" type="date" defaultValue={today} required />
               <div className="grid grid-cols-2 gap-3">
                 <InputField name="firstName" label="Nombre" defaultValue={currentPersonal?.firstName} required />
@@ -315,10 +315,10 @@ function ActionChoice({
   return (
     <button
       onClick={onClick}
-      className="flex w-full flex-col items-start rounded-lg border border-slate-700 p-4 text-left transition hover:border-indigo-600/50 hover:bg-slate-800"
+      className="flex w-full flex-col items-start rounded-lg border border-line p-4 text-left transition hover:border-accent-line hover:bg-surface-hover"
     >
-      <span className="font-medium text-white">{label}</span>
-      <span className="mt-0.5 text-xs text-slate-400">{desc}</span>
+      <span className="font-medium text-fg">{label}</span>
+      <span className="mt-0.5 text-xs text-fg-muted">{desc}</span>
     </button>
   );
 }
@@ -338,9 +338,9 @@ function InputField({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">
+      <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-fg-subtle">
         {label}
-        {required && <span className="text-red-400"> *</span>}
+        {required && <span className="text-danger-fg"> *</span>}
       </span>
       <input
         name={name}
@@ -348,7 +348,7 @@ function InputField({
         required={required}
         defaultValue={defaultValue}
         step={type === "number" ? "0.01" : undefined}
-        className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        className="w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-focus focus:outline-none focus:ring-1 focus:ring-focus"
       />
     </label>
   );
@@ -367,13 +367,13 @@ function SelectField({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">
+      <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-fg-subtle">
         {label}
       </span>
       <select
         name={name}
         defaultValue={defaultValue ?? ""}
-        className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        className="w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg focus:border-focus focus:outline-none focus:ring-1 focus:ring-focus"
       >
         <option value="">— Seleccionar —</option>
         {options.map((o) => (
@@ -391,7 +391,7 @@ function SubmitButton({ pending, label }: { pending: boolean; label: string }) {
     <button
       type="submit"
       disabled={pending}
-      className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+      className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
     >
       {pending ? "Procesando…" : label}
     </button>

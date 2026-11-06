@@ -32,8 +32,8 @@ export default async function ArcoPage({
   if (!allowed) {
     return (
       <div className="mx-auto max-w-md py-12 text-center">
-        <h1 className="text-xl font-bold text-white">Acceso denegado</h1>
-        <p className="mt-2 text-sm text-slate-400">
+        <h1 className="text-xl font-bold text-fg">Acceso denegado</h1>
+        <p className="mt-2 text-sm text-fg-muted">
           No tiene permisos para gestionar solicitudes ARCO. Contacte al
           administrador del tenant.
         </p>
@@ -78,20 +78,20 @@ export default async function ArcoPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Derechos ARCO</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="text-2xl font-bold text-fg">Derechos ARCO</h1>
+        <p className="mt-1 text-sm text-fg-muted">
           Gestión de solicitudes de Acceso, Rectificación, Cancelación y
           Oposición — Protección de datos personales
         </p>
       </div>
       <ArcoPanel requests={rows} />
       {pages > 1 && (
-        <div className="flex items-center justify-between text-sm text-slate-400">
-          {page > 1 ? <Link href={`/admin/arco?page=${page - 1}`} className="hover:text-white">← Anteriores</Link> : <span />}
+        <div className="flex items-center justify-between text-sm text-fg-muted">
+          {page > 1 ? <Link href={`/admin/arco?page=${page - 1}`} className="hover:text-fg">← Anteriores</Link> : <span />}
           <span>
             {page} / {pages}
           </span>
-          {page < pages ? <Link href={`/admin/arco?page=${page + 1}`} className="hover:text-white">Siguientes →</Link> : <span />}
+          {page < pages ? <Link href={`/admin/arco?page=${page + 1}`} className="hover:text-fg">Siguientes →</Link> : <span />}
         </div>
       )}
     </div>
