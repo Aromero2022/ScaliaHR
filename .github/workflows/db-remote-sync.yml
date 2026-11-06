@@ -64,7 +64,7 @@ jobs:
       SYNC_MODE: ${{ inputs.mode }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # No later step runs git, so the token is not left in .git/config,
           # where the scripts and the Supabase CLI that follow could read it.
@@ -142,7 +142,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload backup
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: db-backup-${{ github.run_id }}
           path: backup/
@@ -252,7 +252,7 @@ jobs:
         if: inputs.owner_email != '' && (inputs.mode == 'reset' || inputs.load_seed)
         run: bash scripts/require-demo-tenant.sh "$LOCAL_DB_URL"
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
