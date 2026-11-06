@@ -339,9 +339,11 @@ jobs:
           path: apps/web/e2e-artifacts
           retention-days: 14
 
+      # As root, so find can read every folder: as the image's own user it exits 1
+      # on folders it may not read, even when it finds nothing.
       - name: No e2e tooling in the web image (D44)
         run: |
-          found="$(docker run --rm --entrypoint sh scaliahr-web:local -c 'find / -xdev -type d \( -name axe-core -o -name @axe-core -o -name playwright -o -name playwright-core -o -name @playwright \) -path "*node_modules*" 2>/dev/null')"
+          found="$(docker run --rm --user 0 --entrypoint sh scaliahr-web:local -c 'find / -xdev -type d \( -name axe-core -o -name @axe-core -o -name playwright -o -name playwright-core -o -name @playwright \) -path "*node_modules*"')"
           if [ -n "$found" ]; then
             echo "::error::e2e tooling in scaliahr-web:local:"
             echo "$found"
