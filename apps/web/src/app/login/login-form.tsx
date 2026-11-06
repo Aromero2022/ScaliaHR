@@ -41,31 +41,31 @@ export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolea
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-white">
+          <h1 className="text-3xl font-bold tracking-tight text-fg">
             Scalia HR
           </h1>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-fg-muted">
             Enterprise Human Capital Management
           </p>
         </div>
 
         <form
           onSubmit={handleSubmit}
-          className="rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-xl"
+          className="rounded-2xl border border-line bg-surface p-8 shadow-xl"
         >
-          <h2 className="mb-6 text-lg font-semibold text-slate-200">
+          <h2 className="mb-6 text-lg font-semibold text-fg">
             Sign in to your account
           </h2>
 
           {error && (
-            <div className="mb-4 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
+            <div className="mb-4 rounded-lg border border-danger-line bg-danger-subtle px-4 py-3 text-sm text-danger-fg">
               {error}
             </div>
           )}
 
           {showCompanyCode && (
             <label className="mb-4 block">
-              <span className="mb-1 block text-sm font-medium text-slate-300">
+              <span className="mb-1 block text-sm font-medium text-fg-muted">
                 Código de empresa (opcional)
               </span>
               <input
@@ -73,14 +73,14 @@ export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolea
                 autoComplete="organization"
                 value={companyCode}
                 onChange={(e) => setCompanyCode(e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-control bg-surface-raised px-4 py-2.5 text-fg placeholder:text-fg-subtle focus:border-focus focus:ring-1 focus:ring-focus focus:outline-none"
                 placeholder="acme-corp"
               />
             </label>
           )}
 
           <label className="mb-4 block">
-            <span className="mb-1 block text-sm font-medium text-slate-300">
+            <span className="mb-1 block text-sm font-medium text-fg-muted">
               Email
             </span>
             <input
@@ -88,13 +88,13 @@ export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolea
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-lg border border-control bg-surface-raised px-4 py-2.5 text-fg placeholder:text-fg-subtle focus:border-focus focus:ring-1 focus:ring-focus focus:outline-none"
               placeholder="you@company.com"
             />
           </label>
 
           <label className="mb-6 block">
-            <span className="mb-1 block text-sm font-medium text-slate-300">
+            <span className="mb-1 block text-sm font-medium text-fg-muted">
               Password
             </span>
             <input
@@ -102,7 +102,7 @@ export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolea
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-lg border border-control bg-surface-raised px-4 py-2.5 text-fg placeholder:text-fg-subtle focus:border-focus focus:ring-1 focus:ring-focus focus:outline-none"
               placeholder="••••••••"
             />
           </label>
@@ -110,12 +110,12 @@ export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolea
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+            className="w-full rounded-lg bg-accent px-4 py-2.5 font-semibold text-on-accent transition hover:bg-accent-hover disabled:opacity-50"
           >
             {loading ? "Signing in..." : "Sign In"}
           </button>
 
-          <p className="mt-4 text-center text-xs text-slate-500">
+          <p className="mt-4 text-center text-xs text-fg-subtle">
             Demo: elena.martinez@acme.dev / Demo1234!
           </p>
         </form>

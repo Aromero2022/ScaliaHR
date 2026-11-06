@@ -52,12 +52,12 @@ export default function Sidebar({
   const visibleItems = filterNavByFlags(navItems, moduleFlags, permSet) as NavItem[];
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900">
-      <div className="flex h-16 items-center gap-2 border-b border-slate-800 px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
+    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-line bg-surface">
+      <div className="flex h-16 items-center gap-2 border-b border-line px-6">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-on-accent">
           S
         </div>
-        <span className="text-lg font-bold text-white">Scalia HR</span>
+        <span className="text-lg font-bold text-fg">Scalia HR</span>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
@@ -70,8 +70,8 @@ export default function Sidebar({
               className={clsx(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
                 active
-                  ? "bg-indigo-600/10 text-indigo-400"
-                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                  ? "bg-accent-subtle text-accent-fg"
+                  : "text-fg-muted hover:bg-surface-hover hover:text-fg"
               )}
             >
               <item.icon active={active} />
@@ -81,10 +81,10 @@ export default function Sidebar({
         })}
       </nav>
 
-      <div className="border-t border-slate-800 p-3">
+      <div className="border-t border-line p-3">
         <button
           onClick={handleSignOut}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-slate-800 hover:text-red-400"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-fg-muted transition hover:bg-surface-hover hover:text-danger-fg"
         >
           <LogoutIcon />
           Cerrar Sesión
@@ -97,7 +97,7 @@ export default function Sidebar({
 function EmployeesIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-indigo-400" : "text-slate-500")}
+      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -115,7 +115,7 @@ function EmployeesIcon({ active }: { active: boolean }) {
 function HomeIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-indigo-400" : "text-slate-500")}
+      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -133,7 +133,7 @@ function HomeIcon({ active }: { active: boolean }) {
 function UserIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-indigo-400" : "text-slate-500")}
+      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -151,7 +151,7 @@ function UserIcon({ active }: { active: boolean }) {
 function OrgIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-indigo-400" : "text-slate-500")}
+      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -169,7 +169,7 @@ function OrgIcon({ active }: { active: boolean }) {
 function AdminIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-indigo-400" : "text-slate-500")}
+      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -192,7 +192,7 @@ function AdminIcon({ active }: { active: boolean }) {
 function PerformanceIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-indigo-400" : "text-slate-500")}
+      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -210,7 +210,7 @@ function PerformanceIcon({ active }: { active: boolean }) {
 function LmsIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-indigo-400" : "text-slate-500")}
+      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -228,7 +228,7 @@ function LmsIcon({ active }: { active: boolean }) {
 function SkillsIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-indigo-400" : "text-slate-500")}
+      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -246,7 +246,7 @@ function SkillsIcon({ active }: { active: boolean }) {
 function ShieldIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={clsx("h-5 w-5", active ? "text-indigo-400" : "text-slate-500")}
+      className={clsx("h-5 w-5", active ? "text-accent-fg" : "text-fg-subtle")}
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -264,7 +264,7 @@ function ShieldIcon({ active }: { active: boolean }) {
 function LogoutIcon() {
   return (
     <svg
-      className="h-5 w-5 text-slate-500"
+      className="h-5 w-5 text-fg-subtle"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}

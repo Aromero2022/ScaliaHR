@@ -185,10 +185,10 @@ export default async function EmployeeDetailPage({
   const initials = `${(employee.first_name as string)?.[0] ?? ""}${(employee.last_name as string)?.[0] ?? ""}`.toUpperCase();
 
   const statusColors: Record<string, { bg: string; text: string }> = {
-    ACTIVE: { bg: "bg-emerald-900/50", text: "text-emerald-400" },
-    INACTIVE: { bg: "bg-slate-800", text: "text-slate-400" },
-    ON_LEAVE: { bg: "bg-amber-900/50", text: "text-amber-400" },
-    TERMINATED: { bg: "bg-red-900/50", text: "text-red-400" },
+    ACTIVE: { bg: "bg-success-subtle", text: "text-success-fg" },
+    INACTIVE: { bg: "bg-surface-raised", text: "text-fg-muted" },
+    ON_LEAVE: { bg: "bg-warning-subtle", text: "text-warning-fg" },
+    TERMINATED: { bg: "bg-danger-subtle", text: "text-danger-fg" },
   };
   const statusStyle = statusColors[employee.status as string] ?? statusColors.INACTIVE;
 
@@ -196,14 +196,14 @@ export default async function EmployeeDetailPage({
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600/20 text-lg font-bold text-indigo-400">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-subtle text-lg font-bold text-accent-fg">
             {initials}
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-2xl font-bold text-fg">
               {employee.first_name} {employee.last_name}
             </h1>
-            <p className="mt-0.5 text-sm text-slate-400">
+            <p className="mt-0.5 text-sm text-fg-muted">
               {jobCurrent?.job_title ?? "Sin puesto"} &middot;{" "}
               {rel(employee.departments)?.name ?? "Sin departamento"}
             </p>
@@ -217,8 +217,8 @@ export default async function EmployeeDetailPage({
         {adminView.allowed && <ActionMenu employeeId={id} />}
       </div>
 
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">
+      <section className="rounded-xl border border-line bg-surface p-6">
+        <h2 className="mb-4 text-lg font-semibold text-fg">
           Información Personal
         </h2>
         {personalCurrent ? (
@@ -238,8 +238,8 @@ export default async function EmployeeDetailPage({
               <Field label="IMSS" value={personalCurrent.imss_number ?? "—"} />
             </dl>
             {(personalCurrent.address_line1 || personalCurrent.city) && (
-              <div className="mt-4 border-t border-slate-800 pt-4">
-                <h3 className="mb-3 text-sm font-medium text-slate-400">
+              <div className="mt-4 border-t border-line pt-4">
+                <h3 className="mb-3 text-sm font-medium text-fg-muted">
                   Dirección
                 </h3>
                 <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -253,8 +253,8 @@ export default async function EmployeeDetailPage({
               </div>
             )}
             {personalCurrent.emergency_contact_name && (
-              <div className="mt-4 border-t border-slate-800 pt-4">
-                <h3 className="mb-3 text-sm font-medium text-slate-400">
+              <div className="mt-4 border-t border-line pt-4">
+                <h3 className="mb-3 text-sm font-medium text-fg-muted">
                   Contacto de emergencia
                 </h3>
                 <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
@@ -269,14 +269,14 @@ export default async function EmployeeDetailPage({
             />
           </>
         ) : (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-fg-subtle">
             Sin información personal registrada.
           </p>
         )}
       </section>
 
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">
+      <section className="rounded-xl border border-line bg-surface p-6">
+        <h2 className="mb-4 text-lg font-semibold text-fg">
           Información Laboral
         </h2>
         {jobCurrent ? (
@@ -306,15 +306,15 @@ export default async function EmployeeDetailPage({
             />
           </>
         ) : (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-fg-subtle">
             Sin información laboral registrada.
           </p>
         )}
       </section>
 
       {canViewComp && (
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-white">
+        <section className="rounded-xl border border-line bg-surface p-6">
+          <h2 className="mb-4 text-lg font-semibold text-fg">
             Compensación
           </h2>
           {compCurrent ? (
@@ -343,7 +343,7 @@ export default async function EmployeeDetailPage({
               />
             </>
           ) : (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-fg-subtle">
               Sin información de compensación registrada.
             </p>
           )}
@@ -356,10 +356,10 @@ export default async function EmployeeDetailPage({
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wider text-slate-500">
+      <dt className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
         {label}
       </dt>
-      <dd className="mt-1 text-sm text-slate-200">{value}</dd>
+      <dd className="mt-1 text-sm text-fg">{value}</dd>
     </div>
   );
 }

@@ -17,7 +17,7 @@ export default async function DashboardPage() {
 
   if (!profile) {
     return (
-      <div className="text-slate-400">
+      <div className="text-fg-muted">
         No se encontró perfil de usuario. Contacte al administrador.
       </div>
     );
@@ -56,10 +56,10 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-2xl font-bold text-fg">
           Bienvenido, {profile.first_name}
         </h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-fg-muted">
           {currentJob?.job_title ?? "Sin puesto asignado"} &middot;{" "}
           {dept?.name ?? "Sin departamento"}
         </p>
@@ -94,8 +94,8 @@ export default async function DashboardPage() {
       </div>
 
       {/* Profile Summary */}
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">
+      <section className="rounded-xl border border-line bg-surface p-6">
+        <h2 className="mb-4 text-lg font-semibold text-fg">
           Mi Información
         </h2>
         <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -110,8 +110,8 @@ export default async function DashboardPage() {
       </section>
 
       {/* Goals */}
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">
+      <section className="rounded-xl border border-line bg-surface p-6">
+        <h2 className="mb-4 text-lg font-semibold text-fg">
           Mis Objetivos (PMGM)
         </h2>
         {recentGoals && recentGoals.length > 0 ? (
@@ -119,11 +119,11 @@ export default async function DashboardPage() {
             {recentGoals.map((g) => (
               <div
                 key={g.id}
-                className="flex items-center justify-between rounded-lg border border-slate-800 px-4 py-3"
+                className="flex items-center justify-between rounded-lg border border-line px-4 py-3"
               >
                 <div>
-                  <p className="font-medium text-slate-200">{g.title}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="font-medium text-fg">{g.title}</p>
+                  <p className="text-xs text-fg-subtle">
                     {g.period_start} → {g.period_end}
                   </p>
                 </div>
@@ -132,7 +132,7 @@ export default async function DashboardPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-fg-subtle">
             No hay objetivos registrados aún.
           </p>
         )}
@@ -151,26 +151,26 @@ function KpiCard({
   accent: string;
 }) {
   const ring: Record<string, string> = {
-    indigo: "border-indigo-500/30",
-    emerald: "border-emerald-500/30",
-    amber: "border-amber-500/30",
-    violet: "border-violet-500/30",
+    indigo: "border-accent-line",
+    emerald: "border-success-line",
+    amber: "border-warning-line",
+    violet: "border-category-2-line",
   };
   const text: Record<string, string> = {
-    indigo: "text-indigo-400",
-    emerald: "text-emerald-400",
-    amber: "text-amber-400",
-    violet: "text-violet-400",
+    indigo: "text-accent-fg",
+    emerald: "text-success-fg",
+    amber: "text-warning-fg",
+    violet: "text-category-2-fg",
   };
 
   return (
     <div
-      className={`rounded-xl border bg-slate-900 p-5 ${ring[accent] ?? "border-slate-800"}`}
+      className={`rounded-xl border bg-surface p-5 ${ring[accent] ?? "border-line"}`}
     >
-      <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+      <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
         {label}
       </p>
-      <p className={`mt-2 text-3xl font-bold ${text[accent] ?? "text-white"}`}>
+      <p className={`mt-2 text-3xl font-bold ${text[accent] ?? "text-fg"}`}>
         {value}
       </p>
     </div>
@@ -180,21 +180,21 @@ function KpiCard({
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wider text-slate-500">
+      <dt className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
         {label}
       </dt>
-      <dd className="mt-1 text-sm text-slate-200">{value}</dd>
+      <dd className="mt-1 text-sm text-fg">{value}</dd>
     </div>
   );
 }
 
 function GoalBadge({ status }: { status: string }) {
   const map: Record<string, { bg: string; text: string }> = {
-    NOT_STARTED: { bg: "bg-slate-800", text: "text-slate-400" },
-    ON_TRACK: { bg: "bg-emerald-900/50", text: "text-emerald-400" },
-    AT_RISK: { bg: "bg-amber-900/50", text: "text-amber-400" },
-    COMPLETED: { bg: "bg-indigo-900/50", text: "text-indigo-400" },
-    CANCELLED: { bg: "bg-red-900/50", text: "text-red-400" },
+    NOT_STARTED: { bg: "bg-surface-raised", text: "text-fg-muted" },
+    ON_TRACK: { bg: "bg-success-subtle", text: "text-success-fg" },
+    AT_RISK: { bg: "bg-warning-subtle", text: "text-warning-fg" },
+    COMPLETED: { bg: "bg-accent-subtle", text: "text-accent-fg" },
+    CANCELLED: { bg: "bg-danger-subtle", text: "text-danger-fg" },
   };
   const style = map[status] ?? map.NOT_STARTED;
   return (

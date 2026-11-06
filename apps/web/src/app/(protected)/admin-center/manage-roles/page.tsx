@@ -76,17 +76,17 @@ export default async function ManageRolesPage() {
           <div className="flex items-center gap-2">
             <Link
               href="/admin-center"
-              className="text-sm text-slate-400 transition hover:text-slate-200"
+              className="text-sm text-fg-muted transition hover:text-fg"
             >
               Admin Center
             </Link>
-            <span className="text-slate-600">/</span>
-            <span className="text-sm text-slate-300">Gestión de Roles</span>
+            <span className="text-fg-subtle">/</span>
+            <span className="text-sm text-fg-muted">Gestión de Roles</span>
           </div>
-          <h1 className="mt-2 text-2xl font-bold text-white">
+          <h1 className="mt-2 text-2xl font-bold text-fg">
             Role-Based Permissions
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-fg-muted">
             Roles de permiso, permisos técnicos asignados y asignaciones de
             grupo
           </p>

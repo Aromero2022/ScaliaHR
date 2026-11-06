@@ -29,4 +29,19 @@ describe("check-csp (D29)", () => {
     );
     expect(cspProblems(null, page("x"))).toEqual(["no Content-Security-Policy header"]);
   });
+
+  it("fails when fonts or styles may come from another origin, or the page loads Google Fonts (D40)", () => {
+    const withGoogle = csp
+      .replace("style-src 'self' 'unsafe-inline'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com")
+      .replace("font-src 'self'", "font-src 'self' https://fonts.gstatic.com data:");
+    expect(cspProblems(withGoogle, page("Tm9uY2U="))).toEqual([
+      "font-src allows a source outside the app: https://fonts.gstatic.com",
+      "font-src allows a source outside the app: data:",
+      "style-src allows a source outside the app: https://fonts.googleapis.com",
+    ]);
+    const link = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter">';
+    expect(cspProblems(csp, page("Tm9uY2U=").replace("<head>", `<head>${link}`))).toEqual([
+      "the page loads fonts from Google",
+    ]);
+  });
 });

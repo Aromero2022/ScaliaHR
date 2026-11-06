@@ -28,7 +28,7 @@ export default function OrgTree({ positions }: TreeProps) {
 
   if (roots.length === 0) {
     return (
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-fg-subtle">
         No hay datos de organigrama disponibles.
       </p>
     );
@@ -60,14 +60,14 @@ function Branch({
 
       {children.length > 0 && (
         <>
-          <div className="h-6 w-px bg-slate-700" />
+          <div className="h-6 w-px bg-control" />
           <div className="relative flex gap-6">
             {children.length > 1 && (
-              <div className="absolute top-0 left-[calc(50%-1px)] h-px w-[calc(100%-3rem)] -translate-x-1/2 bg-slate-700" />
+              <div className="absolute top-0 left-[calc(50%-1px)] h-px w-[calc(100%-3rem)] -translate-x-1/2 bg-control" />
             )}
             {children.map((child) => (
               <div key={child.id} className="flex flex-col items-center">
-                <div className="h-6 w-px bg-slate-700" />
+                <div className="h-6 w-px bg-control" />
                 <Branch node={child} childrenMap={childrenMap} depth={depth + 1} />
               </div>
             ))}
@@ -81,16 +81,16 @@ function Branch({
 function PositionCard({ node, depth }: { node: PositionNode; depth: number }) {
   if (node.is_vacant) {
     return (
-      <div className="w-52 rounded-xl border border-dashed border-amber-500/50 bg-slate-900/60 p-4 text-center shadow-lg">
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-amber-900/40 text-lg">
+      <div className="w-52 rounded-xl border border-dashed border-warning-line bg-surface p-4 text-center shadow-lg">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-warning-subtle text-lg">
           ?
         </div>
-        <p className="mt-2 text-sm font-semibold text-amber-400">
+        <p className="mt-2 text-sm font-semibold text-warning-fg">
           Vacante
         </p>
-        <p className="text-xs text-slate-400">{node.title}</p>
-        <p className="text-xs text-slate-600">{node.department_name ?? ""}</p>
-        <span className="mt-2 inline-block rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
+        <p className="text-xs text-fg-muted">{node.title}</p>
+        <p className="text-xs text-fg-subtle">{node.department_name ?? ""}</p>
+        <span className="mt-2 inline-block rounded-full bg-warning-subtle px-2 py-0.5 text-[10px] font-medium text-warning-fg">
           To Be Hired
         </span>
       </div>
@@ -107,32 +107,32 @@ function PositionCard({ node, depth }: { node: PositionNode; depth: number }) {
 
   const ringColor =
     depth === 0
-      ? "border-indigo-500/50"
+      ? "border-accent-line"
       : depth === 1
-        ? "border-emerald-500/40"
-        : "border-slate-700";
+        ? "border-success-line"
+        : "border-line";
 
-  const avatarBg =
+  const avatarTone =
     depth === 0
-      ? "bg-indigo-600"
+      ? "bg-accent text-on-accent"
       : depth === 1
-        ? "bg-emerald-600"
-        : "bg-slate-700";
+        ? "bg-success text-on-success"
+        : "bg-surface-raised text-fg";
 
   return (
     <div
-      className={`w-52 rounded-xl border bg-slate-900 p-4 text-center shadow-lg ${ringColor}`}
+      className={`w-52 rounded-xl border bg-surface p-4 text-center shadow-lg ${ringColor}`}
     >
       <div
-        className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white ${avatarBg}`}
+        className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold ${avatarTone}`}
       >
         {initials}
       </div>
-      <p className="mt-2 text-sm font-semibold text-white">
+      <p className="mt-2 text-sm font-semibold text-fg">
         {node.occupant_name ?? "—"}
       </p>
-      <p className="text-xs text-slate-400">{node.title}</p>
-      <p className="text-xs text-slate-600">{node.department_name ?? ""}</p>
+      <p className="text-xs text-fg-muted">{node.title}</p>
+      <p className="text-xs text-fg-subtle">{node.department_name ?? ""}</p>
     </div>
   );
 }

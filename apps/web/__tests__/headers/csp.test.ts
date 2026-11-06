@@ -24,8 +24,8 @@ describe("contentSecurityPolicy (D29)", () => {
     const csp = contentSecurityPolicy("n", { dev: false, supabaseUrl: "https://abcdefghij.supabase.co" });
     for (const part of [
       "default-src 'self'",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self'",
       "img-src 'self' data: blob:",
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
       "frame-ancestors 'none'",

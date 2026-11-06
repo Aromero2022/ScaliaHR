@@ -57,9 +57,9 @@ export default function PersonSearch({
     <div>
       <input type="hidden" name={name} value={person?.id ?? ""} />
       {person ? (
-        <div className="mt-1 flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white">
+        <div className="mt-1 flex items-center justify-between rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-fg">
           <span>{describe(person)}</span>
-          <button type="button" onClick={() => setPerson(null)} className="text-xs text-slate-400 hover:text-white">
+          <button type="button" onClick={() => setPerson(null)} className="text-xs text-fg-muted hover:text-fg">
             Cambiar
           </button>
         </div>
@@ -71,16 +71,16 @@ export default function PersonSearch({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Escribe al menos 2 letras del nombre o correo"
             aria-label={label}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg outline-none focus:border-focus focus:ring-1 focus:ring-focus"
           />
           {results.length > 0 && (
-            <ul className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-700 bg-slate-800">
+            <ul className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-line bg-surface-raised">
               {results.map((p) => (
                 <li key={p.id}>
                   <button
                     type="button"
                     onClick={() => setPerson(p)}
-                    className="w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-700"
+                    className="w-full px-3 py-2 text-left text-sm text-fg hover:bg-surface-hover"
                   >
                     {describe(p)}
                   </button>

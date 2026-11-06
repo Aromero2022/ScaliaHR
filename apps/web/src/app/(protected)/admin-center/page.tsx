@@ -11,7 +11,7 @@ interface StatCard {
   label: string;
   value: number | string;
   icon: string;
-  color: string;
+  color: "accent" | "success" | "warning" | "info";
 }
 
 interface ConfigRow {
@@ -84,25 +84,25 @@ export default async function AdminCenterPage() {
       label: "Roles de Permiso",
       value: rolesRes.count ?? 0,
       icon: "shield",
-      color: "indigo",
+      color: "accent",
     },
     {
       label: "Grupos de Permiso",
       value: groupsRes.count ?? 0,
       icon: "users",
-      color: "emerald",
+      color: "success",
     },
     {
       label: "Permisos Técnicos",
       value: permsRes.count ?? 0,
       icon: "key",
-      color: "amber",
+      color: "warning",
     },
     {
       label: "Usuarios Activos",
       value: usersRes.count ?? 0,
       icon: "person",
-      color: "sky",
+      color: "info",
     },
   ];
 
@@ -128,8 +128,8 @@ export default async function AdminCenterPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Admin Center</h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <h1 className="text-2xl font-bold text-fg">Admin Center</h1>
+          <p className="mt-1 text-sm text-fg-muted">
             Panel de administración — Role-Based Permissions y configuración de
             la plataforma
           </p>
@@ -137,7 +137,7 @@ export default async function AdminCenterPage() {
         {rolesPerm.allowed && (
           <Link
             href="/admin-center/manage-roles"
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
           >
             Gestionar Roles
           </Link>
@@ -149,13 +149,13 @@ export default async function AdminCenterPage() {
         {stats.map((s) => (
           <div
             key={s.label}
-            className="rounded-xl border border-slate-800 bg-slate-900/50 p-5"
+            className="rounded-xl border border-line bg-surface p-5"
           >
             <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-400">{s.label}</p>
+              <p className="text-sm text-fg-muted">{s.label}</p>
               <StatIcon name={s.icon} color={s.color} />
             </div>
-            <p className="mt-2 text-3xl font-bold text-white">{s.value}</p>
+            <p className="mt-2 text-3xl font-bold text-fg">{s.value}</p>
           </div>
         ))}
       </div>
@@ -163,20 +163,20 @@ export default async function AdminCenterPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* System Configuration — requires admin.manage_config:edit */}
         {configPerm.allowed && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-            <h2 className="mb-4 text-lg font-semibold text-white">
+          <div className="rounded-xl border border-line bg-surface p-6">
+            <h2 className="mb-4 text-lg font-semibold text-fg">
               Configuración del Sistema
             </h2>
             <div className="space-y-3">
               {configs.map((c) => (
                 <div
                   key={c.key}
-                  className="flex items-center justify-between rounded-lg bg-slate-800/50 px-4 py-3"
+                  className="flex items-center justify-between rounded-lg bg-surface-muted px-4 py-3"
                 >
-                  <span className="text-sm font-medium text-slate-300">
+                  <span className="text-sm font-medium text-fg-muted">
                     {c.key}
                   </span>
-                  <span className="text-sm text-slate-400">
+                  <span className="text-sm text-fg-muted">
                     {typeof c.value_json === "string"
                       ? c.value_json
                       : JSON.stringify(c.value_json)}
@@ -184,7 +184,7 @@ export default async function AdminCenterPage() {
                 </div>
               ))}
               {configs.length === 0 && (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-fg-subtle">
                   Sin configuraciones registradas.
                 </p>
               )}
@@ -194,8 +194,8 @@ export default async function AdminCenterPage() {
 
         {/* Rate limits (D28) — requires admin.manage_config:edit */}
         {configPerm.allowed && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-            <h2 className="mb-4 text-lg font-semibold text-white">
+          <div className="rounded-xl border border-line bg-surface p-6">
+            <h2 className="mb-4 text-lg font-semibold text-fg">
               Límites de solicitudes
             </h2>
             <RateLimitSettings settings={rateLimits} />
@@ -204,8 +204,8 @@ export default async function AdminCenterPage() {
 
         {/* Recent Audit Log — requires admin.view_audit_logs:view */}
         {auditPerm.allowed && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-            <h2 className="mb-4 text-lg font-semibold text-white">
+          <div className="rounded-xl border border-line bg-surface p-6">
+            <h2 className="mb-4 text-lg font-semibold text-fg">
               Registro de Auditoría (Reciente)
             </h2>
             <div className="space-y-3">
@@ -214,13 +214,13 @@ export default async function AdminCenterPage() {
                 return (
                   <div
                     key={i}
-                    className="rounded-lg bg-slate-800/50 px-4 py-3"
+                    className="rounded-lg bg-surface-muted px-4 py-3"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="inline-block rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-400">
+                      <span className="inline-block rounded-full bg-accent-subtle px-2.5 py-0.5 text-xs font-medium text-accent-fg">
                         {a.action}
                       </span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-fg-subtle">
                         {new Date(a.created_at).toLocaleDateString("es-MX", {
                           day: "2-digit",
                           month: "short",
@@ -230,7 +230,7 @@ export default async function AdminCenterPage() {
                         })}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-400">
+                    <p className="mt-1 text-sm text-fg-muted">
                       {usr
                         ? `${(usr as Record<string, string>).first_name} ${(usr as Record<string, string>).last_name}`
                         : "Sistema"}
@@ -243,7 +243,7 @@ export default async function AdminCenterPage() {
                         : ""}
                     </p>
                     {a.diff && Object.keys(a.diff).length > 0 && (
-                      <pre className="mt-1 max-h-24 overflow-auto rounded bg-slate-900/50 px-2 py-1 text-xs text-slate-500">
+                      <pre className="mt-1 max-h-24 overflow-auto rounded-sm bg-surface px-2 py-1 text-xs text-fg-subtle">
                         {JSON.stringify(a.diff, null, 2)}
                       </pre>
                     )}
@@ -251,7 +251,7 @@ export default async function AdminCenterPage() {
                 );
               })}
               {auditEntries.length === 0 && (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-fg-subtle">
                   Sin entradas de auditoría.
                 </p>
               )}
@@ -261,17 +261,17 @@ export default async function AdminCenterPage() {
       </div>
 
       {/* Quick Links */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">
+      <div className="rounded-xl border border-line bg-surface p-6">
+        <h2 className="mb-4 text-lg font-semibold text-fg">
           Acceso Rápido
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {rolesPerm.allowed && (
             <Link
               href="/admin-center/manage-roles"
-              className="flex items-center gap-3 rounded-lg bg-slate-800/50 px-4 py-3 text-sm text-slate-300 transition hover:bg-slate-700/50"
+              className="flex items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600/20 text-indigo-400">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-subtle text-accent-fg">
                 <ShieldSvg />
               </span>
               Gestionar Roles y Permisos
@@ -279,18 +279,18 @@ export default async function AdminCenterPage() {
           )}
           <Link
             href="/org-chart"
-            className="flex items-center gap-3 rounded-lg bg-slate-800/50 px-4 py-3 text-sm text-slate-300 transition hover:bg-slate-700/50"
+            className="flex items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600/20 text-emerald-400">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-success-subtle text-success-fg">
               <OrgSvg />
             </span>
             Organigrama (Posiciones)
           </Link>
           <Link
             href="/dashboard"
-            className="flex items-center gap-3 rounded-lg bg-slate-800/50 px-4 py-3 text-sm text-slate-300 transition hover:bg-slate-700/50"
+            className="flex items-center gap-3 rounded-lg bg-surface-muted px-4 py-3 text-sm text-fg-muted transition hover:bg-surface-hover"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-600/20 text-sky-400">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-info-subtle text-info-fg">
               <HomeSvg />
             </span>
             Dashboard Principal
@@ -301,12 +301,17 @@ export default async function AdminCenterPage() {
   );
 }
 
-function StatIcon({ name, color }: { name: string; color: string }) {
-  const bg = `bg-${color}-600/20`;
-  const text = `text-${color}-400`;
+const STAT_ICON_TONE = {
+  accent: "bg-accent-subtle text-accent-fg",
+  success: "bg-success-subtle text-success-fg",
+  warning: "bg-warning-subtle text-warning-fg",
+  info: "bg-info-subtle text-info-fg",
+} as const;
+
+function StatIcon({ name, color }: { name: string; color: keyof typeof STAT_ICON_TONE }) {
   return (
     <span
-      className={`flex h-9 w-9 items-center justify-center rounded-lg ${bg} ${text}`}
+      className={`flex h-9 w-9 items-center justify-center rounded-lg ${STAT_ICON_TONE[color]}`}
     >
       {name === "shield" && <ShieldSvg />}
       {name === "users" && <OrgSvg />}

@@ -115,8 +115,8 @@ export default async function PerformancePage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Desempeño y Objetivos</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="text-2xl font-bold text-fg">Desempeño y Objetivos</h1>
+        <p className="mt-1 text-sm text-fg-muted">
           PMGM — Gestiona tus objetivos SMART y da/recibe feedback continuo
         </p>
       </div>

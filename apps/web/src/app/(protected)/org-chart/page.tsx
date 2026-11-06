@@ -63,16 +63,16 @@ export default async function OrgChartPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-2xl font-bold text-fg">
           Organigrama — Position Management
         </h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-fg-muted">
           Estructura jerárquica basada en posiciones ({totalPositions}{" "}
           posiciones, {vacantCount} vacantes)
         </p>
       </div>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8">
+      <div className="rounded-xl border border-line bg-surface p-8">
         <OrgTree positions={nodes} />
       </div>
     </div>
