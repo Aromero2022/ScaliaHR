@@ -2379,6 +2379,102 @@ caller. Neither guesses from the column name or the shape of the value.
 
 ---
 
+## D43 — Base Component Library
+
+**Decision:** one set of base components in `src/components/ui/`, built only
+on the D40 tokens, with their texts in the es-MX module (D42) and 44 px
+targets, adopted in the screens this PR touches. Phase 9c, PR 4. The day and
+time picker of the 9c list waits for its first consumer (Phases 10 and 21).
+
+**Components:**
+- `Button`: primary, secondary, danger and ghost variants; at least 44 px
+  high; `loading` disables it and sets `aria-busy`. `ButtonLink` gives a link
+  the same look.
+- `Field`: the label is always visible (never a placeholder alone); input,
+  select or textarea; the hint and the error are tied to the control with
+  `aria-describedby`, and an error sets `aria-invalid`. Spacing follows D19:
+  label to control 8 px, control to help 4 px, 20 px between fields.
+- `Dialog`: the native `<dialog>` opened with `showModal()`. The browser keeps
+  the focus inside, closes it with Esc, makes the rest of the page inert and
+  returns the focus to the element that opened it. The title names it through
+  `aria-labelledby`. jsdom has no `<dialog>`, so the unit tests stub
+  `showModal()` and `close()`; the focus trap, Esc and the focus return are
+  checked in Chromium on the production image.
+- `StatCard`: replaces the dashboard's `KpiCard`, the performance stat card
+  and ARCO's `StatCard`.
+- `Badge`: a state never depends on color alone (WCAG 1.4.1): it always shows
+  the `enumLabel()` text. Each tone is a `{family}-fg` on `{family}-subtle`
+  pair (or `fg-muted` on `surface-raised`); a test checks that every tone is
+  one of the D40 contrast pairs, which are validated in light, dark and high
+  contrast.
+- `Table`: a semantic table from 768 px; under 768 px the same rows as cards,
+  one `dl` per row. The hidden one is `display: none`, so it is out of the
+  accessibility tree, and a 320 px page has no horizontal scroll (WCAG
+  1.4.10).
+- `Toast`: one region in the protected layout with `role="status"` and
+  `aria-live="polite"`; it pauses on hover and focus and closes with Esc.
+  Used only for the success messages of the three dialogs this PR migrates
+  (create role, new goal, feedback); errors stay in the dialog.
+- `Skeleton`: appears only after 400 ms through CSS alone (it starts at
+  opacity 0 and an `animation-delay` shows it), with no script, so it works
+  under the nonce CSP of D29; with `prefers-reduced-motion` it has no shimmer.
+  `(protected)/loading.tsx` uses it for every protected page.
+
+**Adoption:**
+- Login, dashboard, profile, the employee list (`Table`) and MFA enrollment.
+- The two hand-made modals without `role="dialog"`, focus trap or Esc move to
+  `Dialog`, `Field`, `Button` and `Toast`: create role (role manager) and new
+  goal and feedback (performance).
+- ARCO's stat cards and badges, and the Admin Center, whose view had two
+  primaries ("Gestionar roles" becomes secondary).
+- Files this PR touches move their texts to `lib/i18n/es-MX.ts` (D42 rule):
+  performance, the role manager, the ARCO panel and the Admin Center page.
+
+**Menu names, without module codes,** from the es-MX module: Inicio,
+Empleados, Mi perfil, Organigrama, Desempeño, Formación, Habilidades, Derechos
+ARCO and Administración. TIH is "Habilidades" because it is the skills layer;
+"Talento" is kept for Succession and Calibration (Phase 18a). The dock's short
+labels stay, except TIH's: "Talento" becomes "Habili-dades" so that it agrees
+with the long name. A test checks that every short label is a prefix of its
+long name or contained in it.
+
+**One primary button per view (static test), the exact rule:**
+- A primary is a `<Button>` whose variant is omitted or `"primary"`, or a
+  `<button>`, `<a>` or `<Link>` whose `className` is a fixed string (not inside
+  a condition) with both `bg-accent` and `text-on-accent`. A selected state
+  drawn with those classes inside a condition (tabs, filters) is not a
+  primary.
+- A view is a `page.tsx` plus the components it renders directly: the
+  components imported by the page and used in its JSX, one level deep, with
+  the local components declared in those files.
+- What is inside a `<Dialog>` or a native `<dialog>` is a view of its own.
+- The branches of a conditional (`a ? X : Y`), and sibling `&&` blocks that
+  compare the same value with different literals (`tab === "goals" && …`,
+  `tab === "feedback" && …`), are alternatives: the view counts the largest
+  branch, not the sum.
+- Every view and every dialog has at most one. Negative controls: fixtures
+  with two primaries in a page and two in a dialog fail; one in a page plus
+  one in its dialog, tab alternatives and a selected filter pass.
+
+**Hand-made modals:** a static test fails on `fixed inset-0` outside
+`components/ui/`, with one listed exception: the D41 "Más" dialog in
+`components/navigation/app-navigation.tsx`, which already has `role="dialog"`,
+`aria-modal`, a focus trap, Esc and focus return, with its own tests.
+
+**Dead code:** `lib/supabase/mfa.ts` and `components/loading.tsx` are
+deleted; nothing imported them.
+
+**Tests (planned):** jsdom unit tests for every component (the `Dialog` with a
+stubbed `<dialog>`, the `Field` ARIA, the `Toast` live region, pause and Esc,
+the `Table` cards, the `Badge` text and tones); the two static rules with
+negative controls; the badge tones against the D40 contrast pairs; the short
+menu labels. In the production image: reflow at 320, 360, 768 and 1280 px in
+light and dark, the keyboard in the three dialogs (focus inside, Esc, focus
+back on the opener), the toast announced, no CSP violation, no console error,
+and screenshots.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.

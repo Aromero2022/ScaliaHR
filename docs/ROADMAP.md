@@ -184,6 +184,7 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Layout Holy Grail / Two Column.
 - Navegación: sidebar completo colapsable en escritorio, riel de íconos en tablet y dock inferior de máximo 5 íconos con texto en móvil.
 - Búsqueda global con ⌘K.
+- Nombres del menú sin códigos de módulo (hoy "Inicio (BizX)", "Talent Hub (TIH)", "Admin Center"). Va en el PR 4 (D43): Inicio, Empleados, Mi perfil, Organigrama, Desempeño, Formación, Habilidades, Derechos ARCO y Administración, desde `lib/i18n/es-MX.ts`. "Talento" queda reservado para Sucesión y Calibración (Fase 18a).
 - Hecho en el PR 2 (D41), salvo ⌘K: shell con landmarks y enlace para saltar al contenido, sidebar colapsable desde 1280 px, rail de 768 a 1279 px y dock de 5 entradas con diálogo "Más" bajo 768 px, todo con la misma lista filtrada por módulo y RBP; sin scroll horizontal a 320 px.
 
 ### Responsive
@@ -218,6 +219,8 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 ### Biblioteca base
 
 - Botón, input, stat card, tabla, modal, toast, skeleton y agenda de día y hora con la zona horaria del tenant visible y aria-labels.
+- Va en el PR 4 (D43), salvo la agenda de día y hora, que entra con su primer consumidor (Fases 10 y 21): `components/ui/` con Button, Field, Dialog sobre `<dialog>` nativo, StatCard, Badge, Table que se vuelve tarjetas bajo 768 px, Toast y Skeleton, adoptados en las pantallas que toca el PR; un test estático limita a un botón primario por vista y otro impide modales hechos a mano fuera de `components/ui/`.
+- Siguientes PRs de la 9c: el PR 5 trae axe en CI, el e2e de Playwright con las rutas corregidas (hoy apunta a `/app`) y las capturas de cierre a 360, 768 y 1280 px; el PR 6, ⌘K con PersonSearch como combobox accesible, framer-motion con movimiento reducido, el grid del dashboard y los formularios largos por pasos.
 
 ### Pruebas
 
