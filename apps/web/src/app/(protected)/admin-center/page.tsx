@@ -148,12 +148,12 @@ export default async function AdminCenterPage() {
               {configs.map((c) => (
                 <div
                   key={c.key}
-                  className="flex items-center justify-between rounded-lg bg-surface-muted px-4 py-3"
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg bg-surface-muted px-4 py-3"
                 >
                   <span className="text-sm font-medium text-fg-muted">
                     {c.key}
                   </span>
-                  <span className="text-sm text-fg-muted">
+                  <span className="min-w-0 break-all text-sm text-fg-muted">
                     {typeof c.value_json === "string"
                       ? c.value_json
                       : JSON.stringify(c.value_json)}
@@ -214,7 +214,7 @@ export default async function AdminCenterPage() {
                         : ""}
                     </p>
                     {a.diff && Object.keys(a.diff).length > 0 && (
-                      <pre className="mt-1 max-h-24 overflow-auto rounded-sm bg-surface px-2 py-1 text-xs text-fg-subtle">
+                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-surface px-2 py-1 text-xs text-fg-subtle">
                         {JSON.stringify(a.diff, null, 2)}
                       </pre>
                     )}

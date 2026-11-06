@@ -67,7 +67,7 @@ export default function RoleManager({ roles, groups }: Props) {
                     setExpandedRole(isExpanded ? null : role.id)
                   }
                   aria-expanded={isExpanded}
-                  className="flex w-full items-center gap-4 px-6 py-4 text-left transition hover:bg-surface-hover"
+                  className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-4 text-left transition hover:bg-surface-hover md:px-6"
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised">
                     {role.is_admin_role ? (
@@ -103,8 +103,8 @@ export default function RoleManager({ roles, groups }: Props) {
                     )}
                   </div>
 
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium text-fg">
                         {role.name}
                       </span>
@@ -119,7 +119,7 @@ export default function RoleManager({ roles, groups }: Props) {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-4 text-sm text-fg-subtle">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-subtle">
                     <span>{t.permissionsCount(role.permissions.length)}</span>
                     <span>{t.grantsCount(role.grants.length)}</span>
                     <svg
@@ -226,7 +226,7 @@ export default function RoleManager({ roles, groups }: Props) {
         </div>
         <div className="divide-y divide-line">
           {groups.map((g) => (
-            <div key={g.id} className="flex items-center gap-4 px-6 py-4">
+            <div key={g.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-4 md:px-6">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-success-subtle">
                 <svg
                   aria-hidden="true"
@@ -243,7 +243,7 @@ export default function RoleManager({ roles, groups }: Props) {
                   />
                 </svg>
               </div>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <p className="font-medium text-fg">{g.name}</p>
                 <p className="text-sm text-fg-muted">
                   {g.description ?? t.noDescription}

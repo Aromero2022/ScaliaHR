@@ -202,7 +202,7 @@ export default async function EmployeesPage({
         />
 
         {total > 0 && (
-          <div className="flex items-center justify-between border-t border-line px-6 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2 md:px-6">
             <p className="text-xs text-fg-subtle">
               {t.showing(showingFrom, showingTo, total)}
             </p>
@@ -214,7 +214,7 @@ export default async function EmployeesPage({
                   label={t.previous}
                 />
               ) : (
-                <span className="rounded-lg px-3 py-1.5 text-xs text-fg-subtle">
+                <span className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs text-fg-subtle">
                   {t.previous}
                 </span>
               )}
@@ -228,7 +228,7 @@ export default async function EmployeesPage({
                   label={t.next}
                 />
               ) : (
-                <span className="rounded-lg px-3 py-1.5 text-xs text-fg-subtle">
+                <span className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs text-fg-subtle">
                   {t.next}
                 </span>
               )}
@@ -257,7 +257,7 @@ function PaginationLink({
   return (
     <Link
       href={href}
-      className="rounded-lg border border-line px-3 py-1.5 text-xs text-fg-muted transition hover:border-accent hover:text-fg"
+      className="inline-flex min-h-11 items-center rounded-lg border border-line px-3 text-xs text-fg-muted transition hover:border-accent hover:text-fg"
     >
       {label}
     </Link>

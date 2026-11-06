@@ -311,6 +311,12 @@ export const messages = {
       dashboard: "Inicio",
     },
   },
+  rolesPage: {
+    breadcrumb: "Ruta",
+    current: "Gestión de Roles",
+    heading: "Permisos por rol",
+    subheading: "Roles de permiso, permisos técnicos asignados y asignaciones de grupo",
+  },
   orgChart: {
     heading: "Organigrama — Gestión de posiciones",
     summary: (positions: number, vacant: number) =>
