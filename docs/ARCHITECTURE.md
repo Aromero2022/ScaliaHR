@@ -2601,6 +2601,11 @@ record what the tests type.
 - The scan earned its place while this PR was built: it caught the TOTP
   secret and the password in Playwright's error context of failing local runs,
   before the measures above existed, and deleted those artifacts.
+- `.gitleaksignore` (new) lists exact gitleaks findings that are not secrets,
+  one `commit:file:rule:line` per line, never a pattern or a file. Its only
+  entry is a made-up password of a fixture in the first commit of this PR,
+  which gitleaks took for a key; the next commit replaced it with a
+  low-entropy value.
 
 **What the suite covers (49 tests):**
 - Employee login with the company code, landing on the dashboard; the Admin

@@ -22,7 +22,8 @@ const temp = (prefix: string) => {
   return dir;
 };
 
-const PASSWORD = "k3Jd8_aQ-zP1vX9mT0bL5yC2nR7wE4sF";
+// Fake values with low entropy on purpose, so gitleaks (D33) does not take them for keys.
+const PASSWORD = "contrasena-falsa-".repeat(2);
 const TOTP = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
 
 /** A zip as Playwright embeds it in its HTML report (one deflated entry, one stored). */
