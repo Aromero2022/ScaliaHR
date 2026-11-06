@@ -2236,6 +2236,105 @@ will follow the tenant's time zone (`platform.timezone`).
 
 ---
 
+## D42 — Spanish Interface Texts and Dates in the Tenant's Time Zone
+
+**Decision:** the texts of the screens this PR touches and the labels of
+every database enum live in one es-MX messages module, with no i18n library.
+Dates are formatted on the server with `Intl.DateTimeFormat("es-MX")`:
+moments in the tenant's time zone, calendar dates with no time zone
+conversion. Phase 9c, PR 3.
+
+**Texts (`src/lib/i18n/es-MX.ts`):**
+- One typed `as const` object grouped by screen, plus the labels of every
+  enum created in `supabase/migrations`, keyed by the enum's name.
+- It holds the texts of the screens this PR touches: login, the app
+  metadata, dashboard, profile, employee list and detail, org chart and MFA
+  enrollment. Screens already in Spanish move into the module when they are
+  next touched (ROADMAP).
+- Terms: "Iniciar sesión", "Correo electrónico", "Contraseña",
+  "Calificación de desempeño", "Calificación de potencial", "Número de
+  empleado", "Jefe directo", "Por contratar" and "App de autenticación" (the
+  name of the MFA factor). Product names stay (Authy, 1Password).
+- Enum values stored in the database (`ACTIVE`, `ON_TRACK`…) do not change;
+  they are translated only when shown. `ON_LEAVE` is "Con permiso"
+  everywhere. The label maps repeated in five components give way to the
+  module; the color maps stay keyed by value.
+
+**Dates (`src/lib/format/dates.ts`):** two explicit functions, chosen by the
+caller. Neither guesses from the column name or the shape of the value.
+- `formatDateOnly(value)` for columns that hold a calendar date. It reads the
+  `YYYY-MM-DD` of the value and formats it in UTC, so "31 dic 2026" is the
+  same in every zone. It accepts a `date` (`2026-12-31`) and the midnight-UTC
+  `timestamptz` that some date-only columns hold today
+  (`2026-12-31T00:00:00+00:00`); anything else is an error. The exact list of
+  columns is in a comment in the file.
+- `formatInstant(value, timeZone)` for moments, in es-MX with a 12-hour clock
+  and the tenant's zone: "5 nov 2026, 11:30 p.m.".
+- The date-only `timestamptz` columns (`period_start`, `period_end` and
+  `due_date` of goals, `users.hire_date`) hold midnight UTC because the
+  Postgres sessions run in UTC: `'2026-01-01'::timestamptz` is
+  `2026-01-01T00:00:00+00:00`. Converted to America/Mexico_City, a period
+  that starts on 1 January would show "31 dic 2025". `formatDateOnly`
+  depends on that UTC session, and an integration test checks
+  `show timezone` = `UTC` and fails with a clear message if it changes.
+  Converting those columns to `date` is planned with expand/contract (D22):
+  goals in Phase 16, `hire_date` in Phase 14.
+- All formatting runs on the server and client components receive strings,
+  so the text is the same in every browser time zone and hydration cannot
+  differ from the server render. "Overdue" (ARCO) and the default "today" of
+  a form are computed on the server in the tenant's zone.
+
+**Tenant time zone:**
+- `getTenantTimeZone(tenantId)` calls `public.tenant_time_zone()` as
+  `prisma_app`, validates the result with Zod and Intl, and falls back to
+  `America/Mexico_City` when it is null or not a valid zone. It is cached per
+  tenant under `tenantTimeZoneTag(id)`, like the module flags (D35); the
+  Admin Center of Phase 11 revalidates that tag when the zone is edited. The
+  tenant id always comes from the server (the verified token or the
+  subdomain), never from user input.
+- New migration, `public.tenant_time_zone(p_tenant_id uuid) RETURNS text`:
+  `LANGUAGE sql`, `STABLE`, `SECURITY DEFINER`, `search_path = ''`. It
+  returns only `value_json #>> '{}'` of the `platform.timezone` key of that
+  tenant: no other key, no key parameter, no row. Execute is revoked from
+  PUBLIC, `anon`, `authenticated` and `service_role` and granted only to
+  `prisma_app`, as with `tenant_module_flags` (D35). It exists because the
+  SELECT policy of `system_configurations` lets only tenant admins read it,
+  so an employee's session cannot, and the cache is filled outside any
+  request. `system_configurations` has no `deleted_at`. The proposal's "no
+  migrations" meant no column, policy or seed change, and none of those
+  change.
+- `create-tenant.ts` writes `platform.timezone` (`America/Mexico_City`) and
+  `platform.locale` (`es`) for every new tenant. Until now only the demo
+  tenant had them. This is code, not a migration.
+
+**Tests:**
+- A static test walks the `.tsx` files with the TypeScript compiler and
+  checks only visible text (JSX text, the `label`, `placeholder`, `title`,
+  `alt` and `aria-label` attributes, and the metadata). It fails on known
+  English texts ("Sign In", "Password", "ACTIVE", "ON TRACK", "Performance
+  Score" and the others found), with a negative control.
+- Every value of every enum in the migrations has a label.
+- A static test fails if a `"use client"` file formats a date.
+- Unit tests of both date functions (moments near midnight, a zone with
+  daylight saving time, an invalid zone, calendar dates under any process
+  `TZ`).
+- Integration tests against the local database: the function's access
+  (`prisma_app` yes, the Data API signed in or not 42501), one tenant never
+  gets another's zone, a tenant made by `create-tenant` has both keys and
+  needs no fallback, a tenant without the key falls back, the UTC session,
+  and the value the database returns for a date-only column.
+- In the production image, with the browser in America/Mexico_City and in
+  Asia/Tokyo: the same dates in both, no console error (hydration included),
+  no CSP violation, and no English text from the list or raw ISO date on the
+  page. Screenshots of dashboard, performance and login in light and dark.
+
+**Accepted for now:**
+- The module labels of the navigation keep their codes ("Inicio (BizX)",
+  "Talent Hub (TIH)", "Admin Center"). D41 left them for this PR, but the
+  approved proposal did not include them; they need a decision of their own.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.

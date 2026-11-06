@@ -197,7 +197,8 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Áreas táctiles de 44px.
 - Skeletons en cargas mayores a 400 ms.
 - Menús que solo muestran módulos contratados (D12) y permitidos por rol (RBP). El sidebar actual ya filtra por flag de módulo y por `can()` (D14); el riel y el dock usan el mismo filtro.
-- Fechas con formato local y la zona horaria del tenant (hoy se muestran ISO crudas: "2026-01-01T00:00:00+00:00").
+- Fechas con formato local y la zona horaria del tenant (hoy se muestran ISO crudas: "2026-01-01T00:00:00+00:00"). Va en el PR 3 (D42).
+- Textos de la UI en un solo módulo, `lib/i18n/es-MX.ts` (D42). Las pantallas que ya están en español y que el PR 3 no toca (Talent Hub, roles y permisos, ARCO, Admin Center, verificación MFA) pasan al módulo cuando se toquen.
 
 ### Accesibilidad (WCAG 2.2 AA)
 
@@ -233,6 +234,7 @@ Motor de workflows configurable, notificaciones push/email/in-app, eventos de ci
 
 - Preferencias de notificación por usuario y opción de desuscribirse de correos no críticos.
 - Notificaciones push por adaptador (local/prueba); el proveedor real se conecta en la Fase 23.
+- Los correos muestran fechas y horas con la zona horaria del tenant (`platform.timezone`), con las mismas reglas de D42: momentos con la zona del tenant y fechas sin hora sin convertir.
 
 ---
 
@@ -241,6 +243,7 @@ Motor de workflows configurable, notificaciones push/email/in-app, eventos de ci
 CRUD de RBP (roles, grupos y asignaciones), DPCS (aviso de privacidad versionado, aceptación al iniciar sesión y Set DPCS Statement Status), Picklist Center, Import Employee Data, configuración de empresa (logo, tema, idioma, política de contraseña y MFA), reporte de auditoría, política de login por cliente (correo, número de empleado o ambos) y reseteo de contraseña por RH.
 
 - Al habilitar roles personalizados, `insert_effective_record` (y cualquier función de la base que hoy autorice por `app_role`) debe validar el permiso RBP en lugar del rol fijo.
+- Zona horaria e idioma del tenant (`platform.timezone` y `platform.locale`) editables en la configuración de empresa. Al guardar la zona, llamar `revalidateTag(tenantTimeZoneTag(tenantId))`; sin esto, la zona nueva tarda hasta 60 s en verse (D42).
 - Cada Server Action del CRUD de RBP debe llamar `writeAuditLog()` con la acción correspondiente: `ROLE_CREATED`, `ROLE_UPDATED`, `ROLE_DELETED`, `PERMISSION_GRANTED`, `PERMISSION_REVOKED`, `GROUP_MEMBER_ADDED`, `GROUP_MEMBER_REMOVED`. Las entradas deben incluir `entity_id` (UUID del recurso) y `diff` (campos modificados) para trazabilidad completa.
 
 ### Theme Manager (D18)
@@ -320,6 +323,7 @@ Depende de: Workflows (10), Admin Center (11), worker y lib/email (9a), API (13)
 ### Onboarding
 
 - Alta del nuevo ingreso en EC con fecha efectiva.
+- Convertir `users.hire_date` de `timestamptz` a `date` con expand/contract (D22). Hoy guarda la medianoche UTC y se muestra con `formatDateOnly()`, que depende de que la sesión de Postgres esté en UTC (D42).
 - Preboarding: portal antes del día 1 con acceso temporal.
 - Captura de datos personales y fiscales (RFC, CURP, NSS, CLABE) con permisos por campo (PII sensible).
 - Documentos y firma electrónica (contrato, aviso de privacidad, NDA); firma electrónica por adaptador (local/prueba).
@@ -340,6 +344,14 @@ Depende de: Workflows (10), Admin Center (11), worker y lib/email (9a), API (13)
 - Al cerrar, aplica la política de retención de DRTM (Fase 20).
 
 **Criterio de cierre:** un alta completa desde preboarding hasta el día 1 y una baja con revocación de accesos verificada, ambas con su bitácora de auditoría.
+
+---
+
+## Fase 16 — PMGM v2
+
+Plantillas de formulario, rating scales, route maps y metas de desempeño.
+
+- Convertir `period_start`, `period_end` y `due_date` de `performance_goals` de `timestamptz` a `date` con expand/contract (D22). Hoy guardan la medianoche UTC y se muestran con `formatDateOnly()`, que depende de que la sesión de Postgres esté en UTC (D42).
 
 ---
 
