@@ -6,6 +6,9 @@ import {
   updateSelfAssessment,
   setManagerAssessment,
 } from "@/app/(protected)/skills-hub/actions";
+import { messages } from "@/lib/i18n/es-MX";
+
+const t = messages.skillsHub;
 
 interface OntologySkill {
   id: string;
@@ -56,9 +59,9 @@ interface Props {
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  technical: { label: "Técnica", color: "text-category-1-fg", bg: "bg-category-1-subtle border-category-1-line" },
-  soft: { label: "Interpersonal", color: "text-category-2-fg", bg: "bg-category-2-subtle border-category-2-line" },
-  language: { label: "Idioma", color: "text-category-3-fg", bg: "bg-category-3-subtle border-category-3-line" },
+  technical: { label: t.categories.technical, color: "text-category-1-fg", bg: "bg-category-1-subtle border-category-1-line" },
+  soft: { label: t.categories.soft, color: "text-category-2-fg", bg: "bg-category-2-subtle border-category-2-line" },
+  language: { label: t.categories.language, color: "text-category-3-fg", bg: "bg-category-3-subtle border-category-3-line" },
 };
 
 
@@ -86,22 +89,22 @@ export default function SkillsHubDashboard({
       : "—";
 
   const tabs: { key: TabKey; label: string }[] = [
-    { key: "radar", label: "Radar de Competencias" },
-    { key: "catalog", label: "Catálogo de Habilidades" },
+    { key: "radar", label: t.tabs.radar },
+    { key: "catalog", label: t.tabs.catalog },
   ];
   if (isManager) {
-    tabs.push({ key: "team", label: "Mi Equipo" });
+    tabs.push({ key: "team", label: t.tabs.team });
   }
 
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className={clsx("grid gap-4", isManager ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
-        <StatTile label="Habilidades Evaluadas" value={assessedCount} />
-        <StatTile label="Brechas Detectadas" value={gapCount} accent="amber" />
-        <StatTile label="Nivel Promedio" value={avgLevel} accent="indigo" />
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-4">
+        <StatTile label={t.stats.assessed} value={assessedCount} />
+        <StatTile label={t.stats.gaps} value={gapCount} accent="amber" />
+        <StatTile label={t.stats.average} value={avgLevel} accent="indigo" />
         {isManager && (
-          <StatTile label="Reportes Directos" value={teamMembers.length} accent="emerald" />
+          <StatTile label={t.stats.directReports} value={teamMembers.length} accent="emerald" />
         )}
       </div>
 
@@ -186,12 +189,8 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
   if (roleSkills.length === 0) {
     return (
       <div className="rounded-xl border border-line bg-surface p-8 text-center">
-        <p className="text-fg-muted">
-          No hay habilidades requeridas asociadas a tu puesto actual.
-        </p>
-        <p className="mt-2 text-sm text-fg-subtle">
-          Contacta a tu administrador para configurar el perfil de competencias de tu rol.
-        </p>
+        <p className="text-fg-muted">{t.noRoleSkills}</p>
+        <p className="mt-2 text-sm text-fg-subtle">{t.noRoleSkillsHint}</p>
       </div>
     );
   }
@@ -200,9 +199,9 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
     <div className="space-y-4">
       {/* Visual radar bars */}
       <div className="rounded-xl border border-line bg-surface p-6">
-        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-fg-muted">
-          Perfil vs. Requisitos del Puesto
-        </h3>
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-fg-muted">
+          {t.profileVsRole}
+        </h2>
         <div className="space-y-3">
           {merged.map((item) => {
             const gap = item.required_level - item.self_level;
@@ -213,12 +212,12 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-fg">{item.skill_name}</span>
                     {item.manager_level !== null && (
-                      <span className="text-xs text-success-fg">✓ Manager</span>
+                      <span className="text-xs text-success-fg">{t.managerAssessed}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-3 text-xs">
                     {isGap && (
-                      <span className="text-warning-fg">Brecha: {gap}</span>
+                      <span className="text-warning-fg">{t.gap(gap)}</span>
                     )}
                     <button
                       onClick={() =>
@@ -226,14 +225,14 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
                           editingSkill === item.skill_id ? null : item.skill_id
                         )
                       }
-                      className="text-accent-fg opacity-0 transition group-hover:opacity-100"
+                      className="text-accent-fg opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
                     >
-                      Evaluar
+                      {t.assess}
                     </button>
                   </div>
                 </div>
-                {/* Double bar */}
-                <div className="relative h-5 overflow-hidden rounded-full bg-surface-raised">
+                {/* Double bar; its labels sit under it, never on the fills (D44, WCAG 1.4.3) */}
+                <div aria-hidden="true" className="relative h-2.5 overflow-hidden rounded-full bg-surface-raised">
                   {/* Required level background */}
                   <div
                     className="absolute inset-y-0 left-0 rounded-full bg-surface-strong"
@@ -247,10 +246,10 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
                     )}
                     style={{ width: `${(item.self_level / 5) * 100}%` }}
                   />
-                  <div className="absolute inset-0 flex items-center justify-between px-2 text-xs font-medium text-fg">
-                    <span>Tú: {item.self_level}/5</span>
-                    <span className="text-fg-muted">Req: {item.required_level}/5</span>
-                  </div>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-xs font-medium">
+                  <span className="text-fg">{t.yourLevelOf(item.self_level)}</span>
+                  <span className="text-fg-muted">{t.requiredOf(item.required_level)}</span>
                 </div>
                 {editingSkill === item.skill_id && (
                   <LevelSelector
@@ -265,13 +264,13 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
         </div>
         <div className="mt-4 flex items-center gap-4 text-xs text-fg-subtle">
           <span className="flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-success" /> Tu nivel
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-success" /> {t.legend.yours}
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-warning" /> Brecha
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-warning" /> {t.legend.gap}
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-surface-strong" /> Requerido
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-surface-strong" /> {t.legend.required}
           </span>
         </div>
       </div>
@@ -279,9 +278,9 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
       {/* Skills not required by role but self-assessed */}
       {unmatched.length > 0 && (
         <div className="rounded-xl border border-line bg-surface p-6">
-          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-fg-muted">
-            Habilidades Adicionales (fuera del perfil del puesto)
-          </h3>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-fg-muted">
+            {t.additional}
+          </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {unmatched.map((ms) => (
               <div
@@ -347,7 +346,7 @@ function LevelSelector({
 
   return (
     <div className="mt-2 flex items-center gap-2 rounded-lg bg-surface-raised p-3">
-      <span className="text-xs text-fg-muted">Auto-evaluación:</span>
+      <span className="text-xs text-fg-muted">{t.selfAssessment}</span>
       {[1, 2, 3, 4, 5].map((level) => (
         <button
           key={level}
@@ -367,7 +366,7 @@ function LevelSelector({
         onClick={onDone}
         className="ml-auto text-xs text-fg-subtle hover:text-fg"
       >
-        Cancelar
+        {messages.common.cancel}
       </button>
       {error && <span className="text-xs text-danger-fg">{error}</span>}
     </div>
@@ -405,13 +404,16 @@ function SkillCatalog({
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="text"
-          placeholder="Buscar habilidad..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-focus"
-        />
+        <label className="flex flex-col gap-2 text-sm font-medium text-fg">
+          {t.search}
+          <input
+            type="search"
+            placeholder={t.searchPlaceholder}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm font-normal text-fg placeholder:text-fg-subtle outline-none focus:border-focus"
+          />
+        </label>
         <div className="flex flex-wrap gap-1">
           <button
             onClick={() => setFilter("ALL")}
@@ -422,7 +424,7 @@ function SkillCatalog({
                 : "bg-surface-raised text-fg-muted hover:text-fg"
             )}
           >
-            Todas
+            {t.all}
           </button>
           {categories.map((cat) => (
             <button
@@ -444,14 +446,14 @@ function SkillCatalog({
       {/* Grouped Skills */}
       {Object.entries(grouped).map(([cat, skills]) => (
         <div key={cat}>
-          <h3
+          <h2
             className={clsx(
               "mb-3 text-sm font-semibold uppercase tracking-wider",
               CATEGORY_CONFIG[cat]?.color ?? "text-fg-muted"
             )}
           >
             {CATEGORY_CONFIG[cat]?.label ?? cat} ({skills.length})
-          </h3>
+          </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {skills.map((skill) => {
               const mine = mySkills.find((ms) => ms.skill_id === skill.id);
@@ -465,7 +467,7 @@ function SkillCatalog({
 
       {filtered.length === 0 && (
         <div className="rounded-xl border border-line bg-surface p-8 text-center">
-          <p className="text-fg-muted">No se encontraron habilidades.</p>
+          <p className="text-fg-muted">{t.noResults}</p>
         </div>
       )}
     </div>
@@ -493,7 +495,7 @@ function SkillCard({
     >
       <div className="flex items-start justify-between">
         <div>
-          <h4 className="text-sm font-semibold text-fg">{skill.name}</h4>
+          <h3 className="text-sm font-semibold text-fg">{skill.name}</h3>
           <span className={clsx("text-xs", catConf?.color ?? "text-fg-muted")}>
             {catConf?.label ?? skill.category}
           </span>
@@ -517,15 +519,15 @@ function SkillCard({
       )}
       <div className="mt-3 flex items-center justify-between">
         {myLevel !== undefined ? (
-          <span className="text-xs text-fg-subtle">Tu nivel: {myLevel}/5</span>
+          <span className="text-xs text-fg-subtle">{t.yourLevel(myLevel)}</span>
         ) : (
-          <span className="text-xs text-fg-subtle">Sin evaluar</span>
+          <span className="text-xs text-fg-subtle">{t.notAssessed}</span>
         )}
         <button
           onClick={() => setShowAssess(!showAssess)}
           className="text-xs text-accent-fg hover:text-fg"
         >
-          {showAssess ? "Cerrar" : "Evaluar"}
+          {showAssess ? messages.common.close : t.assess}
         </button>
       </div>
       {showAssess && (
@@ -547,10 +549,8 @@ function TeamView({ members }: { members: TeamMember[] }) {
   if (members.length === 0) {
     return (
       <div className="rounded-xl border border-line bg-surface p-8 text-center">
-        <p className="text-fg-muted">No tienes reportes directos registrados.</p>
-        <p className="mt-2 text-sm text-fg-subtle">
-          Los reportes se determinan por la relación de manager en la información de puesto.
-        </p>
+        <p className="text-fg-muted">{t.noReports}</p>
+        <p className="mt-2 text-sm text-fg-subtle">{t.noReportsHint}</p>
       </div>
     );
   }
@@ -595,10 +595,7 @@ function TeamView({ members }: { members: TeamMember[] }) {
                   <p className="text-sm font-medium text-fg">
                     {member.full_name}
                   </p>
-                  <p className="text-xs text-fg-subtle">
-                    {skillCount} habilidades · Promedio: {avgLevel} ·{" "}
-                    {assessedByManager}/{skillCount} evaluadas por manager
-                  </p>
+                  <p className="text-xs text-fg-subtle">{t.memberSummary(skillCount, avgLevel, assessedByManager)}</p>
                 </div>
               </div>
               <span
@@ -614,9 +611,7 @@ function TeamView({ members }: { members: TeamMember[] }) {
             {isExpanded && (
               <div className="border-t border-line p-4">
                 {member.skills.length === 0 ? (
-                  <p className="text-sm text-fg-subtle">
-                    Este colaborador aún no ha registrado habilidades.
-                  </p>
+                  <p className="text-sm text-fg-subtle">{t.memberNoSkills}</p>
                 ) : (
                   <div className="space-y-3">
                     {member.skills.map((skill) => (
@@ -664,12 +659,12 @@ function TeamSkillRow({
           onClick={() => setShowAssess(!showAssess)}
           className="text-xs text-success-fg hover:text-fg"
         >
-          {showAssess ? "Cerrar" : "Evaluar"}
+          {showAssess ? messages.common.close : t.assess}
         </button>
       </div>
       <div className="mt-2 flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-fg-subtle">Auto:</span>
+          <span className="text-xs text-fg-subtle">{t.self}</span>
           <div className="flex items-center gap-0.5">
             {Array.from({ length: 5 }).map((_, i) => (
               <span
@@ -688,7 +683,7 @@ function TeamSkillRow({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-fg-subtle">Manager:</span>
+          <span className="text-xs text-fg-subtle">{t.manager}</span>
           {skill.manager_assessed_level !== null ? (
             <>
               <div className="flex items-center gap-0.5">
@@ -709,7 +704,7 @@ function TeamSkillRow({
               </span>
             </>
           ) : (
-            <span className="text-xs text-fg-subtle">Sin evaluar</span>
+            <span className="text-xs text-fg-subtle">{t.notAssessed}</span>
           )}
         </div>
       </div>
@@ -755,7 +750,7 @@ function ManagerLevelSelector({
 
   return (
     <div className="mt-2 flex items-center gap-2 rounded-lg bg-surface-raised p-3">
-      <span className="text-xs text-fg-muted">Evaluación manager:</span>
+      <span className="text-xs text-fg-muted">{t.managerAssessment}</span>
       {[1, 2, 3, 4, 5].map((level) => (
         <button
           key={level}
@@ -775,7 +770,7 @@ function ManagerLevelSelector({
         onClick={onDone}
         className="ml-auto text-xs text-fg-subtle hover:text-fg"
       >
-        Cancelar
+        {messages.common.cancel}
       </button>
       {error && <span className="text-xs text-danger-fg">{error}</span>}
     </div>

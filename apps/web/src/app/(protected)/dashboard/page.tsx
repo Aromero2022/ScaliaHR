@@ -73,7 +73,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4">
         {canViewTenantKpis && (
           <>
             <StatCard label={t.activeEmployees} value={totalEmployees ?? 0} tone="accent" />
@@ -89,7 +89,7 @@ export default async function DashboardPage() {
         <h2 className="mb-4 text-lg font-semibold text-fg">
           {t.myInformation}
         </h2>
-        <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
           <Field label={fields.fullName} value={`${profile.first_name} ${profile.last_name}`} />
           <Field label={fields.email} value={profile.email} />
           <Field label={fields.employeeNumber} value={profile.employee_id ?? messages.common.empty} />
@@ -138,7 +138,7 @@ function Field({ label, value }: { label: string; value: string }) {
       <dt className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
         {label}
       </dt>
-      <dd className="mt-1 text-sm text-fg">{value}</dd>
+      <dd className="mt-1 text-sm wrap-anywhere text-fg">{value}</dd>
     </div>
   );
 }

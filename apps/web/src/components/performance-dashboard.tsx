@@ -75,7 +75,7 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-4">
         <StatCard label={t.stats.goals} value={goals.length} tone="accent" />
         <StatCard label={t.stats.avgProgress} value={`${avgProgress}%`} tone="info" />
         <StatCard label={t.stats.onTrack} value={onTrack} tone="success" />

@@ -183,7 +183,10 @@ export function SidebarNav({ items, initialCollapsed }: { items: ShellNavItem[];
           <CollapseIcon collapsed={collapsed} />
         </button>
       </div>
-      <ul id={listId} className="flex-1 space-y-1 px-3">
+      {/* D44: with large text the list can be taller than the window; it scrolls in its
+          own box so the last modules and "Cerrar sesión" stay reachable. Collapsed, the
+          tooltips must overflow to the right, which a scrolling box would cut. */}
+      <ul id={listId} className={clsx("flex-1 space-y-1 px-3", !collapsed && "min-h-0 overflow-y-auto")}>
         {items.map((item) => (
           <li key={item.href}>
             <NavLink item={item} iconOnly={collapsed} />

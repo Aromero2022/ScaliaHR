@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { buildRoutes, demoCredentialsInClientBundle, isForbiddenRoute } from "../../../../scripts/check-prod-build.mjs";
+import { buildRoutes, demoCredentialsInClientBundle, isForbiddenRoute, testToolsInBuild } from "../../../../scripts/check-prod-build.mjs";
 
 /**
  * D32: CI runs scripts/check-prod-build.mjs on the production build; it fails
@@ -82,6 +82,31 @@ describe("check-prod-build (D32)", () => {
 
     const clean = fakeBuild({ "/page": "/" }, {}, [], { "static/chunks/app.js": "export const ok = 1;", "server/app/page.js": "Demo1234" });
     expect(demoCredentialsInClientBundle(clean)).toEqual([]);
+    expect(run(clean).status).toBe(0);
+  });
+
+  it("fails when axe or Playwright reach the standalone server or the client bundle (D44)", () => {
+    const leaky = fakeBuild({ "/page": "/" }, {}, [
+      "standalone/node_modules/axe-core/package.json",
+      "standalone/apps/web/node_modules/@playwright/test/package.json",
+    ], {
+      "static/chunks/app/page.js": "/*! axe v4.14.0 Copyright (c) 2015 - 2026 Deque Systems, Inc. */",
+    });
+    expect(testToolsInBuild(leaky)).toEqual([
+      "standalone/apps/web/node_modules/@playwright",
+      "standalone/node_modules/axe-core",
+      "static/chunks/app/page.js: Deque Systems",
+    ]);
+    const result = run(leaky);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("e2e tooling in the production build");
+
+    // Names that only contain "axe" or "playwright" are not the packages.
+    const clean = fakeBuild({ "/page": "/" }, {}, [
+      "standalone/node_modules/caniuse-lite/data/features/wasm-relaxed-simd.js",
+      "standalone/apps/web/node_modules/next/dist/compiled/@next/font/dist/google/get-font-axes.js",
+    ], { "static/chunks/app.js": "export const axes = 1;" });
+    expect(testToolsInBuild(clean)).toEqual([]);
     expect(run(clean).status).toBe(0);
   });
 

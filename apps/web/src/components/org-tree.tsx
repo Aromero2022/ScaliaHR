@@ -37,7 +37,9 @@ export default function OrgTree({ positions }: TreeProps) {
   }
 
   return (
-    <div className="flex flex-col items-center gap-8 overflow-x-auto pb-8">
+    // D44: the tree scrolls sideways on narrow screens; the region takes the
+    // keyboard focus so it can be scrolled with the arrow keys (WCAG 2.1.1).
+    <div role="region" aria-label={messages.orgChart.tree} tabIndex={0} className="flex flex-col items-center gap-8 overflow-x-auto pb-8">
       {roots.map((root) => (
         <Branch key={root.id} node={root} childrenMap={childrenMap} depth={0} />
       ))}

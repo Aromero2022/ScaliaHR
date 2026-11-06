@@ -82,8 +82,11 @@ export default function MfaEnrollPage() {
     }
 
     await logMfaEnroll().catch(() => {});
-    router.push(safeNextPath(searchParams.get("next")));
-    router.refresh();
+    // D44: a full navigation. The session became AAL2 in the browser, and with
+    // router.push() + refresh() the refresh that follows the Server Action won
+    // the race and left the person here with the factor already active (seen
+    // in the e2e). replace(): the enrollment page does not stay in history.
+    window.location.replace(safeNextPath(searchParams.get("next")));
   }
 
   return (
