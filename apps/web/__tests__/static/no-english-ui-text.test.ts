@@ -30,6 +30,10 @@ const KNOWN_ENGLISH = [
   "Talent Review",
   "Position Management",
   "QR Code",
+  // D43: the old menu and page names.
+  "Admin Center",
+  "Talent Hub",
+  "Role-Based Permissions",
 ];
 const ENGLISH = KNOWN_ENGLISH.map((text) => ({
   text,
