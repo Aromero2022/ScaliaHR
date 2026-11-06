@@ -2598,9 +2598,10 @@ record what the tests type.
   If the scan fails or never runs, `scripts/e2e.sh` deletes the artifacts. It
   writes `escaneo-de-secretos.txt` only when both pass, and CI uploads the
   artifact only when that file exists, so a cancelled run uploads nothing.
-- The scan earned its place while this PR was built: it caught the TOTP
-  secret and the password in Playwright's error context of failing local runs,
-  before the measures above existed, and deleted those artifacts.
+- The scan earned its place while this PR was built: before the measures
+  above existed, it caught the TOTP secret in Playwright's error context of
+  failing local runs (and deleted those artifacts), and the password in a run
+  made to fail on purpose to test it.
 - `.gitleaksignore` (new) lists exact gitleaks findings that are not secrets,
   one `commit:file:rule:line` per line, never a pattern or a file. Its only
   entry is a made-up password of a fixture in the first commit of this PR,
