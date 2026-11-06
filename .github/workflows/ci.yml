@@ -309,6 +309,18 @@ jobs:
       - name: Pages carry a nonce-based CSP on every script (D29)
         run: node scripts/check-csp.mjs http://localhost:3000/login
 
+      # D36: a short run of the load test, so the tooling keeps working and a
+      # large regression shows up. The full 1,000-user run is local (RUNBOOK).
+      - name: k6 load test, short run (D36)
+        run: npm run load:test
+        env:
+          LOAD_BIG_USERS: "60"
+          LOAD_SMALL_USERS: "5"
+          LOAD_VUS: "60"
+          SMALL_VUS: "5"
+          RAMP: "20s"
+          HOLD: "40s"
+
       - name: Per-tenant export through the running worker (D23)
         run: |
           docker exec scaliahr-worker-1 node dist/export-tenant.js a0000000-0000-0000-0000-000000000001

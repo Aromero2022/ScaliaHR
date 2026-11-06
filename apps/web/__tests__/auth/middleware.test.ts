@@ -23,6 +23,7 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 import { updateSession } from "@/lib/supabase/middleware";
+import { memoryTenantAccessCache, setTenantAccessCache } from "@/lib/tenant/access-cache";
 
 function session(claims: Record<string, unknown> | null, nextLevel: "aal1" | "aal2" = "aal1") {
   auth.getUser.mockResolvedValue({
@@ -46,6 +47,7 @@ const base = { sub: "u1", tenant_id: "t1", app_role: "employee", aal: "aal1" };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setTenantAccessCache(memoryTenantAccessCache());
   tenantLookup.row = { id: "t1", suspended_at: null };
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://localhost:54321");
 });
@@ -99,20 +101,15 @@ describe("middleware MFA policy", () => {
     expect(await visit("/mfa/verify")).toBeNull();
   });
 
-  it("calls getUser() before getClaims() to validate and refresh the session", async () => {
+  it("validates and refreshes the session with getClaims(), with no call to Auth's getUser() (D34)", async () => {
     session({ ...base, app_role: "owner" });
     await visit("/dashboard");
-    const getUserOrder = auth.getUser.mock.invocationCallOrder[0];
-    const getClaimsOrder = auth.getClaims.mock.invocationCallOrder[0];
-    expect(getUserOrder).toBeLessThan(getClaimsOrder);
+    expect(auth.getClaims).toHaveBeenCalledTimes(1);
+    expect(auth.getUser).not.toHaveBeenCalled();
   });
 
-  it("redirects to login when getUser returns null (even if getClaims would succeed)", async () => {
-    auth.getUser.mockResolvedValue({ data: { user: null }, error: null });
-    auth.getClaims.mockResolvedValue({
-      data: { claims: { ...base, app_role: "owner" } },
-      error: null,
-    });
+  it("redirects to login when getClaims finds no valid session", async () => {
+    session(null);
     expect((await visit("/dashboard"))?.pathname).toBe("/login");
   });
 });
@@ -160,5 +157,17 @@ describe("middleware tenant check (D21)", () => {
     const res = await visitHost("unknown.localhost:3000", "/login");
     expect(res.status).toBe(200);
     expect(from).not.toHaveBeenCalled();
+  });
+
+  it("remembers an allowed tenant for a few seconds, but never a refusal (D35)", async () => {
+    session(base);
+    expect((await visitHost("acme-corp.localhost:3000", "/dashboard")).status).toBe(200);
+    expect((await visitHost("acme-corp.localhost:3000", "/employees")).status).toBe(200);
+    expect(tenantLookup.eq).toHaveBeenCalledTimes(1);
+
+    tenantLookup.row = null;
+    expect((await visitHost("other.localhost:3000", "/dashboard")).status).toBe(404);
+    expect((await visitHost("other.localhost:3000", "/dashboard")).status).toBe(404);
+    expect(tenantLookup.eq).toHaveBeenCalledTimes(3);
   });
 });

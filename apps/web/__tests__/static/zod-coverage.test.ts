@@ -1,79 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
-import ts from "typescript";
+import { isServerActionFile, moduleExports, sourceFiles } from "./source-exports";
 
 /**
  * D31: every Server Action that takes input validates it with zod before
  * using it, and "use server" marks only real Server Actions. Files are read
- * with the TypeScript parser, so each action's body is exactly its own, and
- * any export the test does not understand fails it: no action is invisible.
+ * with the TypeScript parser (source-exports.ts), so each action's body is
+ * exactly its own, and any export the test does not understand fails it: no
+ * action is invisible.
  */
 
-const SRC = path.resolve(__dirname, "../../src");
 const VALIDATES = /\.(?:safeParse|parse)\(/;
+const actionFiles = sourceFiles().filter(({ source }) => isServerActionFile(source));
 
-function files(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return files(full);
-    return /\.(ts|tsx)$/.test(entry.name) ? [full] : [];
-  });
-}
-
-const actionFiles = files(SRC)
-  .map((file) => ({ rel: path.relative(SRC, file), source: readFileSync(file, "utf-8") }))
-  .filter(({ source }) => /^["']use server["']/m.test(source));
-
-type Action = { name: string; params: number; body: string };
-
-/**
- * The Server Actions of a file (exported `function` declarations and
- * `const x = async (...) => …` / `async function` expressions) and every other
- * export, which a "use server" file must not have. Type-only exports are fine.
- */
-function serverExports(source: string): { actions: Action[]; unrecognized: string[] } {
-  const file = ts.createSourceFile("actions.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const actions: Action[] = [];
-  const unrecognized: string[] = [];
-  const short = (node: ts.Node) => node.getText(file).split("\n")[0].slice(0, 80);
-  const flags = (node: ts.Node) => (ts.canHaveModifiers(node) ? (ts.getModifiers(node) ?? []).map((m) => m.kind) : []);
-
-  for (const statement of file.statements) {
-    if (ts.isExportAssignment(statement)) {
-      unrecognized.push(short(statement)); // export default x
-      continue;
-    }
-    if (ts.isExportDeclaration(statement)) {
-      if (!statement.isTypeOnly) unrecognized.push(short(statement)); // export { x }, export * from
-      continue;
-    }
-    const modifiers = flags(statement);
-    if (!modifiers.includes(ts.SyntaxKind.ExportKeyword)) continue;
-    if (modifiers.includes(ts.SyntaxKind.DefaultKeyword)) {
-      unrecognized.push(short(statement)); // export default async function
-      continue;
-    }
-    if (ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement)) continue;
-    if (ts.isFunctionDeclaration(statement) && statement.name && statement.body) {
-      actions.push({ name: statement.name.text, params: statement.parameters.length, body: statement.body.getText(file) });
-      continue;
-    }
-    if (ts.isVariableStatement(statement)) {
-      for (const declaration of statement.declarationList.declarations) {
-        const init = declaration.initializer;
-        if (ts.isIdentifier(declaration.name) && init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init))) {
-          actions.push({ name: declaration.name.text, params: init.parameters.length, body: init.body.getText(file) });
-        } else {
-          unrecognized.push(short(declaration));
-        }
-      }
-      continue;
-    }
-    unrecognized.push(short(statement)); // export class, enum, let x = 1…
-  }
-  return { actions, unrecognized };
-}
+/** In a "use server" file every exported function is a Server Action. */
+const serverExports = (source: string) => {
+  const { functions, unrecognized } = moduleExports(source);
+  return { actions: functions, unrecognized };
+};
 
 const unvalidated = (source: string) =>
   serverExports(source)

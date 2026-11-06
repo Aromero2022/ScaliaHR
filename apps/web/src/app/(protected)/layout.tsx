@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/supabase/claims";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import type { ModuleFlags } from "@/lib/tenant/module-flags";
 import { canMany } from "@/lib/authz/can";
 import { NAV_ITEMS } from "@/lib/navigation/nav-config";
 import Sidebar from "@/components/sidebar";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 const SIDEBAR_PERMISSION_KEYS = [
   ...new Set(
@@ -27,12 +27,7 @@ export default async function ProtectedLayout({
   const grantedPermissions: string[] = [];
 
   if (claims.tenantId) {
-    const supabase = await createClient();
-    const { data: bizUser } = await supabase
-      .from("users")
-      .select("id, tenant_id")
-      .eq("auth_uid", claims.userId)
-      .single();
+    const bizUser = await getCurrentUser();
 
     if (bizUser) {
       const results = await canMany(bizUser.id, SIDEBAR_PERMISSION_KEYS, "view");

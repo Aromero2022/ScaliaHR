@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from "react";
 import { createArcoRequest, processArcoRequest, exportUserData } from "./actions";
+import PersonSearch from "@/components/person-search";
 
 type ArcoRow = {
   id: string;
@@ -18,8 +19,6 @@ type ArcoRow = {
   subjectEmail: string;
   subjectId: string;
 };
-
-type Employee = { id: string; label: string };
 
 const typeLabels: Record<string, { label: string; color: string }> = {
   acceso: { label: "Acceso", color: "bg-blue-900/50 text-blue-400" },
@@ -44,13 +43,7 @@ function fmtDate(d: string | null): string {
   });
 }
 
-export default function ArcoPanel({
-  requests,
-  employees,
-}: {
-  requests: ArcoRow[];
-  employees: Employee[];
-}) {
+export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<ArcoRow | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -240,18 +233,7 @@ export default function ArcoPanel({
               <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">
                 Titular de los datos <span className="text-red-400">*</span>
               </span>
-              <select
-                name="subjectId"
-                required
-                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              >
-                <option value="">— Seleccionar empleado —</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.label}
-                  </option>
-                ))}
-              </select>
+              <PersonSearch name="subjectId" label="Buscar titular de los datos" includeSelf showEmail />
             </label>
 
             <label className="block">

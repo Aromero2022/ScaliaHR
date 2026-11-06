@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import PersonSearch from "@/components/person-search";
 import { createGoal, sendFeedback } from "@/app/(protected)/performance/actions";
 
 interface GoalRow {
@@ -29,16 +31,12 @@ interface FeedbackRow {
   is_author: boolean;
 }
 
-interface ColleagueRow {
-  id: string;
-  first_name: string;
-  last_name: string;
-}
-
 interface Props {
   goals: GoalRow[];
   feedbacks: FeedbackRow[];
-  colleagues: ColleagueRow[];
+  feedbackTotal: number;
+  feedbackPage: number;
+  feedbackPageSize: number;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -56,10 +54,11 @@ const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   DEVELOPMENT: { label: "Desarrollo", color: "text-indigo-400" },
 };
 
-export default function PerformanceDashboard({ goals, feedbacks, colleagues }: Props) {
+export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, feedbackPage, feedbackPageSize }: Props) {
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"goals" | "feedback">("goals");
+  const [activeTab, setActiveTab] = useState<"goals" | "feedback">(feedbackPage > 1 ? "feedback" : "goals");
+  const feedbackPages = Math.max(1, Math.ceil(feedbackTotal / feedbackPageSize));
 
   const avgProgress = goals.length
     ? Math.round(goals.reduce((sum, g) => sum + g.progress_percentage, 0) / goals.length)
@@ -99,7 +98,7 @@ export default function PerformanceDashboard({ goals, feedbacks, colleagues }: P
               : "text-slate-400 hover:text-slate-200"
           }`}
         >
-          Feedback Continuo ({feedbacks.length})
+          Feedback Continuo ({feedbackTotal})
         </button>
       </div>
 
@@ -148,15 +147,29 @@ export default function PerformanceDashboard({ goals, feedbacks, colleagues }: P
               ))}
             </div>
           )}
+          {feedbackPages > 1 && (
+            <div className="flex items-center justify-between text-sm text-slate-400">
+              {feedbackPage > 1 ? (
+                <Link href={`/performance?fb=${feedbackPage - 1}`} className="hover:text-white">← Anteriores</Link>
+              ) : (
+                <span />
+              )}
+              <span>
+                {feedbackPage} / {feedbackPages}
+              </span>
+              {feedbackPage < feedbackPages ? (
+                <Link href={`/performance?fb=${feedbackPage + 1}`} className="hover:text-white">Siguientes →</Link>
+              ) : (
+                <span />
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {showGoalModal && <GoalModal onClose={() => setShowGoalModal(false)} />}
       {showFeedbackModal && (
-        <FeedbackModal
-          colleagues={colleagues}
-          onClose={() => setShowFeedbackModal(false)}
-        />
+        <FeedbackModal onClose={() => setShowFeedbackModal(false)} />
       )}
     </div>
   );
@@ -347,7 +360,7 @@ function GoalModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function FeedbackModal({ colleagues, onClose }: { colleagues: ColleagueRow[]; onClose: () => void }) {
+function FeedbackModal({ onClose }: { onClose: () => void }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -382,18 +395,7 @@ function FeedbackModal({ colleagues, onClose }: { colleagues: ColleagueRow[]; on
           <form onSubmit={handleSubmit} className="mt-4 space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-300">Destinatario *</label>
-              <select
-                name="subject_id"
-                required
-                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              >
-                <option value="">Seleccionar...</option>
-                {colleagues.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.first_name} {c.last_name}
-                  </option>
-                ))}
-              </select>
+              <PersonSearch name="subject_id" label="Buscar destinatario" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300">Contenido *</label>

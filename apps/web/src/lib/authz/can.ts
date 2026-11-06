@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { Prisma, withTenant } from "@/lib/db/tenant-client";
+import { Prisma, prisma, withTenant } from "@/lib/db/tenant-client";
 import type { PrismaClient } from "@/lib/db/tenant-client";
 import { getClaims } from "@/lib/supabase/claims";
 
@@ -48,46 +48,53 @@ type PermissionContext = {
   permissions: PermissionRow[];
 };
 
+type ContextRow = {
+  tenant: Record<string, unknown> | null;
+  grants: GrantRow[];
+  permissions: PermissionRow[];
+};
+
+// D35: one batch transaction of two statements (the tenant's RLS context, then
+// a single query for flags, grants and permissions) instead of an interactive
+// transaction of six. It holds a pooled connection for one round trip.
 async function loadPermissionContext(
   userId: string,
   tenantId: string,
 ): Promise<PermissionContext> {
-  return withTenant({ tenantId }, async (tx) => {
-    const [flagRows, grants, permissions] = await Promise.all([
-      tx.$queryRaw<Record<string, boolean>[]>(Prisma.sql`
-        SELECT * FROM public.tenants WHERE id = ${tenantId}::uuid
-      `),
-      tx.$queryRaw<GrantRow[]>(Prisma.sql`
-        SELECT rg.role_id, rg.target_population::text
+  const claims = JSON.stringify({ tenant_id: tenantId, app_role: "member" });
+  const [, rows] = await prisma.$transaction([
+    prisma.$queryRaw`SELECT set_config('role', 'authenticated', true), set_config('request.jwt.claims', ${claims}, true)`,
+    prisma.$queryRaw<ContextRow[]>(Prisma.sql`
+      WITH my_grants AS (
+        SELECT rg.role_id, rg.target_population::text AS target_population
         FROM public.role_grants rg
         JOIN public.group_members gm ON gm.group_id = rg.granted_group_id
                                      AND gm.tenant_id = rg.tenant_id
         WHERE gm.user_id = ${userId}::uuid
           AND rg.tenant_id = ${tenantId}::uuid
-      `),
-      tx.$queryRaw<PermissionRow[]>(Prisma.sql`
-        SELECT rp.role_id, rp.permission_key, rp.action::text, rp.field_key
-        FROM public.role_permissions rp
-        WHERE rp.tenant_id = ${tenantId}::uuid
-          AND rp.role_id IN (
-            SELECT rg.role_id
-            FROM public.role_grants rg
-            JOIN public.group_members gm ON gm.group_id = rg.granted_group_id
-                                         AND gm.tenant_id = rg.tenant_id
-            WHERE gm.user_id = ${userId}::uuid
-              AND rg.tenant_id = ${tenantId}::uuid
-          )
-      `),
-    ]);
+      )
+      SELECT
+        (SELECT to_jsonb(t) FROM public.tenants t WHERE t.id = ${tenantId}::uuid) AS tenant,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('role_id', g.role_id, 'target_population', g.target_population))
+                  FROM my_grants g), '[]'::jsonb) AS grants,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('role_id', rp.role_id, 'permission_key', rp.permission_key,
+                                                      'action', rp.action::text, 'field_key', rp.field_key))
+                  FROM public.role_permissions rp
+                  WHERE rp.tenant_id = ${tenantId}::uuid
+                    AND rp.role_id IN (SELECT role_id FROM my_grants)), '[]'::jsonb) AS permissions
+    `),
+  ]);
 
-    const tenantRow = flagRows[0] ?? {};
-    const moduleFlags: Record<string, boolean> = {};
-    for (const [prefix, col] of Object.entries(PERMISSION_MODULE_MAP)) {
-      moduleFlags[prefix] = (tenantRow as Record<string, unknown>)[col] === true;
-    }
+  const row = rows[0];
+  const tenant = row?.tenant ?? null;
+  const grants = row?.grants ?? [];
+  const permissions = row?.permissions ?? [];
+  const moduleFlags: Record<string, boolean> = {};
+  for (const [prefix, col] of Object.entries(PERMISSION_MODULE_MAP)) {
+    moduleFlags[prefix] = tenant?.[col] === true;
+  }
 
-    return { tenantId, moduleFlags, grants, permissions };
-  });
+  return { tenantId, moduleFlags, grants, permissions };
 }
 
 const loadPermissionContextCached = cache(loadPermissionContext);

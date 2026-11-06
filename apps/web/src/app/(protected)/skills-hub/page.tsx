@@ -5,6 +5,7 @@ import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
 import { can } from "@/lib/authz/can";
 import SkillsHubDashboard from "@/components/skills-hub-dashboard";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 interface SkillOntologyRow {
   id: string;
@@ -41,11 +42,7 @@ export default async function SkillsHubPage() {
   if (!claims.tenantId) redirect("/login");
 
   const supabase = await createClient();
-  const { data: bizUser } = await supabase
-    .from("users")
-    .select("id, position_id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  const bizUser = await getCurrentUser();
 
   if (!bizUser) redirect("/login");
 

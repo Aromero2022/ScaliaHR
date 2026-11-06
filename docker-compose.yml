@@ -22,7 +22,9 @@ services:
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       SUPABASE_INTERNAL_URL: http://kong:8000
-      DATABASE_URL: postgresql://prisma_app:${PRISMA_APP_PASSWORD:?set it in .env.docker}@db:5432/postgres
+      # D37: an explicit pool (Prisma's default is 2 × CPUs + 1) and a wait limit;
+      # local Postgres allows 100 connections.
+      DATABASE_URL: postgresql://prisma_app:${PRISMA_APP_PASSWORD:?set it in .env.docker}@db:5432/postgres?connection_limit=20&pool_timeout=10
       DIRECT_URL: postgresql://prisma_app:${PRISMA_APP_PASSWORD}@db:5432/postgres
       # Fixed superuser password of Supabase local; admin-client needs it (D3).
       ADMIN_DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres

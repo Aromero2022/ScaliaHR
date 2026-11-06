@@ -39,6 +39,12 @@ concurrency:
   group: db-remote-sync
   cancel-in-progress: false
 
+# Least privilege for GITHUB_TOKEN (D39): the job only reads the repository.
+# The backup artifact uses the runner's own token and the environment's
+# approvals do not depend on these permissions, so nothing else is needed.
+permissions:
+  contents: read
+
 env:
   DEMO_TENANT_ID: "a0000000-0000-0000-0000-000000000001"
 
@@ -59,6 +65,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          # No later step runs git, so the token is not left in .git/config,
+          # where the scripts and the Supabase CLI that follow could read it.
+          persist-credentials: false
 
       # D22: the same guard scripts/db-reset-sync.sh applies, before anything
       # else runs. Production only accepts the production mode.

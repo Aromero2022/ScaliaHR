@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const withTenantSpy = vi.fn();
+const transactionSpy = vi.fn();
 const mockQueryRaw = vi.fn();
 
 vi.mock("@/lib/db/tenant-client", () => ({
-  prisma: { $queryRaw: (...args: unknown[]) => mockQueryRaw(...args) },
+  prisma: {
+    $queryRaw: (...args: unknown[]) => mockQueryRaw(...args),
+    $transaction: (ops: Promise<unknown>[]) => {
+      transactionSpy();
+      return Promise.all(ops);
+    },
+  },
   Prisma: {
     sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
       strings,
@@ -58,20 +65,23 @@ const SIDEBAR_KEYS = [
   "admin_center.access",
 ];
 
-describe("withTenant call count — layout sidebar pattern", () => {
+describe("transaction count — layout sidebar pattern", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueryRaw.mockResolvedValue([{}]);
   });
 
-  it("Promise.all of can() for 6 sidebar keys opens exactly 1 withTenant", async () => {
+  it("Promise.all of can() for 6 sidebar keys opens exactly 1 transaction", async () => {
     const results = await Promise.all(
       SIDEBAR_KEYS.map((key) => can("user-1", key, "view")),
     );
     expect(results).toHaveLength(6);
     // Old code: each can() → evaluateCached(…, permissionKey, …) → different
-    // cache key per key → 6 withTenant calls. Fix: loadPermissionContext is
-    // cached per (userId, tenantId) → 1 withTenant call.
-    expect(withTenantSpy).toHaveBeenCalledTimes(1);
+    // cache key per key → 6 transactions. Fix: loadPermissionContext is
+    // cached per (userId, tenantId) → 1 transaction, a batch of two
+    // statements since D35 (no interactive withTenant).
+    expect(transactionSpy).toHaveBeenCalledTimes(1);
+    expect(mockQueryRaw).toHaveBeenCalledTimes(2);
+    expect(withTenantSpy).not.toHaveBeenCalled();
   });
 });

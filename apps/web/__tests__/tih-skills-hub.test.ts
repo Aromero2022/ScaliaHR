@@ -21,7 +21,13 @@ vi.mock("@/lib/audit/log", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+  unstable_cache: (fn: () => unknown) => fn,
 }));
+
+// getModuleFlags reads through prisma_app (D35); an unknown tenant has no row.
+const mockModuleFlagsQuery = vi.fn(async () => [] as unknown[]);
+vi.mock("@/lib/db/tenant-client", () => ({ prisma: { $queryRaw: () => mockModuleFlagsQuery() } }));
 
 vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue(new Map()),
@@ -272,15 +278,6 @@ describe("updateJobRoleSkill — permission gating", () => {
 
 describe("skills-hub page module gating", () => {
   it("is_tih_active defaults to false when tenant not found", async () => {
-    (createClient as ReturnType<typeof vi.fn>).mockResolvedValue({
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            single: vi.fn().mockResolvedValue({ data: null, error: { message: "not found" } }),
-          })),
-        })),
-      })),
-    });
     const { getModuleFlags } = await import("../src/lib/tenant/get-module-flags");
     const flags = await getModuleFlags("nonexistent-tenant");
     expect(flags.is_tih_active).toBe(false);

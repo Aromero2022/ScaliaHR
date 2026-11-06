@@ -5,6 +5,7 @@ const mockQueryRaw = vi.fn();
 vi.mock("@/lib/db/tenant-client", () => ({
   prisma: {
     $queryRaw: (...args: unknown[]) => mockQueryRaw(...args),
+    $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
   },
   Prisma: {
     sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
@@ -43,10 +44,12 @@ const ROLE_1 = "role-1";
 
 let queryCallIndex = 0;
 
-// loadPermissionContext issues 3 queries in Promise.all:
-//   [0] tenant flags, [1] grants, [2] permissions
-// evaluateTargetPopulation may add a 4th query for org-structure checks.
-function setupQuerySequence(...responses: unknown[][]) {
+// Callers list the tenant flags, grants and permissions, then any
+// org-structure answers. loadPermissionContext (D35) issues a batch of two
+// queries: [0] the RLS context, [1] one row with tenant, grants and
+// permissions; evaluateTargetPopulation may add more for org-structure checks.
+function setupQuerySequence(flags: unknown[], grants: unknown[], permissions: unknown[], ...rest: unknown[][]) {
+  const responses: unknown[][] = [[], [{ tenant: flags[0] ?? null, grants, permissions }], ...rest];
   queryCallIndex = 0;
   mockQueryRaw.mockImplementation(() => {
     const result = responses[queryCallIndex] ?? [];

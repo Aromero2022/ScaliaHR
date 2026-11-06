@@ -7,6 +7,12 @@ import { eqAnyOf } from "@/lib/postgrest/filters";
 import { redirect } from "next/navigation";
 import AccessDenied from "@/components/access-denied";
 import PerformanceDashboard from "@/components/performance-dashboard";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { z } from "zod";
+
+// D38: the feedback list is paged; the recipient is searched, not listed.
+const FEEDBACK_PAGE_SIZE = 20;
+const Params = z.object({ fb: z.coerce.number().int().min(1).max(10_000).catch(1) });
 
 interface GoalRow {
   id: string;
@@ -35,7 +41,12 @@ interface FeedbackDbRow {
   subject: { first_name: string; last_name: string }[] | { first_name: string; last_name: string } | null;
 }
 
-export default async function PerformancePage() {
+export default async function PerformancePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { fb: feedbackPage } = Params.parse(await searchParams);
   const claims = await requireAuth();
   if (!claims.tenantId) redirect("/dashboard");
 
@@ -44,18 +55,14 @@ export default async function PerformancePage() {
 
   const supabase = await createClient();
 
-  const { data: bizUser } = await supabase
-    .from("users")
-    .select("id, tenant_id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  const bizUser = await getCurrentUser();
 
   if (!bizUser) redirect("/login");
 
   const { allowed } = await can(bizUser.id, "pmgm.view_own_goals", "view");
   if (!allowed) return <AccessDenied />;
 
-  const [goalsRes, feedbackRes, colleaguesRes] = await Promise.all([
+  const [goalsRes, feedbackRes] = await Promise.all([
     supabase
       .from("performance_goals")
       .select(
@@ -66,15 +73,12 @@ export default async function PerformancePage() {
     supabase
       .from("continuous_feedbacks")
       .select(
-        "id, author_id, subject_id, content, visibility, category, created_at, author:users!continuous_feedbacks_author_id_fkey(first_name, last_name), subject:users!continuous_feedbacks_subject_id_fkey(first_name, last_name)"
+        "id, author_id, subject_id, content, visibility, category, created_at, author:users!continuous_feedbacks_author_id_fkey(first_name, last_name), subject:users!continuous_feedbacks_subject_id_fkey(first_name, last_name)",
+        { count: "exact" }
       )
       .or(eqAnyOf(["author_id", "subject_id"], bizUser.id))
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("users")
-      .select("id, first_name, last_name")
-      .neq("id", bizUser.id)
-      .order("first_name"),
+      .order("created_at", { ascending: false })
+      .range((feedbackPage - 1) * FEEDBACK_PAGE_SIZE, feedbackPage * FEEDBACK_PAGE_SIZE - 1),
   ]);
 
   const goals: GoalRow[] = (goalsRes.data ?? []).map((g) => ({
@@ -108,12 +112,6 @@ export default async function PerformancePage() {
     };
   });
 
-  const colleagues = (colleaguesRes.data ?? []).map((c) => ({
-    id: c.id as string,
-    first_name: c.first_name as string,
-    last_name: c.last_name as string,
-  }));
-
   return (
     <div className="space-y-6">
       <div>
@@ -125,7 +123,9 @@ export default async function PerformancePage() {
       <PerformanceDashboard
         goals={goals}
         feedbacks={feedbacks}
-        colleagues={colleagues}
+        feedbackTotal={feedbackRes.count ?? feedbacks.length}
+        feedbackPage={feedbackPage}
+        feedbackPageSize={FEEDBACK_PAGE_SIZE}
       />
     </div>
   );

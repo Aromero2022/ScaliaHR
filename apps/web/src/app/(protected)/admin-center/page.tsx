@@ -5,6 +5,7 @@ import { can } from "@/lib/authz/can";
 import Link from "next/link";
 import RateLimitSettings, { type RateLimitSetting } from "@/components/rate-limit-settings";
 import { RATE_LIMITS } from "@/lib/rate-limit";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 interface StatCard {
   label: string;
@@ -33,11 +34,7 @@ export default async function AdminCenterPage() {
   if (!claims.tenantId) redirect("/login");
 
   const supabase = await createClient();
-  const { data: bizUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  const bizUser = await getCurrentUser();
   if (!bizUser) redirect("/login");
 
   const [configPerm, auditPerm, rolesPerm] = await Promise.all([

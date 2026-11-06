@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "./server";
 import { aalFromClaims, appRoleFromClaims, mfaStepFor } from "@/lib/auth/mfa-policy";
 
@@ -10,8 +11,11 @@ export type SessionClaims = {
 };
 
 // Reads the verified JWT: tenant_id and app_role are written at the claim
-// root by custom_access_token_hook, aal by Supabase Auth.
-export async function getClaims(): Promise<SessionClaims | null> {
+// root by custom_access_token_hook, aal by Supabase Auth. React's cache()
+// makes it one verification per request (layout, page and actions share it, D35).
+export const getClaims = cache(readClaims);
+
+async function readClaims(): Promise<SessionClaims | null> {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
   const claims = data?.claims;

@@ -2,9 +2,20 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/supabase/claims";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/authz/can";
+import Link from "next/link";
+import { z } from "zod";
 import ArcoPanel from "./arco-panel";
 
-export default async function ArcoPage() {
+// D38: the request list is paged; the subject is searched, not listed.
+const ARCO_PAGE_SIZE = 20;
+const Params = z.object({ page: z.coerce.number().int().min(1).max(10_000).catch(1) });
+
+export default async function ArcoPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { page } = Params.parse(await searchParams);
   const claims = await requireAuth();
   if (!claims.tenantId) redirect("/login");
 
@@ -30,19 +41,15 @@ export default async function ArcoPage() {
     );
   }
 
-  const { data: requests } = await supabase
+  const { data: requests, count } = await supabase
     .from("arco_requests")
     .select(
-      "*, requester:users!arco_requests_requester_id_fkey(first_name, last_name), subject:users!arco_requests_subject_id_fkey(first_name, last_name, email)"
+      "*, requester:users!arco_requests_requester_id_fkey(first_name, last_name), subject:users!arco_requests_subject_id_fkey(first_name, last_name, email)",
+      { count: "exact" }
     )
-    .order("created_at", { ascending: false });
-
-  const { data: employees } = await supabase
-    .from("users")
-    .select("id, first_name, last_name, email")
-    .eq("status", "ACTIVE")
-    .is("deleted_at", null)
-    .order("last_name");
+    .order("created_at", { ascending: false })
+    .range((page - 1) * ARCO_PAGE_SIZE, page * ARCO_PAGE_SIZE - 1);
+  const pages = Math.max(1, Math.ceil((count ?? 0) / ARCO_PAGE_SIZE));
 
   const rows = (requests ?? []).map((r) => {
     const req = r.requester as { first_name: string; last_name: string } | null;
@@ -68,11 +75,6 @@ export default async function ArcoPage() {
     };
   });
 
-  const employeeOptions = (employees ?? []).map((e) => ({
-    id: e.id as string,
-    label: `${e.first_name} ${e.last_name} (${e.email})`,
-  }));
-
   return (
     <div className="space-y-6">
       <div>
@@ -82,7 +84,16 @@ export default async function ArcoPage() {
           Oposición — Protección de datos personales
         </p>
       </div>
-      <ArcoPanel requests={rows} employees={employeeOptions} />
+      <ArcoPanel requests={rows} />
+      {pages > 1 && (
+        <div className="flex items-center justify-between text-sm text-slate-400">
+          {page > 1 ? <Link href={`/admin/arco?page=${page - 1}`} className="hover:text-white">← Anteriores</Link> : <span />}
+          <span>
+            {page} / {pages}
+          </span>
+          {page < pages ? <Link href={`/admin/arco?page=${page + 1}`} className="hover:text-white">Siguientes →</Link> : <span />}
+        </div>
+      )}
     </div>
   );
 }
