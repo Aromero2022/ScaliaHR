@@ -32,6 +32,9 @@ services:
       EMAIL_ENQUEUE_DATABASE_URL: postgresql://email_enqueuer:${EMAIL_ENQUEUER_PASSWORD:?set it in .env.docker}@db:5432/postgres
       # Tenant subdomains are <slug>.localhost (D21).
       APP_BASE_URL: http://localhost:${WEB_PORT:-3000}
+      # D41: demo credentials shown on /login; empty (off) unless .env.docker sets
+      # it, and ignored by a production server whose APP_BASE_URL is not local.
+      SCALIA_DEMO_LOGIN_HINT: ${SCALIA_DEMO_LOGIN_HINT:-}
     ports:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
     networks:

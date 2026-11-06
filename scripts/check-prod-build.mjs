@@ -1,5 +1,6 @@
-// The production build of apps/web must ship no debug or test route and no
-// browser source maps (D29, D32). Run by CI right after `next build`:
+// The production build of apps/web must ship no debug or test route, no
+// browser source maps (D29, D32) and no demo credentials in what the browser
+// downloads (D41). Run by CI right after `next build`:
 //   node scripts/check-prod-build.mjs [apps/web/.next]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -44,6 +45,30 @@ export function browserSourceMaps(nextDir) {
   return found;
 }
 
+// D41: the demo login of supabase/seed.sql. The hint now comes from a server
+// variable; if either string reaches the client bundle, something hard-coded it.
+export const DEMO_CREDENTIALS = ["Demo1234", "elena.martinez@acme.dev"];
+
+function walkFiles(dir, visit) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkFiles(full, visit);
+    else visit(full);
+  }
+}
+
+/** Files under .next/static (the client bundle) that contain a demo credential. */
+export function demoCredentialsInClientBundle(nextDir) {
+  const found = [];
+  const staticDir = path.join(nextDir, "static");
+  if (!existsSync(staticDir)) return found;
+  walkFiles(staticDir, (file) => {
+    const text = readFileSync(file, "latin1");
+    for (const secret of DEMO_CREDENTIALS) if (text.includes(secret)) found.push(`${path.relative(nextDir, file)}: ${secret}`);
+  });
+  return found;
+}
+
 function main() {
   const nextDir = path.resolve(process.argv[2] ?? "apps/web/.next");
   if (!existsSync(path.join(nextDir, "app-path-routes-manifest.json"))) {
@@ -53,10 +78,12 @@ function main() {
   const routes = buildRoutes(nextDir);
   const forbidden = routes.filter(isForbiddenRoute);
   const maps = browserSourceMaps(nextDir);
+  const demo = demoCredentialsInClientBundle(nextDir);
   for (const route of forbidden) console.error(`::error::debug or test route in the production build: ${route}`);
   for (const map of maps) console.error(`::error::browser source map in the production build: ${map}`);
-  if (forbidden.length > 0 || maps.length > 0) process.exit(1);
-  console.log(`Production build: ${routes.length} routes, none for debug or tests; no browser source maps.`);
+  for (const hit of demo) console.error(`::error::demo credential in the client bundle: ${hit}`);
+  if (forbidden.length > 0 || maps.length > 0 || demo.length > 0) process.exit(1);
+  console.log(`Production build: ${routes.length} routes, none for debug or tests; no browser source maps; no demo credentials in the client bundle.`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();

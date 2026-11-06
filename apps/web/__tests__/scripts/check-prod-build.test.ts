@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { buildRoutes, isForbiddenRoute } from "../../../../scripts/check-prod-build.mjs";
+import { buildRoutes, demoCredentialsInClientBundle, isForbiddenRoute } from "../../../../scripts/check-prod-build.mjs";
 
 /**
  * D32: CI runs scripts/check-prod-build.mjs on the production build; it fails
@@ -15,15 +15,20 @@ const SCRIPT = path.join(REPO, "scripts/check-prod-build.mjs");
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
-function fakeBuild(appRoutes: Record<string, string>, pages: Record<string, string> = {}, files: string[] = []) {
+function fakeBuild(
+  appRoutes: Record<string, string>,
+  pages: Record<string, string> = {},
+  files: string[] = [],
+  contents: Record<string, string> = {},
+) {
   const dir = mkdtempSync(path.join(tmpdir(), "d32-next-"));
   dirs.push(dir);
   mkdirSync(path.join(dir, "server"), { recursive: true });
   writeFileSync(path.join(dir, "app-path-routes-manifest.json"), JSON.stringify(appRoutes));
   writeFileSync(path.join(dir, "server/pages-manifest.json"), JSON.stringify({ "/_app": "pages/_app.js", ...pages }));
-  for (const file of files) {
+  for (const file of [...files, ...Object.keys(contents)]) {
     mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
-    writeFileSync(path.join(dir, file), "");
+    writeFileSync(path.join(dir, file), contents[file] ?? "");
   }
   return dir;
 }
@@ -60,6 +65,24 @@ describe("check-prod-build (D32)", () => {
     const maps = run(fakeBuild({ "/page": "/" }, {}, ["static/chunks/app.js.map"]));
     expect(maps.status).toBe(1);
     expect(maps.stderr).toContain("static/chunks/app.js.map");
+  });
+
+  it("fails when the client bundle carries the demo password or email, and ignores the server build (D41)", () => {
+    const leaky = fakeBuild({ "/page": "/" }, {}, [], {
+      "static/chunks/app/login/page.js": 'children:"Demo: elena.martinez@acme.dev / Demo1234!"',
+      "server/app/login/page.js": "Demo1234",
+    });
+    expect(demoCredentialsInClientBundle(leaky)).toEqual([
+      "static/chunks/app/login/page.js: Demo1234",
+      "static/chunks/app/login/page.js: elena.martinez@acme.dev",
+    ]);
+    const result = run(leaky);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("demo credential in the client bundle");
+
+    const clean = fakeBuild({ "/page": "/" }, {}, [], { "static/chunks/app.js": "export const ok = 1;", "server/app/page.js": "Demo1234" });
+    expect(demoCredentialsInClientBundle(clean)).toEqual([]);
+    expect(run(clean).status).toBe(0);
   });
 
   it("fails when there is no build", () => {

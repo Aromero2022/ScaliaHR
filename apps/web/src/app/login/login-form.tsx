@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { rememberCompanyCode, signIn } from "./actions";
 
-export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolean }) {
+export default function LoginForm({ showCompanyCode, demoHint = null }: { showCompanyCode: boolean; demoHint?: string | null }) {
   const [companyCode, setCompanyCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -115,9 +115,12 @@ export default function LoginForm({ showCompanyCode }: { showCompanyCode: boolea
             {loading ? "Signing in..." : "Sign In"}
           </button>
 
-          <p className="mt-4 text-center text-xs text-fg-subtle">
-            Demo: elena.martinez@acme.dev / Demo1234!
-          </p>
+          {/* D41: only on a local stack, from the server variable SCALIA_DEMO_LOGIN_HINT. */}
+          {demoHint && (
+            <p data-demo-login-hint="" className="mt-4 text-center text-xs text-fg-subtle">
+              Demo: {demoHint}
+            </p>
+          )}
         </form>
       </div>
     </div>

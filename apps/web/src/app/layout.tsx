@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { headers } from "next/headers";
 import { connection } from "next/server";
@@ -20,6 +20,13 @@ export const metadata: Metadata = {
   description: "SAP SuccessFactors-class Human Capital Management",
 };
 
+// D41: viewport-fit=cover lets the mobile dock pad itself with env(safe-area-inset-bottom).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default async function RootLayout({
   children,
 }: {
@@ -32,7 +39,7 @@ export default async function RootLayout({
   return (
     // The boot script may change data-theme and data-contrast before React
     // hydrates, so those attributes may differ from the server's.
-    <html lang="en" className={inter.variable} {...DEFAULT_THEME_ATTRIBUTES} suppressHydrationWarning>
+    <html lang="es-MX" className={inter.variable} {...DEFAULT_THEME_ATTRIBUTES} suppressHydrationWarning>
       <head>
         {/* D40: a stored theme choice, applied before the first paint, with the CSP nonce (D29). */}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />

@@ -309,6 +309,16 @@ jobs:
       - name: Pages carry a nonce-based CSP on every script (D29)
         run: node scripts/check-csp.mjs http://localhost:3000/login
 
+      # D41: the image sets no SCALIA_DEMO_LOGIN_HINT, so /login shows no demo credentials.
+      - name: Login shows no demo credentials (D41)
+        run: |
+          page="$(curl -fsS http://localhost:3000/login)"
+          if printf '%s' "$page" | grep -qE 'data-demo-login-hint|Demo1234|elena\.martinez@acme\.dev'; then
+            echo "::error::/login shows demo credentials"
+            exit 1
+          fi
+          echo "/login shows no demo credentials."
+
       # D36: a short run of the load test, so the tooling keeps working and a
       # large regression shows up. The full 1,000-user run is local (RUNBOOK).
       - name: k6 load test, short run (D36)

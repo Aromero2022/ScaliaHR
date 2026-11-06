@@ -4,6 +4,7 @@ import { redirect, notFound } from "next/navigation";
 import { getModuleFlags } from "@/lib/tenant/get-module-flags";
 import { isModuleRouteBlocked } from "@/lib/tenant/module-guards";
 import { can } from "@/lib/authz/can";
+import AccessDenied from "@/components/access-denied";
 import SkillsHubDashboard from "@/components/skills-hub-dashboard";
 import { getCurrentUser } from "@/lib/auth/current-user";
 
@@ -50,6 +51,11 @@ export default async function SkillsHubPage() {
   if (isModuleRouteBlocked("/skills-hub", flags)) {
     notFound();
   }
+
+  // D41: the menu hides Talent Hub without this permission, so the page refuses
+  // it too, like every other module page; the menu is never the guard.
+  const { allowed } = await can(bizUser.id, "tih.employee_skills", "view");
+  if (!allowed) return <AccessDenied />;
 
   let jobRoleId: string | null = null;
   if (bizUser.position_id) {
