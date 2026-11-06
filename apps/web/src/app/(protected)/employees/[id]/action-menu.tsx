@@ -13,7 +13,8 @@ const actions = [
   { key: "personal" as const, label: "Actualizar información personal", icon: PersonIcon },
 ];
 
-export default function ActionMenu({ employeeId }: { employeeId: string }) {
+/** `today` is the tenant's date (YYYY-MM-DD), computed on the server (D42). */
+export default function ActionMenu({ employeeId, today }: { employeeId: string; today: string }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [modalAction, setModalAction] = useState<ActionType>(null);
   const [options, setOptions] = useState<{
@@ -98,6 +99,7 @@ export default function ActionMenu({ employeeId }: { employeeId: string }) {
       {modalAction && options && (
         <ActionModal
           employeeId={employeeId}
+          today={today}
           employeeName={options.employeeName}
           positions={options.positions}
           departments={options.departments}

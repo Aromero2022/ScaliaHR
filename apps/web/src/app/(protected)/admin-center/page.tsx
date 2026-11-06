@@ -6,6 +6,8 @@ import Link from "next/link";
 import RateLimitSettings, { type RateLimitSetting } from "@/components/rate-limit-settings";
 import { RATE_LIMITS } from "@/lib/rate-limit";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { formatInstant } from "@/lib/format/dates";
+import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
 
 interface StatCard {
   label: string;
@@ -32,6 +34,7 @@ interface AuditRow {
 export default async function AdminCenterPage() {
   const claims = await requireAuth();
   if (!claims.tenantId) redirect("/login");
+  const { timeZone } = await getTenantTimeZone(claims.tenantId);
 
   const supabase = await createClient();
   const bizUser = await getCurrentUser();
@@ -221,13 +224,7 @@ export default async function AdminCenterPage() {
                         {a.action}
                       </span>
                       <span className="text-xs text-fg-subtle">
-                        {new Date(a.created_at).toLocaleDateString("es-MX", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {formatInstant(a.created_at, timeZone)}
                       </span>
                     </div>
                     <p className="mt-1 text-sm text-fg-muted">

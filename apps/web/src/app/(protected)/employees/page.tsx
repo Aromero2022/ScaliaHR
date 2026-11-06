@@ -12,6 +12,9 @@ import { safeError } from "@/lib/errors/safe-error";
 import { ilikeAnyOf } from "@/lib/postgrest/filters";
 import { EmployeeListParams } from "@/lib/validations/employees";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { enumLabel, messages } from "@/lib/i18n/es-MX";
+
+const t = messages.employees;
 
 const PAGE_SIZE = 20;
 
@@ -56,11 +59,11 @@ export default async function EmployeesPage({
   const { data: employees, count, error: queryError } = await query;
 
   if (queryError) {
-    const message = await safeError("employees.list", queryError, "No se pudo cargar la lista de empleados.");
+    const message = await safeError("employees.list", queryError, t.loadError);
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-fg">Empleados</h1>
+          <h1 className="text-2xl font-bold text-fg">{t.heading}</h1>
         </div>
         <div className="rounded-xl border border-danger-line bg-danger-subtle p-6 text-center">
           <p className="text-sm text-danger-fg">
@@ -135,13 +138,13 @@ export default async function EmployeesPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-fg">Empleados</h1>
+          <h1 className="text-2xl font-bold text-fg">{t.heading}</h1>
           <p className="mt-1 text-sm text-fg-muted">
-            Directorio de empleados activos — Employee Central
+            {t.subheading}
           </p>
         </div>
         <Suspense>
-          <SearchInput placeholder="Buscar por nombre, email o ID…" />
+          <SearchInput placeholder={t.searchPlaceholder} />
         </Suspense>
       </div>
 
@@ -150,11 +153,11 @@ export default async function EmployeesPage({
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-line text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                <th className="px-6 py-3">Empleado</th>
-                <th className="px-6 py-3">Puesto</th>
-                <th className="px-6 py-3">Departamento</th>
-                <th className="px-6 py-3">ID Empleado</th>
-                <th className="px-6 py-3">Estado</th>
+                <th className="px-6 py-3">{t.columns.employee}</th>
+                <th className="px-6 py-3">{t.columns.jobTitle}</th>
+                <th className="px-6 py-3">{t.columns.department}</th>
+                <th className="px-6 py-3">{t.columns.employeeNumber}</th>
+                <th className="px-6 py-3">{t.columns.status}</th>
                 <th className="px-6 py-3" />
               </tr>
             </thead>
@@ -165,9 +168,7 @@ export default async function EmployeesPage({
                     colSpan={6}
                     className="px-6 py-12 text-center text-fg-subtle"
                   >
-                    {search
-                      ? `No se encontraron empleados para "${search}".`
-                      : "No hay empleados registrados."}
+                    {search ? t.noResultsFor(search) : t.none}
                   </td>
                 </tr>
               ) : (
@@ -190,13 +191,13 @@ export default async function EmployeesPage({
                       </div>
                     </td>
                     <td className="px-6 py-4 text-fg-muted">
-                      {emp.jobTitle ?? emp.positionTitle ?? "—"}
+                      {emp.jobTitle ?? emp.positionTitle ?? messages.common.empty}
                     </td>
                     <td className="px-6 py-4 text-fg-muted">
-                      {emp.department ?? "—"}
+                      {emp.department ?? messages.common.empty}
                     </td>
                     <td className="px-6 py-4 font-mono text-xs text-fg-muted">
-                      {emp.employeeId ?? "—"}
+                      {emp.employeeId ?? messages.common.empty}
                     </td>
                     <td className="px-6 py-4">
                       <StatusBadge status={emp.status} />
@@ -207,7 +208,7 @@ export default async function EmployeesPage({
                           href={`/employees/${emp.id}`}
                           className="text-sm font-medium text-accent-fg transition hover:text-fg"
                         >
-                          Ver perfil →
+                          {t.viewProfile}
                         </Link>
                       ) : null}
                     </td>
@@ -221,18 +222,18 @@ export default async function EmployeesPage({
         {total > 0 && (
           <div className="flex items-center justify-between border-t border-line px-6 py-3">
             <p className="text-xs text-fg-subtle">
-              Mostrando {showingFrom}–{showingTo} de {total}
+              {t.showing(showingFrom, showingTo, total)}
             </p>
             <div className="flex gap-2">
               {page > 1 ? (
                 <PaginationLink
                   page={page - 1}
                   search={search}
-                  label="← Anterior"
+                  label={t.previous}
                 />
               ) : (
                 <span className="rounded-lg px-3 py-1.5 text-xs text-fg-subtle">
-                  ← Anterior
+                  {t.previous}
                 </span>
               )}
               <span className="rounded-lg px-3 py-1.5 text-xs text-fg-muted">
@@ -242,11 +243,11 @@ export default async function EmployeesPage({
                 <PaginationLink
                   page={page + 1}
                   search={search}
-                  label="Siguiente →"
+                  label={t.next}
                 />
               ) : (
                 <span className="rounded-lg px-3 py-1.5 text-xs text-fg-subtle">
-                  Siguiente →
+                  {t.next}
                 </span>
               )}
             </div>
@@ -293,7 +294,7 @@ function StatusBadge({ status }: { status: string }) {
     <span
       className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[status] ?? styles.INACTIVE}`}
     >
-      {status === "ACTIVE" ? "Activo" : status === "ON_LEAVE" ? "Permiso" : status === "TERMINATED" ? "Baja" : "Inactivo"}
+      {enumLabel("EmployeeStatus", status)}
     </span>
   );
 }

@@ -14,6 +14,7 @@ process.env.ADMIN_DATABASE_URL = env.dbUrl;
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  unstable_cache: (fn: () => unknown) => fn,
 }));
 
 const mockGetUser = vi.fn();
@@ -29,6 +30,7 @@ vi.mock("@/lib/supabase/server", () => ({
 const { createTenant } = await import("@/lib/admin/create-tenant");
 const { adminPrisma } = await import("@/lib/db/admin-client");
 const { prisma } = await import("@/lib/db/tenant-client");
+const { getTenantTimeZone } = await import("@/lib/tenant/get-tenant-time-zone");
 
 const db = new pg.Client({ connectionString: env.dbUrl });
 await db.connect();
@@ -143,6 +145,20 @@ describe("createTenant() produces same structure as seed.sql demo tenant", () =>
     );
     expect(grants).toHaveLength(4);
   }, 30_000);
+
+  it("D42: writes platform.timezone and platform.locale, so the zone needs no fallback", async () => {
+    if (!createdTenantId) throw new Error("createTenant did not produce a tenant");
+
+    const { rows } = await db.query<{ key: string; value_json: unknown }>(
+      `SELECT key, value_json FROM public.system_configurations WHERE tenant_id = $1 AND key LIKE 'platform.%' ORDER BY key`,
+      [createdTenantId],
+    );
+    expect(rows).toEqual([
+      { key: "platform.locale", value_json: "es" },
+      { key: "platform.timezone", value_json: "America/Mexico_City" },
+    ]);
+    expect(await getTenantTimeZone(createdTenantId)).toEqual({ timeZone: "America/Mexico_City", isFallback: false });
+  });
 
   it("Owner + HR Admin share same admin permissions as seed.sql", async () => {
     if (!createdTenantId) throw new Error("createTenant did not produce a tenant");

@@ -3,6 +3,9 @@
 import { useState, useTransition, useRef, useEffect } from "react";
 import { createArcoRequest, processArcoRequest, exportUserData } from "./actions";
 import PersonSearch from "@/components/person-search";
+import { enumLabel } from "@/lib/i18n/es-MX";
+
+// D42: dates and "overdue" arrive from the server, computed in the tenant's time zone; this client component never formats dates.
 
 type ArcoRow = {
   id: string;
@@ -11,37 +14,29 @@ type ArcoRow = {
   description: string;
   resolutionNotes: string | null;
   exportHash: string | null;
-  dueDate: string;
-  completedAt: string | null;
-  createdAt: string;
+  dueLabel: string;
+  completedLabel: string | null;
+  createdLabel: string;
+  isOverdue: boolean;
   requesterName: string;
   subjectName: string;
   subjectEmail: string;
   subjectId: string;
 };
 
-const typeLabels: Record<string, { label: string; color: string }> = {
-  acceso: { label: "Acceso", color: "bg-category-1-subtle text-category-1-fg" },
-  rectificacion: { label: "Rectificación", color: "bg-warning-subtle text-warning-fg" },
-  cancelacion: { label: "Cancelación", color: "bg-danger-subtle text-danger-fg" },
-  oposicion: { label: "Oposición", color: "bg-category-2-subtle text-category-2-fg" },
+const typeColors: Record<string, string> = {
+  acceso: "bg-category-1-subtle text-category-1-fg",
+  rectificacion: "bg-warning-subtle text-warning-fg",
+  cancelacion: "bg-danger-subtle text-danger-fg",
+  oposicion: "bg-category-2-subtle text-category-2-fg",
 };
 
-const statusLabels: Record<string, { label: string; color: string }> = {
-  pending: { label: "Pendiente", color: "bg-warning-subtle text-warning-fg" },
-  in_progress: { label: "En proceso", color: "bg-info-subtle text-info-fg" },
-  completed: { label: "Completada", color: "bg-success-subtle text-success-fg" },
-  rejected: { label: "Rechazada", color: "bg-danger-subtle text-danger-fg" },
+const statusColors: Record<string, string> = {
+  pending: "bg-warning-subtle text-warning-fg",
+  in_progress: "bg-info-subtle text-info-fg",
+  completed: "bg-success-subtle text-success-fg",
+  rejected: "bg-danger-subtle text-danger-fg",
 };
-
-function fmtDate(d: string | null): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("es-MX", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
 
 export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
   const [showCreate, setShowCreate] = useState(false);
@@ -321,14 +316,14 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
                 {selectedRequest.description}
               </DetailRow>
               <DetailRow label="Fecha límite">
-                {fmtDate(selectedRequest.dueDate)}
+                {selectedRequest.dueLabel}
               </DetailRow>
               <DetailRow label="Creada">
-                {fmtDate(selectedRequest.createdAt)}
+                {selectedRequest.createdLabel}
               </DetailRow>
-              {selectedRequest.completedAt && (
+              {selectedRequest.completedLabel && (
                 <DetailRow label="Resuelta">
-                  {fmtDate(selectedRequest.completedAt)}
+                  {selectedRequest.completedLabel}
                 </DetailRow>
               )}
               {selectedRequest.resolutionNotes && (
@@ -408,10 +403,6 @@ function RequestCard({
   request: ArcoRow;
   onClick: () => void;
 }) {
-  const isOverdue =
-    (request.status === "pending" || request.status === "in_progress") &&
-    new Date(request.dueDate) < new Date();
-
   return (
     <button
       onClick={onClick}
@@ -421,7 +412,7 @@ function RequestCard({
         <div className="flex items-center gap-2">
           <TypeBadge type={request.requestType} />
           <StatusBadge status={request.status} />
-          {isOverdue && (
+          {request.isOverdue && (
             <span className="rounded-full bg-danger-subtle px-2 py-0.5 text-xs font-medium text-danger-fg">
               Vencida
             </span>
@@ -433,7 +424,7 @@ function RequestCard({
         </p>
         <p className="mt-0.5 text-xs text-fg-subtle">
           Solicitante: {request.requesterName} · Límite:{" "}
-          {fmtDate(request.dueDate)}
+          {request.dueLabel}
         </p>
       </div>
       <svg
@@ -454,19 +445,17 @@ function RequestCard({
 }
 
 function TypeBadge({ type }: { type: string }) {
-  const t = typeLabels[type] ?? { label: type, color: "bg-surface-raised text-fg-muted" };
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${t.color}`}>
-      {t.label}
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[type] ?? "bg-surface-raised text-fg-muted"}`}>
+      {enumLabel("arco_request_type", type)}
     </span>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const s = statusLabels[status] ?? { label: status, color: "bg-surface-raised text-fg-muted" };
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.color}`}>
-      {s.label}
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[status] ?? "bg-surface-raised text-fg-muted"}`}>
+      {enumLabel("arco_request_status", status)}
     </span>
   );
 }

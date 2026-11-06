@@ -2236,6 +2236,149 @@ will follow the tenant's time zone (`platform.timezone`).
 
 ---
 
+## D42 — Spanish Interface Texts and Dates in the Tenant's Time Zone
+
+**Decision:** the texts of the screens this PR touches and the labels of
+every database enum live in one es-MX messages module, with no i18n library.
+Dates are formatted on the server with `Intl.DateTimeFormat("es-MX")`:
+moments in the tenant's time zone, calendar dates with no time zone
+conversion. Phase 9c, PR 3.
+
+**Texts (`src/lib/i18n/es-MX.ts`):**
+- One typed `as const` object grouped by screen, plus the labels of every
+  enum created in `supabase/migrations`, keyed by the enum's name.
+- It holds the texts of the screens this PR touches: login, the app
+  metadata, dashboard, profile, employee list and detail (with the history
+  component), org chart and MFA enrollment. Screens already in Spanish keep
+  their texts in the component and move into the module when they are next
+  touched (ROADMAP): performance, Talent Hub, roles and permissions, ARCO,
+  Admin Center, MFA verification and the employee change dialogs.
+- Terms: "Iniciar sesión", "Correo electrónico", "Contraseña",
+  "Calificación de desempeño", "Calificación de potencial", "Número de
+  empleado", "Jefe directo", "Por contratar" and "App de autenticación" (the
+  name of the MFA factor). Product names stay (Authy, 1Password).
+- Enum values stored in the database (`ACTIVE`, `ON_TRACK`…) do not change;
+  they are translated only when shown, with `enumLabel()`. `ON_LEAVE` is
+  "Con permiso" everywhere. The label maps repeated in five components
+  (dashboard, employee list and detail, performance, ARCO) give way to the
+  module, and so do the feedback form's options; the color maps stay keyed
+  by value.
+- Goal states agree with the interface's noun, "objetivo": "Sin iniciar",
+  "En curso", "En riesgo", "Completado", "Cancelado" (the proposal's table
+  said "Completada" and "Cancelada"). `MANAGER_ONLY` feedback is "Solo jefe
+  directo", in line with "Jefe directo".
+
+**Dates (`src/lib/format/dates.ts`):** two explicit functions, chosen by the
+caller. Neither guesses from the column name or the shape of the value.
+- `formatDateOnly(value)` for columns that hold a calendar date. It reads the
+  `YYYY-MM-DD` of the value and formats it in UTC, so "31 dic 2026" is the
+  same in every zone. It accepts a `date` (`2026-12-31`) and the midnight-UTC
+  `timestamptz` that some date-only columns hold today
+  (`2026-12-31T00:00:00+00:00`); anything else is an error. The exact list of
+  columns is in a comment in the file.
+- `formatInstant(value, timeZone)` for moments, in es-MX with a 12-hour clock
+  and the tenant's zone: "5 nov 2026, 11:30 p.m.".
+- The date-only `timestamptz` columns (`period_start`, `period_end` and
+  `due_date` of goals, `users.hire_date`) hold midnight UTC because the
+  Postgres sessions run in UTC: `'2026-01-01'::timestamptz` is
+  `2026-01-01T00:00:00+00:00`. Converted to America/Mexico_City, a period
+  that starts on 1 January would show "31 dic 2025". `formatDateOnly`
+  depends on that UTC session, and an integration test checks
+  `show timezone` = `UTC` and fails with a clear message if it changes.
+  Converting those columns to `date` is planned with expand/contract (D22):
+  goals in Phase 16, `hire_date` in Phase 14.
+- All formatting runs on the server and client components receive strings,
+  so the text is the same in every browser time zone and hydration cannot
+  differ from the server render. "Overdue" (ARCO) and the default "today" of
+  a form are computed on the server in the tenant's zone.
+
+**Tenant time zone:**
+- `getTenantTimeZone(tenantId)` calls `public.tenant_time_zone()` as
+  `prisma_app`, validates the result with Zod and Intl, and falls back to
+  `America/Mexico_City` when it is null or not a valid zone. It is cached per
+  tenant under `tenantTimeZoneTag(id)`, like the module flags (D35); the
+  Admin Center of Phase 11 revalidates that tag when the zone is edited. The
+  tenant id always comes from the server (the verified token or the
+  subdomain), never from user input.
+- New migration, `public.tenant_time_zone(p_tenant_id uuid) RETURNS text`:
+  `LANGUAGE sql`, `STABLE`, `SECURITY DEFINER`, `search_path = ''`. It
+  returns only `value_json #>> '{}'` of the `platform.timezone` key of that
+  tenant: no other key, no key parameter, no row. Execute is revoked from
+  PUBLIC, `anon`, `authenticated` and `service_role` and granted only to
+  `prisma_app`, as with `tenant_module_flags` (D35). It exists because the
+  SELECT policy of `system_configurations` lets only tenant admins read it,
+  so an employee's session cannot, and the cache is filled outside any
+  request. `system_configurations` has no `deleted_at`. The proposal's "no
+  migrations" meant no column, policy or seed change, and none of those
+  change.
+- `create-tenant.ts` writes `platform.timezone` (`America/Mexico_City`) and
+  `platform.locale` (`es`) for every new tenant. Until now only the demo
+  tenant had them. This is code, not a migration.
+
+**Implementation:**
+- `src/lib/i18n/es-MX.ts` (`messages`, `ENUM_LABELS`, `enumLabel()`),
+  `src/lib/format/dates.ts` (`formatDateOnly`, `formatInstant`,
+  `calendarDateIn`, `canonicalTimeZone`), `src/lib/tenant/get-tenant-time-zone.ts`
+  (`getTenantTimeZone`, `readTenantTimeZone`, `getSessionTimeZone`,
+  `tenantTimeZoneTag`) and `src/lib/tenant/platform-defaults.ts`.
+- Migration `20261106030000_d42_tenant_time_zone.sql`; `create-tenant.ts`
+  inserts both keys in the same transaction as the rest of the tenant.
+- Server pages format and pass text: performance (`dueLabel`,
+  `createdLabel`), ARCO (`dueLabel`, `createdLabel`, `completedLabel`,
+  `isOverdue`), the employee detail (history periods and the tenant's
+  "today" for the change dialogs), profile and Admin Center (audit times).
+- ARCO "overdue" now means the due date has passed in the tenant's zone;
+  before, a request became overdue at 00:00 UTC of its due date.
+- `src/lib/supabase/mfa.ts` (`enrollTotp`) also named the factor
+  "Authenticator App" and now uses the module. Nothing imports it; it stays.
+
+**Tests:**
+- `__tests__/static/no-english-ui-text.test.ts`: walks every source file
+  with the TypeScript parser and reads only what a user can see (JSX text,
+  the `label`, `placeholder`, `title`, `alt` and `aria-label` attributes,
+  visible properties such as `label`, `title`, `description`,
+  `friendlyName` or `error`, and every string of the messages module). It
+  fails on the English texts that were on screen ("Sign In", "Password",
+  "ACTIVE", "ON TRACK", "Performance Score", "Employee ID", "To Be Hired",
+  "Authenticator App"…). Negative controls: it finds each of them in a
+  fixture, and does not count `.eq("status", "ACTIVE")`, a comparison, an
+  `<option value>` or "1Password".
+- `__tests__/static/no-client-date-formatting.test.ts`: a `"use client"` file
+  fails on `toLocale*String`, `toISOString`, `Intl.DateTimeFormat`,
+  `new Date()` or an import of `lib/format/dates`, with a negative control.
+- `__tests__/i18n/enum-labels.test.ts`: reads every `CREATE TYPE … AS ENUM`
+  and `ADD VALUE` in public from the migrations (15 enums) and requires
+  exactly those values to have a label.
+- `__tests__/format/dates.test.ts` and `__tests__/tenant/tenant-time-zone.test.ts`:
+  moments near midnight in two zones, daylight saving time, calendar dates
+  under six process zones, values that are refused instead of guessed,
+  invalid zones and the fallback, the cache key, tag and revalidation.
+- Integration, against the local database: `tenant-time-zone.test.ts`
+  (`prisma_app` gets the demo tenant's zone; anon, an employee and a tenant
+  admin get 42501 from the Data API; two tenants each get their own; a
+  tenant without the key or an unknown id gets null and the fallback; a
+  stored value that is not a zone falls back; the function's definition and
+  privileges), `dates-utc-session.test.ts` (`SHOW timezone` is UTC for the
+  migration role and `prisma_app`, and a goal written through the Data API
+  comes back as `2026-01-01T00:00:00+00:00`, "1 ene 2026"; it fails with an
+  explicit message if a session zone changes) and `create-tenant.test.ts`
+  (a new tenant has both keys and `getTenantTimeZone()` needs no fallback).
+- In the production image, with the browser in America/Mexico_City and in
+  Asia/Tokyo: the same dates in both on dashboard, performance, profile,
+  employee list and detail, org chart, ARCO and Admin Center; no console
+  error (hydration included), no CSP violation, and no English text from the
+  list or raw ISO date on any page. Screenshots of login, dashboard and
+  performance in light and dark at 360 and 1280 px.
+
+**Accepted for now:**
+- The module labels of the navigation keep their codes ("Inicio (BizX)",
+  "Talent Hub (TIH)", "Admin Center"). D41 left them for this PR, but the
+  approved proposal did not include them; they need a decision of their own.
+- "Feedback", "Coaching" and "9-Box" stay: they are the terms HR uses in
+  Spanish.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.

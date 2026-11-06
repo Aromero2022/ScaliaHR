@@ -6,6 +6,7 @@ import { createTenantSchema, type CreateTenantInput } from "@/lib/validations/te
 import { revalidatePath } from "next/cache";
 import { safeError } from "@/lib/errors/safe-error";
 import { consumeRateLimit, rateLimitMessage } from "@/lib/rate-limit";
+import { DEFAULT_TENANT_LOCALE, DEFAULT_TENANT_TIME_ZONE } from "@/lib/tenant/platform-defaults";
 
 export async function createTenant(input: CreateTenantInput) {
   const supabase = await createClient();
@@ -63,6 +64,13 @@ export async function createTenant(input: CreateTenantInput) {
       );
 
       const tid = tenant.id;
+
+      // D42: the tenant's time zone and locale, read by getTenantTimeZone() and the email branding.
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO public.system_configurations (tenant_id, key, value_json)
+        VALUES (${tid}::uuid, 'platform.timezone', ${JSON.stringify(DEFAULT_TENANT_TIME_ZONE)}::jsonb),
+               (${tid}::uuid, 'platform.locale', ${JSON.stringify(DEFAULT_TENANT_LOCALE)}::jsonb)
+      `);
 
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO public.permission_roles (tenant_id, name, description, is_admin_role)

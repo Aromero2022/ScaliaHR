@@ -6,6 +6,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { safeNextPath } from "@/lib/auth/mfa-policy";
 import { logMfaEnroll, logMfaEnrollFailed } from "../actions";
 import { mfaErrorMessage } from "@/lib/auth/messages";
+import { messages } from "@/lib/i18n/es-MX";
+
+const t = messages.mfaEnroll;
 
 export default function MfaEnrollPage() {
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -36,7 +39,7 @@ export default function MfaEnrollPage() {
 
       const { data, error } = await supabase.auth.mfa.enroll({
         factorType: "totp",
-        friendlyName: "Authenticator App",
+        friendlyName: t.factorName,
       });
       if (error) {
         setError(mfaErrorMessage(error));
@@ -84,24 +87,23 @@ export default function MfaEnrollPage() {
   return (
     <div className="mx-auto max-w-md space-y-6 py-12">
       <h1 className="text-2xl font-bold text-fg">
-        Configurar autenticación de dos factores
+        {t.heading}
       </h1>
       <p className="text-sm text-fg-muted">
-        Escanea el código QR con tu aplicación de autenticación (Google
-        Authenticator, Authy, 1Password, etc.)
+        {t.intro}
       </p>
 
       {qrCode && (
         <div className="flex justify-center rounded-xl border border-line bg-qr-surface p-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={qrCode} alt="QR Code" width={200} height={200} />
+          <img src={qrCode} alt={t.qrAlt} width={200} height={200} />
         </div>
       )}
 
       {secret && (
         <div className="rounded-lg border border-line bg-surface p-4">
           <p className="mb-1 text-xs text-fg-subtle">
-            Si no puedes escanear, ingresa manualmente:
+            {t.manualEntry}
           </p>
           <code className="select-all text-sm text-accent-fg">{secret}</code>
         </div>
@@ -116,7 +118,7 @@ export default function MfaEnrollPage() {
 
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-fg-muted">
-            Código de verificación
+            {t.code}
           </span>
           <input
             type="text"
@@ -137,7 +139,7 @@ export default function MfaEnrollPage() {
           disabled={loading || code.length !== 6}
           className="w-full rounded-lg bg-accent px-4 py-2.5 font-semibold text-on-accent transition hover:bg-accent-hover disabled:opacity-50"
         >
-          {loading ? "Verificando..." : "Activar MFA"}
+          {loading ? t.submitting : t.submit}
         </button>
       </form>
     </div>

@@ -197,7 +197,8 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Áreas táctiles de 44px.
 - Skeletons en cargas mayores a 400 ms.
 - Menús que solo muestran módulos contratados (D12) y permitidos por rol (RBP). El sidebar actual ya filtra por flag de módulo y por `can()` (D14); el riel y el dock usan el mismo filtro.
-- Fechas con formato local y la zona horaria del tenant (hoy se muestran ISO crudas: "2026-01-01T00:00:00+00:00").
+- Fechas con formato local y la zona horaria del tenant (hoy se muestran ISO crudas: "2026-01-01T00:00:00+00:00"). Hecho en el PR 3 (D42): todas las fechas se formatean en el servidor con `Intl.DateTimeFormat("es-MX")`; los momentos con la zona del tenant (`platform.timezone`, respaldo America/Mexico_City) y reloj de 12 horas, y las fechas sin hora sin convertir de zona. Los componentes cliente reciben texto y un test estático impide que formateen fechas.
+- Textos de la UI en un solo módulo, `lib/i18n/es-MX.ts` (D42). Las pantallas que ya están en español y cuyos textos el PR 3 no movió (desempeño, Talent Hub, roles y permisos, ARCO, Admin Center, verificación MFA y los diálogos de cambios del empleado) pasan al módulo cuando se toquen.
 
 ### Accesibilidad (WCAG 2.2 AA)
 
@@ -207,7 +208,7 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Zoom al 200 % sin romper el layout.
 - prefers-reduced-motion respetado (framer-motion con useReducedMotion). framer-motion todavía no está en el repo; se agrega en esta fase.
 - PersonSearch (D38) como combobox accesible: role=combobox, listbox con aria-activedescendant, navegación con teclado y anuncio de resultados.
-- `<html lang>` en "es-MX" (hoy "en"; WCAG 3.1.1) y textos de la UI en español: "Sign in", "Password", "PERFORMANCE SCORE", "ON TRACK", estados como "ACTIVE". El `lang` quedó hecho en el PR 2 (D41); los textos van en el PR 3.
+- `<html lang>` en "es-MX" (hoy "en"; WCAG 3.1.1) y textos de la UI en español: "Sign in", "Password", "PERFORMANCE SCORE", "ON TRACK", estados como "ACTIVE". El `lang` quedó hecho en el PR 2 (D41). Los textos quedaron hechos en el PR 3 (D42): login, metadatos, dashboard, perfil, empleados, organigrama y alta de MFA en español desde `lib/i18n/es-MX.ts`, y los estados de la base traducidos al mostrarlos con las etiquetas de todos los enums; un test estático falla si vuelve un texto en inglés conocido.
 
 ### Credenciales demo en el login
 
@@ -233,6 +234,7 @@ Motor de workflows configurable, notificaciones push/email/in-app, eventos de ci
 
 - Preferencias de notificación por usuario y opción de desuscribirse de correos no críticos.
 - Notificaciones push por adaptador (local/prueba); el proveedor real se conecta en la Fase 23.
+- Los correos muestran fechas y horas con la zona horaria del tenant (`platform.timezone`), con las mismas reglas de D42: momentos con la zona del tenant y fechas sin hora sin convertir.
 
 ---
 
@@ -241,6 +243,7 @@ Motor de workflows configurable, notificaciones push/email/in-app, eventos de ci
 CRUD de RBP (roles, grupos y asignaciones), DPCS (aviso de privacidad versionado, aceptación al iniciar sesión y Set DPCS Statement Status), Picklist Center, Import Employee Data, configuración de empresa (logo, tema, idioma, política de contraseña y MFA), reporte de auditoría, política de login por cliente (correo, número de empleado o ambos) y reseteo de contraseña por RH.
 
 - Al habilitar roles personalizados, `insert_effective_record` (y cualquier función de la base que hoy autorice por `app_role`) debe validar el permiso RBP en lugar del rol fijo.
+- Zona horaria e idioma del tenant (`platform.timezone` y `platform.locale`) editables en la configuración de empresa. Al guardar la zona, llamar `revalidateTag(tenantTimeZoneTag(tenantId))`; sin esto, la zona nueva tarda hasta 60 s en verse (D42).
 - Cada Server Action del CRUD de RBP debe llamar `writeAuditLog()` con la acción correspondiente: `ROLE_CREATED`, `ROLE_UPDATED`, `ROLE_DELETED`, `PERMISSION_GRANTED`, `PERMISSION_REVOKED`, `GROUP_MEMBER_ADDED`, `GROUP_MEMBER_REMOVED`. Las entradas deben incluir `entity_id` (UUID del recurso) y `diff` (campos modificados) para trazabilidad completa.
 
 ### Theme Manager (D18)
@@ -320,6 +323,7 @@ Depende de: Workflows (10), Admin Center (11), worker y lib/email (9a), API (13)
 ### Onboarding
 
 - Alta del nuevo ingreso en EC con fecha efectiva.
+- Convertir `users.hire_date` de `timestamptz` a `date` con expand/contract (D22). Hoy guarda la medianoche UTC y se muestra con `formatDateOnly()`, que depende de que la sesión de Postgres esté en UTC (D42).
 - Preboarding: portal antes del día 1 con acceso temporal.
 - Captura de datos personales y fiscales (RFC, CURP, NSS, CLABE) con permisos por campo (PII sensible).
 - Documentos y firma electrónica (contrato, aviso de privacidad, NDA); firma electrónica por adaptador (local/prueba).
@@ -340,6 +344,14 @@ Depende de: Workflows (10), Admin Center (11), worker y lib/email (9a), API (13)
 - Al cerrar, aplica la política de retención de DRTM (Fase 20).
 
 **Criterio de cierre:** un alta completa desde preboarding hasta el día 1 y una baja con revocación de accesos verificada, ambas con su bitácora de auditoría.
+
+---
+
+## Fase 16 — PMGM v2
+
+Plantillas de formulario, rating scales, route maps y metas de desempeño.
+
+- Convertir `period_start`, `period_end` y `due_date` de `performance_goals` de `timestamptz` a `date` con expand/contract (D22). Hoy guardan la medianoche UTC y se muestran con `formatDateOnly()`, que depende de que la sesión de Postgres esté en UTC (D42).
 
 ---
 
@@ -423,11 +435,11 @@ Contratar PITR y encender su export por tenant:
 
 ## Tabla de cumplimiento
 
-> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1), con main en 5908222 (PR #48, Fase 9a PR 2: correo y tenant por subdominio, D20 y D21), con main en 3ca8d5d (PR #49, Fase 9a PR 3: migraciones seguras, D22), con main en b101eb7 (PR #50, Fase 9a PR 4: respaldos y runbook, D23 y D24), con main en c28be3f (PR #51, Fase 9b PR 1: privilegios de la base y advisors, D25 y D26), con main en 20e48b5 (PR #52, Fase 9b PR 2: errores seguros y logs JSON, D27), con main en a961e52 (PR #53, Fase 9b PR 3: rate limiting y filtro de búsqueda, D28), con main en e15e0ef (PR #54, Fase 9b PR 4: endurecimiento, D29 a D33), con main en ae25e87 (PR #57, Fase 9b PR 5: rendimiento, D34 a D39), con main en 8f13442 (PR #60, Fase 9c PR 1: design tokens, D40) y con la rama del PR 2 de la Fase 9c (layout responsive y navegación, D41). Cada fase, al cerrarse, actualiza el estado de sus filas.
+> Estados verificados contra el código y la base local de main (commit 0a3c70f) el 2026-11-04, revisados de nuevo con main en 62ea0cc (PR #45, Fase 9a PR 1), con main en 5908222 (PR #48, Fase 9a PR 2: correo y tenant por subdominio, D20 y D21), con main en 3ca8d5d (PR #49, Fase 9a PR 3: migraciones seguras, D22), con main en b101eb7 (PR #50, Fase 9a PR 4: respaldos y runbook, D23 y D24), con main en c28be3f (PR #51, Fase 9b PR 1: privilegios de la base y advisors, D25 y D26), con main en 20e48b5 (PR #52, Fase 9b PR 2: errores seguros y logs JSON, D27), con main en a961e52 (PR #53, Fase 9b PR 3: rate limiting y filtro de búsqueda, D28), con main en e15e0ef (PR #54, Fase 9b PR 4: endurecimiento, D29 a D33), con main en ae25e87 (PR #57, Fase 9b PR 5: rendimiento, D34 a D39), con main en 8f13442 (PR #60, Fase 9c PR 1: design tokens, D40) con main en cdb1ec2 (PR #61, Fase 9c PR 2: layout responsive y navegación, D41) y con la rama del PR 3 de la Fase 9c (textos en español y fechas con la zona del tenant, D42). Cada fase, al cerrarse, actualiza el estado de sus filas.
 
 | Norma o control | Dónde se cumple | Estado |
 |-----------------|-----------------|--------|
-| RLS por tenant | Todas las tablas + D3 (Prisma sin bypass) + D6 + D17 (`pgboss`) + D20 (`email_enqueuer`) + D22 (`ops`) + D25 (privilegios) | Cumple: las 38 tablas de `public`, las 11 de `pgboss` y la de `ops` tienen ENABLE + FORCE RLS y ningún rol de la app (incluidos `worker_app` y `email_enqueuer`) tiene BYPASSRLS. `email_enqueuer` solo inserta trabajos de `email.send` y no lee su contenido; `worker_app` lee la marca del tenant solo a través de `email_branding()`. Desde D25 ningún rol de la app tiene TRUNCATE, TRIGGER, REFERENCES ni MAINTAIN en ninguna tabla, tampoco en las que creen migraciones futuras, con test. Los advisors de seguridad y rendimiento de Supabase quedan en cero contra la base local y CI lo verifica |
+| RLS por tenant | Todas las tablas + D3 (Prisma sin bypass) + D6 + D17 (`pgboss`) + D20 (`email_enqueuer`) + D22 (`ops`) + D25 (privilegios) + D35 y D42 (funciones solo para `prisma_app`) | Cumple: las 38 tablas de `public`, las 11 de `pgboss` y la de `ops` tienen ENABLE + FORCE RLS y ningún rol de la app (incluidos `worker_app` y `email_enqueuer`) tiene BYPASSRLS. `email_enqueuer` solo inserta trabajos de `email.send` y no lee su contenido; `worker_app` lee la marca del tenant solo a través de `email_branding()`. Desde D25 ningún rol de la app tiene TRUNCATE, TRIGGER, REFERENCES ni MAINTAIN en ninguna tabla, tampoco en las que creen migraciones futuras, con test. Los advisors de seguridad y rendimiento de Supabase quedan en cero contra la base local y CI lo verifica. Desde D42, `public.tenant_time_zone()` (SECURITY DEFINER, `search_path` vacío) da a `prisma_app` solo la zona horaria de un tenant; anon y las sesiones de la Data API reciben 42501, y la política SELECT de `system_configurations` sigue siendo solo para admins, con tests contra la base local |
 | Secretos fuera del cliente y del repo | .env fuera del repo + D4 + D17 (`.dockerignore`, `.env.docker` ignorado e imágenes revisadas en CI) + D20 (`EMAIL_ENQUEUE_DATABASE_URL` solo en el servidor) + D30 (server-only) + D33 (gitleaks) + D39 (permisos mínimos en todos los workflows) | Cumple: los módulos con llaves o conexiones privilegiadas (`admin-client`, `tenant-client`, `lib/email`, `moodle-client`) llevan `import "server-only"`, así que importarlos desde un componente cliente rompe el build, y una regla de lint propia lo marca antes, también a través de otros módulos. gitleaks revisa todo el historial de git en cada PR; la única excepción son las llaves demo públicas de Supabase local. El `GITHUB_TOKEN` de CI y de db-remote-sync solo puede leer el repositorio (`permissions: contents: read`), y los checkouts del escaneo de secretos y de db-remote-sync no dejan el token en `.git/config` (`persist-credentials: false`, D39). El build no publica source maps del navegador (D29) |
 | Rate limiting (429) | 9b (D28) + 23 (límites nativos de Auth en el proyecto alojado) | Cumple en local: login, MFA, alta de tenant, todas las Server Actions y las rutas HTTP gastan un token de `rate_limit_consume()` antes de actuar; solo `prisma_app` puede llamarla. Login, MFA y alta de tenant fallan cerrados. Llaves por IP, por cuenta (tenant + correo) y por usuario en su tenant, guardadas como hash. Las rutas responden 429 con Retry-After y las Server Actions el tiempo de espera. Cada tenant ajusta sus límites de escritura y API desde Admin Center, dentro de topes. Probado contra Supabase local y en la imagen de producción; un test estático con el parser de TypeScript falla si una Server Action o ruta no gasta un token (D39). Los límites nativos de Supabase Auth quedan en `config.toml`, pero la CLI local no aplica los de IP; en la Fase 23 se activan en el proyecto alojado con `Sb-Forwarded-For` |
 | Fuerza bruta contra la API de Supabase Auth directa | 23 (límites nativos + CAPTCHA) | Pendiente: riesgo aceptado por el Principio 8 (D28) |
@@ -442,7 +454,7 @@ Contratar PITR y encender su export por tenant:
 | Credenciales demo fuera de producción | 9c (D41) + 23 (sin datos demo) | Cumple en local: el login muestra una pista solo si la variable del servidor `SCALIA_DEMO_LOGIN_HINT` la trae (nunca `NEXT_PUBLIC_`), y se ignora en producción si `APP_BASE_URL` no es local; `check:prod-build` falla si el bundle del cliente contiene la contraseña o el correo demo, y CI revisa el `/login` de la imagen. Pendiente para la Fase 23: sacar los datos demo de las migraciones y ninguna credencial demo en pantalla |
 | Uploads seguros (SVG, logos, íconos) | 11 | Pendiente: hoy no hay uploads |
 | Datos sensibles enmascarados | 11 | Pendiente: CURP, RFC y salario se muestran completos a quien pasa RLS (D6); NSS y CLABE llegan en la Fase 14 |
-| WCAG 2.2 AA (contraste, teclado, zoom, táctil) | 9c (D40, D41 y PRs siguientes) + validación de colores en 11 | Parcial: desde D40 todo color es un token y una prueba revisa sus 121 pares por modo (texto 4.5:1, bordes de controles, foco e indicadores 3:1) en claro, oscuro y alto contraste (7:1 y 4.5:1); el texto terciario y los placeholders también cumplen 4.5:1. Un test estático impide colores literales en los componentes. Foco visible global con el token `focus`. Desde D41: `lang="es-MX"`, enlace para saltar al contenido, navegación con `aria-current`, diálogo "Más" modal con foco atrapado y Esc, tooltips del rail con foco de teclado y Esc, áreas táctiles de 44 px en la navegación, sin scroll horizontal a 320 px (1.4.10) y foco nunca oculto bajo el dock o el header (2.4.11), medidos en la imagen de producción. Faltan textos en español, zoom al 200 % en todas las pantallas, la biblioteca base y axe en CI (PRs siguientes de la 9c) |
+| WCAG 2.2 AA (contraste, teclado, zoom, táctil) | 9c (D40, D41, D42 y PRs siguientes) + validación de colores en 11 | Parcial: desde D40 todo color es un token y una prueba revisa sus 121 pares por modo (texto 4.5:1, bordes de controles, foco e indicadores 3:1) en claro, oscuro y alto contraste (7:1 y 4.5:1); el texto terciario y los placeholders también cumplen 4.5:1. Un test estático impide colores literales en los componentes. Foco visible global con el token `focus`. Desde D41: `lang="es-MX"`, enlace para saltar al contenido, navegación con `aria-current`, diálogo "Más" modal con foco atrapado y Esc, tooltips del rail con foco de teclado y Esc, áreas táctiles de 44 px en la navegación, sin scroll horizontal a 320 px (1.4.10) y foco nunca oculto bajo el dock o el header (2.4.11), medidos en la imagen de producción. Desde D42 (3.1.1): textos de la UI en español con el `lang="es-MX"`, estados de la base traducidos y fechas en es-MX; un test estático falla si vuelve un texto en inglés conocido. Faltan zoom al 200 % en todas las pantallas, la biblioteca base y axe en CI (PRs siguientes de la 9c) |
 | Movimiento reducido | 9c | Parcial: las duraciones de transición son tokens que pasan a 0 con `prefers-reduced-motion: reduce` (D40). Faltan framer-motion con `useReducedMotion` y la animación del indicador de carga |
 | LFPDPPP 2025: aviso de privacidad | 11 (DPCS visible en todos los temas) | Pendiente: DPCS todavía no existe |
 | LFPDPPP 2025: derechos ARCO | 20 | Parcial: el admin procesa solicitudes y la supresión existe (D10); faltan autoservicio y bloqueo (Known Risk registrado) |

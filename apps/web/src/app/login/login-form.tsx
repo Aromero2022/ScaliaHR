@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { rememberCompanyCode, signIn } from "./actions";
+import { messages } from "@/lib/i18n/es-MX";
+
+const t = messages.login;
 
 export default function LoginForm({ showCompanyCode, demoHint = null }: { showCompanyCode: boolean; demoHint?: string | null }) {
   const [companyCode, setCompanyCode] = useState("");
@@ -26,7 +29,7 @@ export default function LoginForm({ showCompanyCode, demoHint = null }: { showCo
       }
     }
 
-    const result = await signIn({ email, password }).catch(() => ({ error: "No se pudo iniciar sesión. Intenta de nuevo." }));
+    const result = await signIn({ email, password }).catch(() => ({ error: t.genericError }));
 
     if (result.error) {
       setError(result.error);
@@ -42,10 +45,10 @@ export default function LoginForm({ showCompanyCode, demoHint = null }: { showCo
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight text-fg">
-            Scalia HR
+            {messages.app.name}
           </h1>
           <p className="mt-2 text-sm text-fg-muted">
-            Enterprise Human Capital Management
+            {messages.app.tagline}
           </p>
         </div>
 
@@ -54,7 +57,7 @@ export default function LoginForm({ showCompanyCode, demoHint = null }: { showCo
           className="rounded-2xl border border-line bg-surface p-8 shadow-xl"
         >
           <h2 className="mb-6 text-lg font-semibold text-fg">
-            Sign in to your account
+            {t.heading}
           </h2>
 
           {error && (
@@ -66,7 +69,7 @@ export default function LoginForm({ showCompanyCode, demoHint = null }: { showCo
           {showCompanyCode && (
             <label className="mb-4 block">
               <span className="mb-1 block text-sm font-medium text-fg-muted">
-                Código de empresa (opcional)
+                {t.companyCode}
               </span>
               <input
                 type="text"
@@ -74,14 +77,14 @@ export default function LoginForm({ showCompanyCode, demoHint = null }: { showCo
                 value={companyCode}
                 onChange={(e) => setCompanyCode(e.target.value)}
                 className="w-full rounded-lg border border-control bg-surface-raised px-4 py-2.5 text-fg placeholder:text-fg-subtle focus:border-focus focus:ring-1 focus:ring-focus focus:outline-none"
-                placeholder="acme-corp"
+                placeholder={t.companyCodePlaceholder}
               />
             </label>
           )}
 
           <label className="mb-4 block">
             <span className="mb-1 block text-sm font-medium text-fg-muted">
-              Email
+              {t.email}
             </span>
             <input
               type="email"
@@ -89,13 +92,13 @@ export default function LoginForm({ showCompanyCode, demoHint = null }: { showCo
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-control bg-surface-raised px-4 py-2.5 text-fg placeholder:text-fg-subtle focus:border-focus focus:ring-1 focus:ring-focus focus:outline-none"
-              placeholder="you@company.com"
+              placeholder={t.emailPlaceholder}
             />
           </label>
 
           <label className="mb-6 block">
             <span className="mb-1 block text-sm font-medium text-fg-muted">
-              Password
+              {t.password}
             </span>
             <input
               type="password"
@@ -103,7 +106,7 @@ export default function LoginForm({ showCompanyCode, demoHint = null }: { showCo
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border border-control bg-surface-raised px-4 py-2.5 text-fg placeholder:text-fg-subtle focus:border-focus focus:ring-1 focus:ring-focus focus:outline-none"
-              placeholder="••••••••"
+              placeholder={t.passwordPlaceholder}
             />
           </label>
 
@@ -112,13 +115,13 @@ export default function LoginForm({ showCompanyCode, demoHint = null }: { showCo
             disabled={loading}
             className="w-full rounded-lg bg-accent px-4 py-2.5 font-semibold text-on-accent transition hover:bg-accent-hover disabled:opacity-50"
           >
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? t.submitting : t.submit}
           </button>
 
           {/* D41: only on a local stack, from the server variable SCALIA_DEMO_LOGIN_HINT. */}
           {demoHint && (
             <p data-demo-login-hint="" className="mt-4 text-center text-xs text-fg-subtle">
-              Demo: {demoHint}
+              {t.demoHint(demoHint)}
             </p>
           )}
         </form>
