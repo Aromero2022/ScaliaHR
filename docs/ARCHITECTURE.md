@@ -1996,6 +1996,91 @@ one person is a search. Phase 9b, PR 5.
 
 ---
 
+## D40 — Design Tokens and Theme Base
+
+**Decision:** every color, radius, shadow, font and duration the web app uses
+is a semantic token. A preset is data: one file of values per preset, rendered
+to CSS variables on the server. Tailwind 4 reads the tokens through `@theme`,
+and its default palette is removed, so a component cannot use a literal color.
+Phase 9c, PR 1 (D18, D19).
+
+**Three layers:**
+
+1. **Preset values** (`src/lib/theme/presets/clean.ts`): a typed object with
+   the light and dark color sets and the shape values (radii, shadows). The
+   five presets of Phase 11 (Glass, Soft, Midnight, Editorial, Bento) are five
+   more files of the same type. The high-contrast variant is derived from the
+   preset (D18 calls it automatic); a preset may override single values.
+2. **Theme CSS** (`themeCss(preset)` in `src/lib/theme/`): renders the
+   `--theme-*` variables for each mode and contrast, and validates every value
+   against a strict format (hex colors, lengths, shadow lists) before it
+   reaches CSS. A theme is never a stylesheet (D18), so tenant values in
+   Phase 11 go through the same check. The root layout puts it in a `<style>`.
+3. **Tailwind contract** (`src/app/globals.css`): `@theme inline` maps each
+   utility token to its `--theme-*` variable, and `--color-*: initial` drops
+   the default palette. `bg-slate-800` generates no CSS; `bg-surface` does.
+
+**Color tokens.** All are opaque except `overlay`, so every pair has one
+contrast ratio to test.
+
+| Group | Tokens (utility) | Role |
+|---|---|---|
+| Surfaces | `canvas`, `surface`, `surface-muted`, `surface-raised`, `surface-hover`, `surface-strong`, `overlay`, `qr-surface` | Page, cards, subtle sections, inputs and chips, hover, neutral fills (progress tracks), modal backdrop, the light background a QR code needs |
+| Text | `fg`, `fg-muted`, `fg-subtle` | Primary, secondary and tertiary text (placeholders included) |
+| Lines | `line`, `control` | Decorative dividers and outlines; the boundary of form controls |
+| Focus | `focus` | Focus indicator |
+| Accent | `accent`, `accent-hover`, `accent-fg`, `accent-subtle`, `accent-line`, `on-accent` | Primary action and active state, its hover, accent text and links, selected background, tinted border, text on the accent |
+| States | `success`, `warning`, `danger`, `info`, each with `-hover`, `-fg`, `-subtle`, `-line` and `on-` | The same five roles as the accent, per state |
+| Categories | `category-1` … `category-3`, each with `-fg`, `-subtle`, `-line` | Labels that tell categories apart (skill types, ARCO request types) and carry no state |
+
+**Contrast rules**, tested for every pair in light, dark, high-contrast light
+and high-contrast dark:
+- 4.5:1 for text: `fg`, `fg-muted`, `fg-subtle` and every `-fg` token on every
+  surface they are used on; each `-fg` on its `-subtle`; each `on-` on its
+  solid color and its hover.
+- 3:1 for components: `control` and `focus` against the surfaces; `accent`,
+  the states and `surface-strong` as indicators (progress bars, active tabs,
+  status dots) against the surfaces.
+- High contrast raises text to 7:1 and boundaries to 4.5:1.
+
+**Other tokens:**
+- Radii: `--radius-xs` … `--radius-2xl` and `full`. Clean keeps Tailwind's
+  values.
+- Shadows: `--shadow-sm` … `--shadow-2xl`, per mode.
+- Spacing: Tailwind's 4 px step (`--spacing: 0.25rem`), plus the form spacing
+  of D19 as `form-label` (8 px), `form-help` (4 px), `form-field` (20 px) and
+  `form-section` (24 px).
+- Typography: `--font-sans` is Inter, self-hosted with `next/font/local` (SIL
+  Open Font License 1.1, license file next to the font); `--font-mono` is the
+  system monospace stack. The type scale is Tailwind's.
+- Motion: `--motion-fast`, `--motion-base`, `--motion-slow` and
+  `--ease-standard`; under `prefers-reduced-motion: reduce` every duration is
+  0.
+
+**Theme selection, on `<html>`:**
+- `data-preset="clean"`.
+- `data-theme="system" | "light" | "dark"`, default `system` (follows
+  `prefers-color-scheme`).
+- `data-contrast="auto" | "more"`, default `auto` (follows
+  `prefers-contrast: more`).
+- `system` and `auto` are resolved by CSS media queries, so with nothing
+  stored the page is right on first paint without any script. A stored choice
+  (light, dark or more contrast) is applied by an inline script in `<head>`
+  before the first paint. That script carries the request's CSP nonce (D29),
+  accepts only the listed values and changes nothing else.
+
+**Components** use only these tokens. A static test fails on Tailwind palette
+classes, arbitrary color values, hex colors and opacity modifiers on colors
+(a translucent token has no fixed contrast), and on a solid accent or state
+background whose text is not its `on-` token.
+
+**Fonts and CSP:** the CSP no longer lists `fonts.googleapis.com` or
+`fonts.gstatic.com`; fonts and styles come from `'self'` only, and
+`scripts/check-csp.mjs` fails if an external origin appears in `font-src` or
+`style-src`.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.
