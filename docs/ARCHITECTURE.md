@@ -2136,6 +2136,56 @@ background whose text is not its `on-` token.
 
 ---
 
+## D41 — Responsive Layout and Navigation
+
+**Decision:** one application shell for every protected page, with the
+navigation of D19 at three widths, all fed by the same filtered list of
+modules. Phase 9c, PR 2. ⌘K is not part of it.
+
+**Shell (`(protected)/layout.tsx`):**
+- Landmarks `header`, `nav` and `main`, and a "Saltar al contenido" link as
+  the first focusable element (WCAG 2.4.1).
+- Padding that follows the width; no horizontal scroll at 320 px (WCAG
+  1.4.10), measured at 320, 360, 768 and 1280 px.
+
+**Navigation by width** (Tailwind `md` = 768 px, `xl` = 1280 px, the D19
+reference widths):
+- 1280 px and up: full sidebar that can be collapsed. The state lives in a
+  cookie the server reads, so the first paint is right with no script. The
+  cookie only accepts `1` (collapsed) or `0`; any other value means expanded.
+  It is `SameSite=Lax`, `Path=/`, and `Secure` when the app runs on https.
+- 768 to 1279 px (1024–1279 included): icon rail. Each icon has its
+  accessible name from `aria-label` or visually hidden text; the tooltip
+  appears on hover and on keyboard focus but never names the link.
+- Under 768 px: bottom dock with at most 5 items, each with icon and text.
+  With more than 5 modules, the fifth is "Más", which opens an accessible
+  dialog (`role="dialog"`, `aria-modal`, focus trapped, Esc closes and focus
+  returns to "Más"). The dock respects `env(safe-area-inset-bottom)`, and
+  `main` keeps bottom padding so the dock never covers content or the focused
+  element (WCAG 2.4.11).
+- In all three: the same `NAV_ITEMS` through the same `filterNavByFlags`
+  (module flags, D12, and RBP, D14); `aria-current="page"` on the active item;
+  44 px touch targets; "Cerrar sesión" always reachable.
+- The menu only hides what the user cannot open. Each page keeps its own
+  server guard (`isModuleRouteBlocked` and `can()`), and a test opens hidden
+  routes to show they stay blocked whatever the menu shows.
+
+**Also in this PR (from the 9c accessibility and login items):**
+- `<html lang="es-MX">` (WCAG 3.1.1).
+- The demo credentials leave the code. The login page (a server component)
+  shows a hint only when the server variable `SCALIA_DEMO_LOGIN_HINT` holds
+  one, never a `NEXT_PUBLIC_` variable. It is ignored when `NODE_ENV` is
+  `production` and `APP_BASE_URL` is not a local host (`localhost`,
+  `*.localhost`, `127.0.0.1`). `check:prod-build` fails if the client bundle
+  contains `Demo1234` or the demo email, and the Docker job checks that the
+  image's `/login` shows no hint. The seed and the migrations are unchanged;
+  removing the demo data is already an entry requirement of Phase 23.
+
+**Left for PR 3:** the interface texts still in English and the dates, which
+will follow the tenant's time zone (`platform.timezone`).
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.

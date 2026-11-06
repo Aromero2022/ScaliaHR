@@ -196,6 +196,7 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Áreas táctiles de 44px.
 - Skeletons en cargas mayores a 400 ms.
 - Menús que solo muestran módulos contratados (D12) y permitidos por rol (RBP). El sidebar actual ya filtra por flag de módulo y por `can()` (D14); el riel y el dock usan el mismo filtro.
+- Fechas con formato local y la zona horaria del tenant (hoy se muestran ISO crudas: "2026-01-01T00:00:00+00:00").
 
 ### Accesibilidad (WCAG 2.2 AA)
 
@@ -205,6 +206,11 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Zoom al 200 % sin romper el layout.
 - prefers-reduced-motion respetado (framer-motion con useReducedMotion). framer-motion todavía no está en el repo; se agrega en esta fase.
 - PersonSearch (D38) como combobox accesible: role=combobox, listbox con aria-activedescendant, navegación con teclado y anuncio de resultados.
+- `<html lang>` en "es-MX" (hoy "en"; WCAG 3.1.1) y textos de la UI en español: "Sign in", "Password", "PERFORMANCE SCORE", "ON TRACK", estados como "ACTIVE".
+
+### Credenciales demo en el login
+
+- La pantalla de login muestra "Demo: elena.martinez@acme.dev / Demo1234!" sin condición, también en la imagen de producción. Que solo aparezca con una variable explícita de demo local, apagada por defecto, con un test que lo verifique en el build de producción.
 
 ### Biblioteca base
 
@@ -344,6 +350,7 @@ Depende de: Workflows (10), Admin Center (11), worker y lib/email (9a), API (13)
 - Fases 9a–22 completas y probadas al 100 % en local.
 - Cambiar el factor MFA del owner.
 - Sacar los datos demo de las migraciones a seed.sql.
+- Sin credenciales demo en ninguna pantalla.
 - `can()` como función SECURITY DEFINER en la base.
 - Verificar la bitácora de auditoría: **parcialmente resuelto** (PR #42). Login (`AUTH_LOGIN`), MFA (`MFA_ENROLL`, `MFA_VERIFY`, `MFA_ENROLL_FAILED`, `MFA_VERIFY_FAILED`) ya se registran y Admin Center los muestra con `entity`, `entity_id` y `diff`. Desde D28 (Fase 9b) el login y la verificación MFA corren en el servidor, que escribe `AUTH_LOGIN`, `MFA_VERIFY` y `MFA_VERIFY_FAILED`, y los logins fallidos quedan en los logs JSON. Pendiente: cambios de permisos (Fase 11 CRUD de RBP), los logins fallidos en la bitácora y las llamadas directas a la API de Supabase Auth (Known Risk "Login Audit Depends on the Client" en ARCHITECTURE.md).
 - Cerrar los Known Risks de ARCHITECTURE.md.
