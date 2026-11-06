@@ -2637,7 +2637,8 @@ record what the tests type.
 - Zoom: every page and the login at 640 px (what a 1280 px window shows at
   200 % zoom: reflow, WCAG 1.4.10) and at 1280 px with the root font size at
   200 % (WCAG 1.4.4). Measured in the page: horizontal scroll, text cut by a
-  box that hides its overflow only at 200 %, text or controls drawn on top of
+  box that hides its overflow only at 200 %, text wider than its own box only
+  at 200 % (it spills over whatever is next to it), text or controls drawn on top of
   each other within a layer (the page, or one fixed or sticky bar; content
   passing under the dock is not an overlap), text off the left edge, and text
   of a fixed or sticky bar outside the window (a full-page screenshot
@@ -2658,11 +2659,14 @@ page replaces it when the answer arrives (2,094 ms), and with
 **What the suite found, fixed in this PR:**
 - Grids whose column count followed only the window width, so at 200 % text
   their columns were too narrow (horizontal scroll and overlaps on the
-  dashboard, profile, employee detail, ARCO and Admin Center). Their columns
+  dashboard, profile, employee detail, ARCO, Admin Center, and the stat tiles
+  of Desempeño and Habilidades). Their columns
   now have a minimum width in `rem` (`repeat(auto-fit|auto-fill,
   minmax(min(100%, Nrem), 1fr))`, the auto-fit grid of D19): the same window
   holds fewer, wider columns when the text grows, and at 100 % the column
-  counts stay as they were. Field values wrap anywhere (long emails).
+  counts stay as they were (Habilidades for an employee goes from 3 to 2 tiles
+  across at 360 px, where 3 did not fit). Field values wrap anywhere (long
+  emails).
 - The employee detail header did not wrap: "Tomar Acción" stuck out 9 px at
   360 px. The Admin Center quick links' icons shrank and their SVG covered the
   text at 200 %; they no longer shrink.
@@ -2727,9 +2731,16 @@ their e2e lands (ROADMAP). The forced MFA enrollment it also covered is in
   standalone server's `node_modules` or axe's mark in the client bundle fail
   the build; names that only contain "axe" (`get-font-axes.js`,
   `wasm-relaxed-simd.js`) do not.
-- The suite itself, run twice in a row on the production image: 49 passed,
-  130 axe scans with no WCAG violation, the scans of 173 files found no
-  secret, and the cleanup deleted 3 accounts and 2 factors each time.
+- The suite itself, run several times in a row on the production image, with
+  full Chrome and with the headless shell CI uses: 49 passed, 130 axe scans
+  with no WCAG violation, the scans of 179 files found no secret, and the
+  cleanup deleted 3 accounts and 2 factors each time.
+- The first CI run failed one zoom test: Habilidades at 1280 px with text at
+  200 %, two stat labels drawn on top of each other. Each label was 101 px
+  wider than its tile, but the neighbour's text started just 3 px further on
+  locally, under the overlap threshold, so only CI's slightly different text
+  widths crossed it. The zoom check now also fails on text wider than its own
+  box, which found the same defect in Desempeño; both grids were fixed.
 
 **Accepted for now:**
 - Icon-only navigation (the collapsed sidebar and the rail) with the root

@@ -69,7 +69,14 @@ export async function openProtected(page: Page, path: string): Promise<void> {
   await page.waitForLoadState("networkidle");
 }
 
-export type LayoutReport = { horizontalScroll: number; clipped: string[]; overlaps: string[]; offscreen: string[]; unreachable: string[] };
+export type LayoutReport = {
+  horizontalScroll: number;
+  clipped: string[];
+  spilled: string[];
+  overlaps: string[];
+  offscreen: string[];
+  unreachable: string[];
+};
 
 /**
  * What a reader would lose: horizontal scroll of the page, text cut by a box
@@ -119,12 +126,20 @@ export async function layoutProblems(page: Page): Promise<LayoutReport> {
     const horizontalScroll = Math.max(0, doc.scrollWidth - doc.clientWidth);
 
     const clipped: string[] = [];
+    // Text wider than its own box with visible overflow spills over whatever is
+    // next to it, even when the neighbour's text happens to start a few pixels
+    // further on (seen in CI: a stat label 101 px wider than its tile).
+    const spilled: string[] = [];
     for (const el of document.body.querySelectorAll("*")) {
       if (!shown(el) || !el.textContent?.trim()) continue;
       const s = getComputedStyle(el);
       const hidesX = s.overflowX === "hidden" || s.overflowX === "clip" || s.textOverflow === "ellipsis";
       const hidesY = s.overflowY === "hidden" || s.overflowY === "clip";
       if ((hidesX && el.scrollWidth > el.clientWidth + 1) || (hidesY && el.scrollHeight > el.clientHeight + 1)) clipped.push(describe(el));
+      const ownText = [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim());
+      if (ownText && s.overflowX === "visible" && !s.display.startsWith("inline") && el.scrollWidth > el.clientWidth + 1) {
+        spilled.push(`${describe(el)} "${el.textContent.trim().slice(0, 24)}"`);
+      }
     }
 
     const layerOf = (el: Element): Element | null => {
@@ -175,6 +190,7 @@ export async function layoutProblems(page: Page): Promise<LayoutReport> {
     return {
       horizontalScroll,
       clipped: [...new Set(clipped)],
+      spilled: [...new Set(spilled)],
       overlaps: [...new Set(overlaps)],
       offscreen: [...new Set(offscreen)],
       unreachable: [...new Set(unreachable)],

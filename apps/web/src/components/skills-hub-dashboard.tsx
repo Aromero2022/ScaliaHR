@@ -99,7 +99,7 @@ export default function SkillsHubDashboard({
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className={clsx("grid gap-4", isManager ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-4">
         <StatTile label={t.stats.assessed} value={assessedCount} />
         <StatTile label={t.stats.gaps} value={gapCount} accent="amber" />
         <StatTile label={t.stats.average} value={avgLevel} accent="indigo" />
