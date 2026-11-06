@@ -2421,14 +2421,17 @@ time picker of the 9c list waits for its first consumer (Phases 10 and 21).
   `(protected)/loading.tsx` uses it for every protected page.
 
 **Adoption:**
-- Login, dashboard, profile, the employee list (`Table`) and MFA enrollment.
+- Login, dashboard, profile, the employee list (`Table`) and detail (`Badge`)
+  and MFA enrollment.
 - The two hand-made modals without `role="dialog"`, focus trap or Esc move to
   `Dialog`, `Field`, `Button` and `Toast`: create role (role manager) and new
   goal and feedback (performance).
 - ARCO's stat cards and badges, and the Admin Center, whose view had two
   primaries ("Gestionar roles" becomes secondary).
 - Files this PR touches move their texts to `lib/i18n/es-MX.ts` (D42 rule):
-  performance, the role manager, the ARCO panel and the Admin Center page.
+  performance, the role manager and its page, the ARCO panel and the Admin
+  Center page. "Admin Center", "Role-Based Permissions" and "Talent Hub" leave
+  the interface and join the English-text test's list.
 
 **Menu names, without module codes,** from the es-MX module: Inicio,
 Empleados, Mi perfil, Organigrama, Desempeño, Formación, Habilidades, Derechos
@@ -2464,14 +2467,58 @@ long name or contained in it.
 **Dead code:** `lib/supabase/mfa.ts` and `components/loading.tsx` are
 deleted; nothing imported them.
 
-**Tests (planned):** jsdom unit tests for every component (the `Dialog` with a
-stubbed `<dialog>`, the `Field` ARIA, the `Toast` live region, pause and Esc,
-the `Table` cards, the `Badge` text and tones); the two static rules with
-negative controls; the badge tones against the D40 contrast pairs; the short
-menu labels. In the production image: reflow at 320, 360, 768 and 1280 px in
-light and dark, the keyboard in the three dialogs (focus inside, Esc, focus
-back on the opener), the toast announced, no CSP violation, no console error,
-and screenshots.
+**Implementation:**
+- `src/components/ui/`: `button.tsx`, `field.tsx`, `dialog.tsx`,
+  `stat-card.tsx` (with an optional decorative icon, for the Admin Center),
+  `badge.tsx` (`BADGE_TONES`, `ENUM_TONES`), `table.tsx`, `toast.tsx`
+  (`ToastProvider` in the protected layout, `useToast()`) and `skeleton.tsx`;
+  the skeleton CSS in `globals.css`.
+- The table's scroller is `relative`: without it, the visually hidden text of
+  a cell (absolute) escaped its `overflow` and made a 768 px page 131 px
+  wider. Between 768 and 1279 px a wide table scrolls inside its own box, as
+  WCAG 1.4.10 allows for data tables; the page never does.
+- In the cards, each label sits above its value at full width: a side column
+  of labels left 90 px for the values at 320 px.
+- The Admin Center's long configuration values and the role manager's
+  counters wrap at 320 px (they made those pages up to 622 px wider).
+
+**Tests:**
+- `__tests__/ui/components.test.ts` (jsdom): `Button` (primary by default,
+  44 px, `aria-busy` while loading), `Field` (label, hint and error tied, no
+  stray ARIA), `Dialog` (with a stubbed `<dialog>`: opened with
+  `showModal()`, named by its title, content only while open, the close button
+  and the native close event), `Badge` (the `enumLabel()` text; every tone is
+  a D40 text pair at 4.5:1 and its classes are exactly that pair; tones only
+  for real enum values), `StatCard`, `Table` (caption, `scope="col"`, cards
+  with `dt`/`dd`, actions at the foot, the empty text), `Toast` (polite status
+  region, closes after 5 s, pauses on hover and focus, Esc and its button) and
+  `Skeleton` (status text, and the CSS: opacity 0, 400 ms delay, no shimmer
+  with reduced motion).
+- `__tests__/static/one-primary-per-view.test.ts`: the rule above on every
+  `page.tsx` and every dialog. Negative controls with fixtures; run against
+  `origin/main`, it counts 2 primaries in the Admin Center and 3 in
+  performance, the two cases this PR fixes.
+- `__tests__/static/no-handmade-modals.test.ts`, with its negative control and
+  a check that the listed exception is still the D41 dialog.
+- `__tests__/navigation/shell.test.ts`: the menu names, no module codes, and
+  short labels compared with the long ones without case.
+- In the production image, with a browser: 7 pages × 320, 360, 768 and
+  1280 px × light and dark (56 loads) with no horizontal scroll, no CSP
+  violation, no console error and no redirect; the employee table as cards
+  under 768 px and a table from 768 px; the three dialogs with the keyboard at
+  1280 px light and 360 px dark (focus inside on opening, 25 Tab and
+  Shift+Tab presses never leave it, Esc closes, focus back on the opener); the
+  goal and role toasts announced in the live region.
+
+**Accepted for now:**
+- ARCO's two dialogs were already native `<dialog>` elements and keep their
+  own markup; they count as dialogs for the one-primary rule.
+- The employee search box (42 px) and the rate-limit form of the Admin Center
+  (28–30 px) are under 44 px, above the 24 px of WCAG 2.5.8; this PR did not
+  touch them.
+- The skeleton was not seen in the browser (the pages load in under 400 ms);
+  its CSS is checked by the unit test.
+- Creating a role is still a simulation; its toast says so.
 
 ---
 
