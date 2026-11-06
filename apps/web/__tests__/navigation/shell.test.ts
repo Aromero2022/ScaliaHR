@@ -34,10 +34,13 @@ describe("mobile dock (D41)", () => {
     expect(splitDock(all).more).toEqual([]);
   });
 
-  it("gives every module a short label for the dock", () => {
+  it("gives every module a short label for the dock whose pieces fit 320 px without being cut", () => {
     for (const item of NAV_ITEMS) {
-      expect(item.shortLabel.length, item.href).toBeGreaterThan(0);
-      expect(item.shortLabel.length, item.href).toBeLessThanOrEqual(12);
+      const text = item.shortLabel.replaceAll("\u00AD", "");
+      expect(text.length, item.href).toBeGreaterThan(0);
+      expect(item.label.startsWith(text.slice(0, 4)) || item.label.includes(text), item.href).toBe(true);
+      // 64 px per dock item at 320 px: up to 7 characters a line at 12 px (measured in Inter).
+      for (const piece of item.shortLabel.split("\u00AD")) expect(piece.length, `${item.href}: ${piece}`).toBeLessThanOrEqual(7);
     }
   });
 });

@@ -21,7 +21,7 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ auth: { signOut: vi.fn() } }) }));
 
-import { DockNav, RailNav, SidebarNav } from "@/components/navigation/app-navigation";
+import { DockNav, RailNav, SidebarNav, SignOutButton } from "@/components/navigation/app-navigation";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -142,6 +142,17 @@ describe("tablet rail (D41)", () => {
     expect(tooltip().className).toMatch(/(^|\s)hidden(\s|$)/);
     await act(async () => link.blur());
     expect(tooltip().className).not.toMatch(/(^|\s)hidden(\s|$)/);
+  });
+});
+
+describe("header sign-out on mobile (D41)", () => {
+  it("opens its tooltip below and toward the left, so it never widens a 320 px page (WCAG 1.4.10)", async () => {
+    await render(createElement(SignOutButton, { iconOnly: true, tooltipSide: "below" }));
+    const button = container.querySelector("button")!;
+    expect(accessibleText(button)).toBe("Cerrar sesión");
+    const tooltip = button.querySelector("[aria-hidden='true'].absolute")!;
+    expect(tooltip.className).toContain("right-0");
+    expect(tooltip.className).not.toContain("left-full");
   });
 });
 

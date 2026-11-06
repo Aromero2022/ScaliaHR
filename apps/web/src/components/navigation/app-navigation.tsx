@@ -58,12 +58,14 @@ const linkTone = (active: boolean) =>
  * (it sits inside the link), and hides with Esc (WCAG 1.4.13). It is
  * aria-hidden: the link's name comes from its visually hidden text.
  */
-function Tooltip({ text, hidden }: { text: string; hidden: boolean }) {
+function Tooltip({ text, hidden, side = "right" }: { text: string; hidden: boolean; side?: "right" | "below" }) {
   return (
     <span
       aria-hidden="true"
       className={clsx(
-        "absolute top-1/2 left-full z-50 -translate-y-1/2 pl-2",
+        "absolute z-50",
+        // "below" opens toward the left edge, so a button at the right of the screen never pushes the page wider.
+        side === "right" ? "top-1/2 left-full -translate-y-1/2 pl-2" : "top-full right-0 pt-2",
         hidden ? "hidden" : "invisible group-hover:visible group-focus-visible:visible",
       )}
     >
@@ -125,7 +127,7 @@ function useSignOut() {
   };
 }
 
-export function SignOutButton({ iconOnly = false }: { iconOnly?: boolean }) {
+export function SignOutButton({ iconOnly = false, tooltipSide = "right" }: { iconOnly?: boolean; tooltipSide?: "right" | "below" }) {
   const signOut = useSignOut();
   const tip = useTooltipDismiss();
   return (
@@ -142,7 +144,7 @@ export function SignOutButton({ iconOnly = false }: { iconOnly?: boolean }) {
       {iconOnly ? (
         <>
           <span className="sr-only">Cerrar sesión</span>
-          <Tooltip text="Cerrar sesión" hidden={tip.dismissed} />
+          <Tooltip text="Cerrar sesión" hidden={tip.dismissed} side={tooltipSide} />
         </>
       ) : (
         <span>Cerrar sesión</span>
@@ -251,7 +253,7 @@ export function DockNav({ items }: { items: ShellNavItem[] }) {
             <li key={item.href} className="min-w-0 flex-1">
               <Link href={item.href} aria-current={active ? "page" : undefined} className={dockItemClass(active)}>
                 <NavIcon href={item.href} active={active} />
-                <span className="max-w-full truncate">{item.shortLabel}</span>
+                <span className="max-w-full text-center leading-tight hyphens-manual">{item.shortLabel}</span>
               </Link>
             </li>
           );

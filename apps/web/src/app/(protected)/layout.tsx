@@ -62,7 +62,7 @@ export default async function ProtectedLayout({
         <span className="text-lg font-bold text-fg">Scalia HR</span>
         {/* Under 768 px the dock has no room for it; the rail and the sidebar carry their own. */}
         <div className="ml-auto md:hidden">
-          <SignOutButton iconOnly />
+          <SignOutButton iconOnly tooltipSide="below" />
         </div>
       </header>
       <div className="flex">
