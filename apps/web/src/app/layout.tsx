@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { connection } from "next/server";
 import { NONCE_HEADER } from "@/lib/security/csp";
 import { DEFAULT_THEME_ATTRIBUTES, DEFAULT_THEME_CSS, THEME_BOOT_SCRIPT } from "@/lib/theme";
+import { messages } from "@/lib/i18n/es-MX";
 import "./globals.css";
 
 // D40: Inter (SIL OFL 1.1, src/fonts/inter/OFL.txt), served from the app's own
@@ -16,8 +17,8 @@ const inter = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Scalia HR — Enterprise HCM",
-  description: "SAP SuccessFactors-class Human Capital Management",
+  title: messages.app.name,
+  description: messages.app.tagline,
 };
 
 // D41: viewport-fit=cover lets the mobile dock pad itself with env(safe-area-inset-bottom).

@@ -8,6 +8,7 @@ import AccessDenied from "@/components/access-denied";
 import OrgTree from "@/components/org-tree";
 import type { PositionNode } from "@/components/org-tree";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { messages } from "@/lib/i18n/es-MX";
 
 export default async function OrgChartPage() {
   const claims = await requireAuth();
@@ -64,11 +65,10 @@ export default async function OrgChartPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-fg">
-          Organigrama — Position Management
+          {messages.orgChart.heading}
         </h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Estructura jerárquica basada en posiciones ({totalPositions}{" "}
-          posiciones, {vacantCount} vacantes)
+          {messages.orgChart.summary(totalPositions, vacantCount)}
         </p>
       </div>
 

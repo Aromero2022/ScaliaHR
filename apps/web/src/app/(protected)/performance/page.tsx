@@ -9,6 +9,8 @@ import AccessDenied from "@/components/access-denied";
 import PerformanceDashboard from "@/components/performance-dashboard";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { z } from "zod";
+import { formatDateOnly, formatInstant } from "@/lib/format/dates";
+import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
 
 // D38: the feedback list is paged; the recipient is searched, not listed.
 const FEEDBACK_PAGE_SIZE = 20;
@@ -23,7 +25,7 @@ interface GoalRow {
   actual_value: number | null;
   weight: number | null;
   status: string;
-  due_date: string | null;
+  dueLabel: string | null;
   progress_percentage: number;
   period_start: string;
   period_end: string;
@@ -81,6 +83,8 @@ export default async function PerformancePage({
       .range((feedbackPage - 1) * FEEDBACK_PAGE_SIZE, feedbackPage * FEEDBACK_PAGE_SIZE - 1),
   ]);
 
+  // D42: dates are formatted here, on the server; due_date is a calendar date, created_at a moment.
+  const { timeZone } = await getTenantTimeZone(claims.tenantId);
   const goals: GoalRow[] = (goalsRes.data ?? []).map((g) => ({
     id: g.id as string,
     title: g.title as string,
@@ -90,7 +94,7 @@ export default async function PerformancePage({
     actual_value: g.actual_value as number | null,
     weight: g.weight as number | null,
     status: g.status as string,
-    due_date: g.due_date as string | null,
+    dueLabel: g.due_date ? formatDateOnly(g.due_date as string) : null,
     progress_percentage: (g.progress_percentage as number) ?? 0,
     period_start: g.period_start as string,
     period_end: g.period_end as string,
@@ -105,7 +109,7 @@ export default async function PerformancePage({
       content: fb.content,
       visibility: fb.visibility,
       category: fb.category,
-      created_at: fb.created_at,
+      createdLabel: formatInstant(fb.created_at, timeZone),
       author: author ?? null,
       subject: subject ?? null,
       is_author: fb.author_id === bizUser.id,

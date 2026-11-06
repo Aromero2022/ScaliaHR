@@ -7,18 +7,16 @@ import { can } from "@/lib/authz/can";
 import AccessDenied from "@/components/access-denied";
 import EmployeeHistory from "@/components/employee-history";
 import ActionMenu from "./action-menu";
+import { enumLabel, messages } from "@/lib/i18n/es-MX";
+import { calendarDateIn, formatDateOnly } from "@/lib/format/dates";
+import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
 
-function fmtDate(d: string | null | undefined): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("es-MX", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+const t = messages.employeeDetail;
+const fields = messages.fields;
+const empty = messages.common.empty;
 
 function fmtMoney(n: number | null | undefined, currency = "MXN"): string {
-  if (n == null) return "—";
+  if (n == null) return empty;
   return new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency,
@@ -26,12 +24,13 @@ function fmtMoney(n: number | null | undefined, currency = "MXN"): string {
   }).format(n);
 }
 
-const frequencyLabels: Record<string, string> = {
-  monthly: "Mensual",
-  biweekly: "Quincenal",
-  weekly: "Semanal",
-  annual: "Anual",
-};
+/** D42: the history shows calendar dates (start_date and end_date are `date`), formatted here on the server. */
+function historyPeriod(start: string, end: string | null): { period: string; isCurrent: boolean } {
+  return {
+    period: end ? `${formatDateOnly(start)} → ${formatDateOnly(end)}` : formatDateOnly(start),
+    isCurrent: end === null,
+  };
+}
 
 export default async function EmployeeDetailPage({
   params,
@@ -119,7 +118,7 @@ export default async function EmployeeDetailPage({
       .order("start_date", { ascending: false }),
   ]);
 
-  let managerName = "—";
+  let managerName: string = empty;
   if (jobCurrent?.manager_id) {
     const { data: mgr } = await supabase
       .from("users")
@@ -130,6 +129,7 @@ export default async function EmployeeDetailPage({
   }
 
   const canViewComp = adminView.allowed || teamView.allowed;
+  const today = calendarDateIn((await getTenantTimeZone(claims.tenantId)).timeZone);
 
   function rel(obj: unknown): Record<string, string> | null {
     if (!obj) return null;
@@ -139,46 +139,43 @@ export default async function EmployeeDetailPage({
 
   const personalHistoryRecords = (personalHistory ?? []).map((r) => ({
     id: r.id as string,
-    start_date: r.start_date as string,
-    end_date: r.end_date as string | null,
-    event_reason: r.event_reason as string | null,
+    ...historyPeriod(r.start_date as string, r.end_date as string | null),
+    eventReason: r.event_reason as string | null,
     fields: [
-      { label: "Nombre", value: `${r.first_name} ${r.last_name}` },
-      { label: "Teléfono", value: r.phone ?? "—" },
-      { label: "Email personal", value: r.personal_email ?? "—" },
-      { label: "Nacionalidad", value: r.nationality ?? "—" },
-      { label: "Nacimiento", value: fmtDate(r.date_of_birth) },
-      { label: "Género", value: r.gender ?? "—" },
-      { label: "Estado civil", value: r.marital_status ?? "—" },
+      { label: fields.firstName, value: `${r.first_name} ${r.last_name}` },
+      { label: fields.phone, value: r.phone ?? empty },
+      { label: fields.personalEmail, value: r.personal_email ?? empty },
+      { label: fields.nationality, value: r.nationality ?? empty },
+      { label: fields.birth, value: formatDateOnly(r.date_of_birth) },
+      { label: fields.gender, value: r.gender ?? empty },
+      { label: fields.maritalStatus, value: r.marital_status ?? empty },
     ],
   }));
 
   const jobHistoryRecords = (jobHistory ?? []).map((r) => ({
     id: r.id as string,
-    start_date: r.start_date as string,
-    end_date: r.end_date as string | null,
-    event_reason: r.event_reason as string | null,
+    ...historyPeriod(r.start_date as string, r.end_date as string | null),
+    eventReason: r.event_reason as string | null,
     fields: [
-      { label: "Puesto", value: r.job_title ?? "—" },
-      { label: "Posición", value: rel(r.positions)?.title ?? "—" },
-      { label: "Departamento", value: rel(r.departments)?.name ?? "—" },
-      { label: "Clasificación", value: rel(r.job_classifications)?.title ?? "—" },
-      { label: "Ubicación", value: rel(r.locations)?.name ?? "—" },
-      { label: "Unidad de negocio", value: rel(r.business_units)?.name ?? "—" },
-      { label: "Entidad legal", value: rel(r.legal_entities)?.name ?? "—" },
+      { label: fields.jobTitle, value: r.job_title ?? empty },
+      { label: fields.position, value: rel(r.positions)?.title ?? empty },
+      { label: fields.department, value: rel(r.departments)?.name ?? empty },
+      { label: fields.classification, value: rel(r.job_classifications)?.title ?? empty },
+      { label: fields.location, value: rel(r.locations)?.name ?? empty },
+      { label: fields.businessUnit, value: rel(r.business_units)?.name ?? empty },
+      { label: fields.legalEntity, value: rel(r.legal_entities)?.name ?? empty },
     ],
   }));
 
   const compHistoryRecords = (compHistory ?? []).map((r) => ({
     id: r.id as string,
-    start_date: r.start_date as string,
-    end_date: r.end_date as string | null,
-    event_reason: r.event_reason as string | null,
+    ...historyPeriod(r.start_date as string, r.end_date as string | null),
+    eventReason: r.event_reason as string | null,
     fields: [
-      { label: "Salario base", value: fmtMoney(r.base_salary, r.currency) },
-      { label: "Moneda", value: r.currency ?? "MXN" },
-      { label: "Frecuencia", value: frequencyLabels[r.frequency] ?? r.frequency },
-      { label: "Bono objetivo", value: r.bonus_target != null ? `${r.bonus_target}%` : "—" },
+      { label: fields.baseSalary, value: fmtMoney(r.base_salary, r.currency) },
+      { label: fields.currency, value: r.currency ?? "MXN" },
+      { label: fields.frequency, value: enumLabel("pay_frequency", r.frequency) },
+      { label: fields.bonusTarget, value: r.bonus_target != null ? `${r.bonus_target}%` : empty },
     ],
   }));
 
@@ -204,110 +201,110 @@ export default async function EmployeeDetailPage({
               {employee.first_name} {employee.last_name}
             </h1>
             <p className="mt-0.5 text-sm text-fg-muted">
-              {jobCurrent?.job_title ?? "Sin puesto"} &middot;{" "}
-              {rel(employee.departments)?.name ?? "Sin departamento"}
+              {jobCurrent?.job_title ?? messages.common.noJob} &middot;{" "}
+              {rel(employee.departments)?.name ?? messages.common.noDepartment}
             </p>
           </div>
           <span
             className={`ml-2 self-start rounded-full px-3 py-1 text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}
           >
-            {employee.status}
+            {enumLabel("EmployeeStatus", employee.status as string)}
           </span>
         </div>
-        {adminView.allowed && <ActionMenu employeeId={id} />}
+        {adminView.allowed && <ActionMenu employeeId={id} today={today} />}
       </div>
 
       <section className="rounded-xl border border-line bg-surface p-6">
         <h2 className="mb-4 text-lg font-semibold text-fg">
-          Información Personal
+          {t.personalInformation}
         </h2>
         {personalCurrent ? (
           <>
             <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label="Nombre" value={personalCurrent.first_name} />
-              <Field label="Apellido" value={personalCurrent.last_name} />
-              <Field label="Email" value={employee.email as string} />
-              <Field label="Teléfono" value={personalCurrent.phone ?? "—"} />
-              <Field label="Email personal" value={personalCurrent.personal_email ?? "—"} />
-              <Field label="Nacionalidad" value={personalCurrent.nationality ?? "—"} />
-              <Field label="Fecha de nacimiento" value={fmtDate(personalCurrent.date_of_birth)} />
-              <Field label="Género" value={personalCurrent.gender ?? "—"} />
-              <Field label="Estado civil" value={personalCurrent.marital_status ?? "—"} />
-              <Field label="CURP / ID Nacional" value={personalCurrent.national_id ?? "—"} />
-              <Field label="RFC / Tax ID" value={personalCurrent.tax_id ?? "—"} />
-              <Field label="IMSS" value={personalCurrent.imss_number ?? "—"} />
+              <Field label={fields.firstName} value={personalCurrent.first_name} />
+              <Field label={fields.lastName} value={personalCurrent.last_name} />
+              <Field label={fields.email} value={employee.email as string} />
+              <Field label={fields.phone} value={personalCurrent.phone ?? empty} />
+              <Field label={fields.personalEmail} value={personalCurrent.personal_email ?? empty} />
+              <Field label={fields.nationality} value={personalCurrent.nationality ?? empty} />
+              <Field label={fields.birthDate} value={formatDateOnly(personalCurrent.date_of_birth)} />
+              <Field label={fields.gender} value={personalCurrent.gender ?? empty} />
+              <Field label={fields.maritalStatus} value={personalCurrent.marital_status ?? empty} />
+              <Field label={fields.nationalId} value={personalCurrent.national_id ?? empty} />
+              <Field label={fields.taxId} value={personalCurrent.tax_id ?? empty} />
+              <Field label={fields.imss} value={personalCurrent.imss_number ?? empty} />
             </dl>
             {(personalCurrent.address_line1 || personalCurrent.city) && (
               <div className="mt-4 border-t border-line pt-4">
                 <h3 className="mb-3 text-sm font-medium text-fg-muted">
-                  Dirección
+                  {t.address}
                 </h3>
                 <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <Field label="Calle" value={personalCurrent.address_line1 ?? "—"} />
-                  <Field label="Calle 2" value={personalCurrent.address_line2 ?? "—"} />
-                  <Field label="Ciudad" value={personalCurrent.city ?? "—"} />
-                  <Field label="Estado" value={personalCurrent.state ?? "—"} />
-                  <Field label="C.P." value={personalCurrent.postal_code ?? "—"} />
-                  <Field label="País" value={personalCurrent.country ?? "—"} />
+                  <Field label={fields.street} value={personalCurrent.address_line1 ?? empty} />
+                  <Field label={fields.street2} value={personalCurrent.address_line2 ?? empty} />
+                  <Field label={fields.city} value={personalCurrent.city ?? empty} />
+                  <Field label={fields.state} value={personalCurrent.state ?? empty} />
+                  <Field label={fields.postalCode} value={personalCurrent.postal_code ?? empty} />
+                  <Field label={fields.country} value={personalCurrent.country ?? empty} />
                 </dl>
               </div>
             )}
             {personalCurrent.emergency_contact_name && (
               <div className="mt-4 border-t border-line pt-4">
                 <h3 className="mb-3 text-sm font-medium text-fg-muted">
-                  Contacto de emergencia
+                  {t.emergencyContact}
                 </h3>
                 <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                  <Field label="Nombre" value={personalCurrent.emergency_contact_name ?? "—"} />
-                  <Field label="Teléfono" value={personalCurrent.emergency_contact_phone ?? "—"} />
+                  <Field label={fields.firstName} value={personalCurrent.emergency_contact_name ?? empty} />
+                  <Field label={fields.phone} value={personalCurrent.emergency_contact_phone ?? empty} />
                 </dl>
               </div>
             )}
             <EmployeeHistory
               records={personalHistoryRecords}
-              label="información personal"
+              label={t.historyOf.personal}
             />
           </>
         ) : (
           <p className="text-sm text-fg-subtle">
-            Sin información personal registrada.
+            {t.noPersonalInformation}
           </p>
         )}
       </section>
 
       <section className="rounded-xl border border-line bg-surface p-6">
         <h2 className="mb-4 text-lg font-semibold text-fg">
-          Información Laboral
+          {t.jobInformation}
         </h2>
         {jobCurrent ? (
           <>
             <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label="Puesto" value={jobCurrent.job_title ?? "—"} />
+              <Field label={fields.jobTitle} value={jobCurrent.job_title ?? empty} />
               <Field
-                label="Posición"
+                label={fields.position}
                 value={
                   rel(jobCurrent.positions)
                     ? `${rel(jobCurrent.positions)!.title} (${rel(jobCurrent.positions)!.position_code})`
-                    : "—"
+                    : empty
                 }
               />
-              <Field label="Departamento" value={rel(jobCurrent.departments)?.name ?? "—"} />
-              <Field label="Clasificación" value={rel(jobCurrent.job_classifications)?.title ?? "—"} />
-              <Field label="Manager" value={managerName} />
-              <Field label="Ubicación" value={rel(jobCurrent.locations)?.name ?? "—"} />
-              <Field label="Unidad de negocio" value={rel(jobCurrent.business_units)?.name ?? "—"} />
-              <Field label="Entidad legal" value={rel(jobCurrent.legal_entities)?.name ?? "—"} />
-              <Field label="Fecha efectiva" value={fmtDate(jobCurrent.start_date)} />
-              <Field label="Motivo" value={jobCurrent.event_reason ?? "—"} />
+              <Field label={fields.department} value={rel(jobCurrent.departments)?.name ?? empty} />
+              <Field label={fields.classification} value={rel(jobCurrent.job_classifications)?.title ?? empty} />
+              <Field label={fields.manager} value={managerName} />
+              <Field label={fields.location} value={rel(jobCurrent.locations)?.name ?? empty} />
+              <Field label={fields.businessUnit} value={rel(jobCurrent.business_units)?.name ?? empty} />
+              <Field label={fields.legalEntity} value={rel(jobCurrent.legal_entities)?.name ?? empty} />
+              <Field label={fields.effectiveDate} value={formatDateOnly(jobCurrent.start_date)} />
+              <Field label={fields.reason} value={jobCurrent.event_reason ?? empty} />
             </dl>
             <EmployeeHistory
               records={jobHistoryRecords}
-              label="información laboral"
+              label={t.historyOf.job}
             />
           </>
         ) : (
           <p className="text-sm text-fg-subtle">
-            Sin información laboral registrada.
+            {t.noJobInformation}
           </p>
         )}
       </section>
@@ -315,36 +312,36 @@ export default async function EmployeeDetailPage({
       {canViewComp && (
         <section className="rounded-xl border border-line bg-surface p-6">
           <h2 className="mb-4 text-lg font-semibold text-fg">
-            Compensación
+            {t.compensation}
           </h2>
           {compCurrent ? (
             <>
               <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Field
-                  label="Salario base"
+                  label={fields.baseSalary}
                   value={fmtMoney(compCurrent.base_salary, compCurrent.currency)}
                 />
-                <Field label="Moneda" value={compCurrent.currency ?? "MXN"} />
+                <Field label={fields.currency} value={compCurrent.currency ?? "MXN"} />
                 <Field
-                  label="Frecuencia de pago"
-                  value={frequencyLabels[compCurrent.frequency] ?? compCurrent.frequency}
+                  label={fields.payFrequency}
+                  value={enumLabel("pay_frequency", compCurrent.frequency)}
                 />
                 <Field
-                  label="Bono objetivo"
-                  value={compCurrent.bonus_target != null ? `${compCurrent.bonus_target}%` : "—"}
+                  label={fields.bonusTarget}
+                  value={compCurrent.bonus_target != null ? `${compCurrent.bonus_target}%` : empty}
                 />
-                <Field label="Grupo de pago" value={compCurrent.pay_group ?? "—"} />
-                <Field label="Fecha efectiva" value={fmtDate(compCurrent.start_date)} />
-                <Field label="Motivo" value={compCurrent.event_reason ?? "—"} />
+                <Field label={fields.payGroup} value={compCurrent.pay_group ?? empty} />
+                <Field label={fields.effectiveDate} value={formatDateOnly(compCurrent.start_date)} />
+                <Field label={fields.reason} value={compCurrent.event_reason ?? empty} />
               </dl>
               <EmployeeHistory
                 records={compHistoryRecords}
-                label="compensación"
+                label={t.historyOf.compensation}
               />
             </>
           ) : (
             <p className="text-sm text-fg-subtle">
-              Sin información de compensación registrada.
+              {t.noCompensation}
             </p>
           )}
         </section>

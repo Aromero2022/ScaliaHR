@@ -1,11 +1,12 @@
 import { createClient } from "./server";
 import { safeError } from "@/lib/errors/safe-error";
+import { messages } from "@/lib/i18n/es-MX";
 
 export async function enrollTotp() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.mfa.enroll({
     factorType: "totp",
-    friendlyName: "Authenticator App",
+    friendlyName: messages.mfaEnroll.factorName,
   });
 
   if (error) return { error: await safeError("mfa.enrollTotp", error) };

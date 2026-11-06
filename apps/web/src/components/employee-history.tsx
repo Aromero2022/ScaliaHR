@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { messages } from "@/lib/i18n/es-MX";
 
+/** D42: the period comes formatted from the server; this component never formats dates. */
 type HistoryRecord = {
   id: string;
-  start_date: string;
-  end_date: string | null;
-  event_reason: string | null;
+  period: string;
+  isCurrent: boolean;
+  eventReason: string | null;
   fields: { label: string; value: string }[];
 };
 
@@ -40,7 +42,7 @@ export default function EmployeeHistory({
             d="M8.25 4.5l7.5 7.5-7.5 7.5"
           />
         </svg>
-        Ver historial de {label} ({records.length} registros)
+        {messages.history.show(label, records.length)}
       </button>
 
       {open && (
@@ -50,17 +52,16 @@ export default function EmployeeHistory({
               <div className="absolute -left-[31px] top-1 h-3 w-3 rounded-full border-2 border-line bg-surface" />
               <div className="flex items-center gap-3 mb-2">
                 <span className="text-xs font-medium text-fg-muted">
-                  {r.start_date}
-                  {r.end_date ? ` → ${r.end_date}` : ""}
+                  {r.period}
                 </span>
-                {idx === 0 && !r.end_date && (
+                {idx === 0 && r.isCurrent && (
                   <span className="rounded-full bg-success-subtle px-2 py-0.5 text-xs font-medium text-success-fg">
-                    Vigente
+                    {messages.history.current}
                   </span>
                 )}
-                {r.event_reason && (
+                {r.eventReason && (
                   <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs text-fg-muted">
-                    {r.event_reason}
+                    {r.eventReason}
                   </span>
                 )}
               </div>

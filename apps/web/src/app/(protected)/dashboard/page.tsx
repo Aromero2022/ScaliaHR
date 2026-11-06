@@ -2,6 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/supabase/claims";
 import { can } from "@/lib/authz/can";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { enumLabel, messages } from "@/lib/i18n/es-MX";
+import { formatDateOnly } from "@/lib/format/dates";
+
+const t = messages.dashboard;
+const fields = messages.fields;
 
 export default async function DashboardPage() {
   const claims = await requireAuth();
@@ -18,7 +23,7 @@ export default async function DashboardPage() {
   if (!profile) {
     return (
       <div className="text-fg-muted">
-        No se encontró perfil de usuario. Contacte al administrador.
+        {t.noProfile}
       </div>
     );
   }
@@ -57,11 +62,11 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-fg">
-          Bienvenido, {profile.first_name}
+          {t.welcome(profile.first_name)}
         </h1>
         <p className="mt-1 text-sm text-fg-muted">
-          {currentJob?.job_title ?? "Sin puesto asignado"} &middot;{" "}
-          {dept?.name ?? "Sin departamento"}
+          {currentJob?.job_title ?? messages.common.noJobAssigned} &middot;{" "}
+          {dept?.name ?? messages.common.noDepartment}
         </p>
       </div>
 
@@ -70,25 +75,25 @@ export default async function DashboardPage() {
         {canViewTenantKpis && (
           <>
             <KpiCard
-              label="Empleados Activos"
+              label={t.activeEmployees}
               value={totalEmployees ?? 0}
               accent="indigo"
             />
             <KpiCard
-              label="Departamentos"
+              label={t.departments}
               value={totalDepts ?? 0}
               accent="emerald"
             />
           </>
         )}
         <KpiCard
-          label="Performance Score"
-          value={profile.performance_score ?? "—"}
+          label={t.performanceScore}
+          value={profile.performance_score ?? messages.common.empty}
           accent="amber"
         />
         <KpiCard
-          label="Potential Score"
-          value={profile.potential_score ?? "—"}
+          label={t.potentialScore}
+          value={profile.potential_score ?? messages.common.empty}
           accent="violet"
         />
       </div>
@@ -96,23 +101,23 @@ export default async function DashboardPage() {
       {/* Profile Summary */}
       <section className="rounded-xl border border-line bg-surface p-6">
         <h2 className="mb-4 text-lg font-semibold text-fg">
-          Mi Información
+          {t.myInformation}
         </h2>
         <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Nombre completo" value={`${profile.first_name} ${profile.last_name}`} />
-          <Field label="Email" value={profile.email} />
-          <Field label="Employee ID" value={profile.employee_id ?? "—"} />
-          <Field label="Estado" value={profile.status} />
-          <Field label="Fecha de ingreso" value={profile.hire_date ? new Date(profile.hire_date).toLocaleDateString("es-ES") : "—"} />
-          <Field label="Puesto" value={currentJob?.job_title ?? "—"} />
-          <Field label="Departamento" value={dept?.name ?? "—"} />
+          <Field label={fields.fullName} value={`${profile.first_name} ${profile.last_name}`} />
+          <Field label={fields.email} value={profile.email} />
+          <Field label={fields.employeeNumber} value={profile.employee_id ?? messages.common.empty} />
+          <Field label={fields.status} value={enumLabel("EmployeeStatus", profile.status)} />
+          <Field label={fields.hireDate} value={formatDateOnly(profile.hire_date)} />
+          <Field label={fields.jobTitle} value={currentJob?.job_title ?? messages.common.empty} />
+          <Field label={fields.department} value={dept?.name ?? messages.common.empty} />
         </dl>
       </section>
 
       {/* Goals */}
       <section className="rounded-xl border border-line bg-surface p-6">
         <h2 className="mb-4 text-lg font-semibold text-fg">
-          Mis Objetivos (PMGM)
+          {t.myGoals}
         </h2>
         {recentGoals && recentGoals.length > 0 ? (
           <div className="space-y-3">
@@ -124,7 +129,7 @@ export default async function DashboardPage() {
                 <div>
                   <p className="font-medium text-fg">{g.title}</p>
                   <p className="text-xs text-fg-subtle">
-                    {g.period_start} → {g.period_end}
+                    {formatDateOnly(g.period_start)} → {formatDateOnly(g.period_end)}
                   </p>
                 </div>
                 <GoalBadge status={g.status} />
@@ -133,7 +138,7 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <p className="text-sm text-fg-subtle">
-            No hay objetivos registrados aún.
+            {t.noGoals}
           </p>
         )}
       </section>
@@ -201,7 +206,7 @@ function GoalBadge({ status }: { status: string }) {
     <span
       className={`rounded-full px-3 py-1 text-xs font-medium ${style.bg} ${style.text}`}
     >
-      {status.replace("_", " ")}
+      {enumLabel("GoalStatus", status)}
     </span>
   );
 }

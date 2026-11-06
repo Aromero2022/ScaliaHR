@@ -1,5 +1,7 @@
 "use client";
 
+import { messages } from "@/lib/i18n/es-MX";
+
 export interface PositionNode {
   id: string;
   position_code: string;
@@ -29,7 +31,7 @@ export default function OrgTree({ positions }: TreeProps) {
   if (roots.length === 0) {
     return (
       <p className="text-sm text-fg-subtle">
-        No hay datos de organigrama disponibles.
+        {messages.orgChart.empty}
       </p>
     );
   }
@@ -86,12 +88,12 @@ function PositionCard({ node, depth }: { node: PositionNode; depth: number }) {
           ?
         </div>
         <p className="mt-2 text-sm font-semibold text-warning-fg">
-          Vacante
+          {messages.orgChart.vacant}
         </p>
         <p className="text-xs text-fg-muted">{node.title}</p>
         <p className="text-xs text-fg-subtle">{node.department_name ?? ""}</p>
         <span className="mt-2 inline-block rounded-full bg-warning-subtle px-2 py-0.5 text-[10px] font-medium text-warning-fg">
-          To Be Hired
+          {messages.orgChart.toBeHired}
         </span>
       </div>
     );

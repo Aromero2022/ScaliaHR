@@ -11,6 +11,8 @@ type SelectOption = { id: string; label: string };
 
 type ActionModalProps = {
   employeeId: string;
+  /** D42: today's date (YYYY-MM-DD) in the tenant's time zone, from the server. */
+  today: string;
   employeeName: string;
   positions: SelectOption[];
   departments: SelectOption[];
@@ -37,6 +39,7 @@ type ActionType = "job" | "compensation" | "personal" | null;
 
 export default function ActionModal({
   employeeId,
+  today,
   employeeName,
   positions,
   departments,
@@ -141,8 +144,6 @@ export default function ActionModal({
       }
     });
   }
-
-  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <>

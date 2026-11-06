@@ -5,6 +5,8 @@ import { can } from "@/lib/authz/can";
 import Link from "next/link";
 import { z } from "zod";
 import ArcoPanel from "./arco-panel";
+import { calendarDateIn, formatDateOnly, formatInstant } from "@/lib/format/dates";
+import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
 
 // D38: the request list is paged; the subject is searched, not listed.
 const ARCO_PAGE_SIZE = 20;
@@ -51,6 +53,10 @@ export default async function ArcoPage({
     .range((page - 1) * ARCO_PAGE_SIZE, page * ARCO_PAGE_SIZE - 1);
   const pages = Math.max(1, Math.ceil((count ?? 0) / ARCO_PAGE_SIZE));
 
+  // D42: due_date is a calendar date; created_at and completed_at are moments in the tenant's zone.
+  // A request is overdue once its due date has passed in that zone.
+  const { timeZone } = await getTenantTimeZone(claims.tenantId);
+  const today = calendarDateIn(timeZone);
   const rows = (requests ?? []).map((r) => {
     const req = r.requester as { first_name: string; last_name: string } | null;
     const sub = r.subject as {
@@ -65,9 +71,10 @@ export default async function ArcoPage({
       description: r.description as string,
       resolutionNotes: r.resolution_notes as string | null,
       exportHash: r.export_hash as string | null,
-      dueDate: r.due_date as string,
-      completedAt: r.completed_at as string | null,
-      createdAt: r.created_at as string,
+      dueLabel: formatDateOnly(r.due_date as string),
+      completedLabel: r.completed_at ? formatInstant(r.completed_at as string, timeZone, { withTime: false }) : null,
+      createdLabel: formatInstant(r.created_at as string, timeZone, { withTime: false }),
+      isOverdue: (r.status === "pending" || r.status === "in_progress") && (r.due_date as string) < today,
       requesterName: req ? `${req.first_name} ${req.last_name}` : "—",
       subjectName: sub ? `${sub.first_name} ${sub.last_name}` : "—",
       subjectEmail: sub?.email ?? "—",

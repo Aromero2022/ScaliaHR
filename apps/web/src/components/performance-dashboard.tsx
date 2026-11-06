@@ -4,6 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import PersonSearch from "@/components/person-search";
 import { createGoal, sendFeedback } from "@/app/(protected)/performance/actions";
+import { ENUM_LABELS, enumLabel } from "@/lib/i18n/es-MX";
+
+// D42: dates arrive formatted by the server (dueLabel, createdLabel); this client component never formats them.
 
 interface GoalRow {
   id: string;
@@ -14,7 +17,7 @@ interface GoalRow {
   actual_value: number | null;
   weight: number | null;
   status: string;
-  due_date: string | null;
+  dueLabel: string | null;
   progress_percentage: number;
   period_start: string;
   period_end: string;
@@ -25,7 +28,7 @@ interface FeedbackRow {
   content: string;
   visibility: string;
   category: string;
-  created_at: string;
+  createdLabel: string;
   author: { first_name: string; last_name: string } | null;
   subject: { first_name: string; last_name: string } | null;
   is_author: boolean;
@@ -39,19 +42,19 @@ interface Props {
   feedbackPageSize: number;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  NOT_STARTED: { label: "Sin Iniciar", color: "text-fg-muted", bg: "bg-surface-strong" },
-  ON_TRACK: { label: "En Curso", color: "text-success-fg", bg: "bg-success" },
-  AT_RISK: { label: "En Riesgo", color: "text-warning-fg", bg: "bg-warning" },
-  COMPLETED: { label: "Completado", color: "text-info-fg", bg: "bg-info" },
-  CANCELLED: { label: "Cancelado", color: "text-danger-fg", bg: "bg-danger" },
+const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
+  NOT_STARTED: { color: "text-fg-muted", bg: "bg-surface-strong" },
+  ON_TRACK: { color: "text-success-fg", bg: "bg-success" },
+  AT_RISK: { color: "text-warning-fg", bg: "bg-warning" },
+  COMPLETED: { color: "text-info-fg", bg: "bg-info" },
+  CANCELLED: { color: "text-danger-fg", bg: "bg-danger" },
 };
 
-const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
-  GENERAL: { label: "General", color: "text-fg-muted" },
-  RECOGNITION: { label: "Reconocimiento", color: "text-success-fg" },
-  COACHING: { label: "Coaching", color: "text-warning-fg" },
-  DEVELOPMENT: { label: "Desarrollo", color: "text-accent-fg" },
+const CATEGORY_CONFIG: Record<string, { color: string }> = {
+  GENERAL: { color: "text-fg-muted" },
+  RECOGNITION: { color: "text-success-fg" },
+  COACHING: { color: "text-warning-fg" },
+  DEVELOPMENT: { color: "text-accent-fg" },
 };
 
 export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, feedbackPage, feedbackPageSize }: Props) {
@@ -216,9 +219,6 @@ function ProgressRing({ percentage, status }: { percentage: number; status: stri
 
 function GoalCard({ goal }: { goal: GoalRow }) {
   const config = STATUS_CONFIG[goal.status] || STATUS_CONFIG.NOT_STARTED;
-  const dueStr = goal.due_date
-    ? new Date(goal.due_date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })
-    : null;
 
   return (
     <div className="flex items-start gap-4 rounded-xl border border-line bg-surface p-5">
@@ -227,7 +227,7 @@ function GoalCard({ goal }: { goal: GoalRow }) {
         <div className="flex items-center gap-2">
           <h3 className="truncate font-medium text-fg">{goal.title}</h3>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${config.color} bg-surface-raised`}>
-            {config.label}
+            {enumLabel("GoalStatus", goal.status)}
           </span>
         </div>
         {goal.description && (
@@ -242,7 +242,7 @@ function GoalCard({ goal }: { goal: GoalRow }) {
             </span>
           )}
           {goal.weight != null && <span>Peso: {Math.round(goal.weight * 100)}%</span>}
-          {dueStr && <span>Vence: {dueStr}</span>}
+          {goal.dueLabel && <span>Vence: {goal.dueLabel}</span>}
         </div>
         {/* Progress Bar */}
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-raised">
@@ -264,22 +264,19 @@ function FeedbackCard({ feedback }: { feedback: FeedbackRow }) {
   const subjectName = feedback.subject
     ? `${feedback.subject.first_name} ${feedback.subject.last_name}`
     : "Desconocido";
-  const dateStr = new Date(feedback.created_at).toLocaleDateString("es-MX", {
-    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
-  });
 
   return (
     <div className="rounded-xl border border-line bg-surface p-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className={`rounded-full bg-surface-raised px-2.5 py-0.5 text-[10px] font-medium ${catConfig.color}`}>
-            {catConfig.label}
+            {enumLabel("FeedbackCategory", feedback.category)}
           </span>
           <span className="rounded-full bg-surface-raised px-2.5 py-0.5 text-[10px] font-medium text-fg-muted">
-            {feedback.visibility === "PUBLIC" ? "Público" : feedback.visibility === "MANAGER_ONLY" ? "Solo Gerente" : "Privado"}
+            {enumLabel("FeedbackVisibility", feedback.visibility)}
           </span>
         </div>
-        <span className="text-xs text-fg-subtle">{dateStr}</span>
+        <span className="text-xs text-fg-subtle">{feedback.createdLabel}</span>
       </div>
       <p className="mt-3 text-sm text-fg-muted">{feedback.content}</p>
       <div className="mt-3 flex items-center gap-1 text-xs text-fg-subtle">
@@ -420,9 +417,9 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
                   name="visibility"
                   className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg outline-none focus:border-focus"
                 >
-                  <option value="PRIVATE">Privado</option>
-                  <option value="MANAGER_ONLY">Solo Gerente</option>
-                  <option value="PUBLIC">Público</option>
+                  {Object.entries(ENUM_LABELS.FeedbackVisibility).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -431,10 +428,9 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
                   name="category"
                   className="mt-1 w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg outline-none focus:border-focus"
                 >
-                  <option value="GENERAL">General</option>
-                  <option value="RECOGNITION">Reconocimiento</option>
-                  <option value="COACHING">Coaching</option>
-                  <option value="DEVELOPMENT">Desarrollo</option>
+                  {Object.entries(ENUM_LABELS.FeedbackCategory).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </select>
               </div>
             </div>
