@@ -1,7 +1,8 @@
 // k6 load test (D36) against the local Docker stack. Each virtual user is one
 // employee: it signs in once (straight to Supabase Auth, not through the
 // rate-limited login form), then opens app pages with a reading pause between
-// them, like a person would. Scenarios run at the same time:
+// them, like a person would (THINK_MIN–THINK_MAX seconds, default 20–40: the
+// workload model of D36). Scenarios run at the same time:
 //   one_tenant      LOAD_VUS users (default 1,000) in tenant load-big
 //   other_tenants   50 users in each of load-a, load-b and load-c
 // Thresholds: page p95 < 500 ms, < 1 % failed requests, > 99 % checks; every
@@ -21,8 +22,8 @@ const SMALL_VUS = Number(__ENV.SMALL_VUS ?? 50);
 const HOLD = __ENV.HOLD ?? "4m";
 const RAMP = __ENV.RAMP ?? "2m";
 const RAMP_SECONDS = Number(RAMP.replace(/s$/, "").replace(/(\d+)m$/, (_, m) => String(Number(m) * 60)));
-const THINK_MIN = Number(__ENV.THINK_MIN ?? 2);
-const THINK_MAX = Number(__ENV.THINK_MAX ?? 6);
+const THINK_MIN = Number(__ENV.THINK_MIN ?? 20);
+const THINK_MAX = Number(__ENV.THINK_MAX ?? 40);
 
 // One copy of the accounts for every VU (each VU would otherwise parse its own).
 const ACCOUNTS_FILE = __ENV.ACCOUNTS ?? "/out/accounts.json";

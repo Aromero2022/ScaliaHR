@@ -2,8 +2,8 @@
 # k6 load test (D36) against the LOCAL Docker stack started by `npm run local:up`.
 # Seeds the load tenants (load/seed.mjs), then runs load/pages.js in the
 # pinned grafana/k6 image on the host network. Extra arguments go to k6, e.g.
-#   npm run load:test                       # 1,000 + 3×50 users, 4 min at full load
-#   LOAD_VUS=50 SMALL_VUS=5 HOLD=30s npm run load:test   # short smoke run
+#   npm run load:test                       # 1,000 + 3×50 users, 4 min at full load, 20–40 s pauses
+#   THINK_MIN=2 THINK_MAX=6 LOAD_VUS=150 SMALL_VUS=10 npm run load:test   # capacity of one web process
 # Results: load/.out/summary.json (git-ignored).
 set -euo pipefail
 

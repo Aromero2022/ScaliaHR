@@ -320,6 +320,9 @@ jobs:
           SMALL_VUS: "5"
           RAMP: "20s"
           HOLD: "40s"
+          # Short pauses, so 75 users send real traffic (about 18 pages/s at full load).
+          THINK_MIN: "2"
+          THINK_MAX: "6"
 
       - name: Per-tenant export through the running worker (D23)
         run: |

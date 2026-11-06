@@ -1778,6 +1778,207 @@ MIT (Principle 8). Phase 9b, PR 4.
 
 ---
 
+## D34 — Middleware Session Check Without a Call to Auth
+
+**Decision:** the middleware validates the session with
+`supabase.auth.getClaims()` instead of `getUser()`. Phase 9b, PR 5.
+
+- `getClaims()` checks the JWT's signature against Supabase Auth's public keys
+  (ES256, fetched once and cached). It also refreshes an expired session, so
+  the cookie still carries the latest JWT from `custom_access_token_hook`. With
+  a symmetric key it falls back to `getUser()` by itself.
+- `getUser()` asked Auth on every request. Under load that call was the
+  busiest service (up to 3.5 cores in the baseline run).
+- What changes: a session revoked in Auth keeps passing the middleware until
+  its JWT expires (`jwt_expiry` 900 s). That was already the case for every
+  direct call to the Data API, which only checks the JWT, and the pages already
+  read claims with `getClaims()`.
+- The middleware no longer reads the claims twice: one `getClaims()` serves the
+  session check, the tenant id header (D27), the tenant check (D21) and the MFA
+  step.
+
+---
+
+## D35 — Caching per Tenant and per Request
+
+**Decision:** what every page repeats is read once. A few things are cached
+across requests, always keyed by the tenant of the verified token; the rest is
+cached only within one request. Phase 9b, PR 5.
+
+**Across requests:**
+- **Tenant check of the middleware (D21).** `lib/tenant/access-cache.ts`
+  remembers an allowed (requested tenant, token tenant) pair for 5 s.
+  - Refusals and failed lookups are never cached.
+  - A tenant suspended in the database is refused at most 5 s later; its new
+    tokens already leave it out (hook, D21).
+  - The cache has an `invalidate(tenantId)` meant for the suspension path.
+    Today suspension is done by the platform in SQL, and the cache lives in
+    each process, so the 5 s TTL is the bound. A shared store (Redis, Phase 23)
+    would implement the same interface and make invalidation reach every
+    instance.
+- **Module flags.** `getModuleFlags` uses `unstable_cache` per tenant (tag
+  `tenant:<id>:modules`, 60 s).
+  - It reads through `public.tenant_module_flags(uuid)`, a SECURITY DEFINER
+    function only `prisma_app` can execute, which returns the 12 flags of one
+    tenant. The cache is filled outside the request, so it cannot use the
+    user's session.
+  - Callers pass the tenant id of the verified token.
+  - A change of flags (platform console, Phase 12) calls
+    `revalidateTag(moduleFlagsTag(id))`. Until then the 60 s TTL bounds it.
+- **RBP stays out of any cross-request cache.** D14 and the roadmap require
+  that a revoked permission stops working at once. That needs an invalidation
+  this design does not have, so the permission context is still read on every
+  request.
+
+**Within one request (React `cache()`):**
+- `getClaims()`, the server Supabase client (`createClient()`) and the current
+  employee row (`getCurrentUser()`). The layout and the page used to read the
+  employee row and the module flags twice each.
+- The permission context of `can()` (D14) is now one batch transaction of two
+  statements: the RLS context with `set_config('role', …)` and one query that
+  returns flags, grants and permissions. The interactive transaction it
+  replaced had six statements. Under load the interactive version ran out of
+  pooled connections (`P2028`, "Unable to start a transaction").
+
+**Tests:**
+- unit: cache TTL, keys and invalidation; the middleware remembers an allowed
+  tenant but not a refusal; `getClaims()` instead of `getUser()`; one
+  transaction for six `can()` calls;
+- integration: `tenant_module_flags()` for `prisma_app` only, the same flags
+  as the table, no row for an unknown tenant, refused from the Data API.
+
+---
+
+## D36 — Load Test with k6 Against the Docker Stack
+
+**Decision:** `npm run load:test` runs k6 (grafana/k6 v1.8.2, pinned by
+digest, open source) against the local Docker stack and gates on page p95 <
+500 ms in steady state. Phase 9b, PR 5.
+
+- **Fixture (`load/seed.mjs`, local database only).**
+  - Tenant `load-big` has 1,000 employees; `load-a`, `load-b` and `load-c`
+    have 50 each.
+  - Each tenant gets the demo tenant's RBP structure, job records with a
+    manager per 25 employees, goals, feedback and one Auth account per
+    employee.
+  - Every run first deletes the previous load data.
+- **Scenarios (`load/pages.js`).** All run at the same time:
+  - 1,000 users in `load-big` and 50 in each of the other three, 1,150 in all;
+  - each one signs in once, straight to Supabase Auth, since the login form's
+    limits are per IP (D28);
+  - then it opens the dashboard, employees (pages and search), org chart,
+    performance, skills hub and profile, with a reading pause between pages
+    (20–40 s by default, `THINK_MIN` and `THINK_MAX`).
+- **Checks:** every page answers 200, and no page shows another tenant's
+  employees.
+- **Thresholds:** page p95 < 500 ms in steady state, < 1 % failed requests,
+  > 99 % checks. Ramp-up, with 1,150 bcrypt sign-ins in two minutes, is
+  reported but not gated.
+
+**Results (4 vCPU and 15 GB, with the whole stack and k6 on the same
+machine):**
+
+| Run | Users | Pause between pages | Requests/s | Page p95 | Failed |
+|-----|-------|---------------------|------------|----------|--------|
+| Before this PR | 1,150 | 2–6 s | 41 (saturated) | 60 s (timeouts) | 60 % |
+| After, workload model | 1,150 | 20–40 s | 35 | 217 ms (p99 360 ms) | 0 % |
+| After, capacity | 180 | 2–6 s | 38 | 209 ms | 0 % |
+| After, past capacity | 250 | 2–6 s | 46 (saturated) | 2.25 s | 0 % |
+
+- **The workload model:** 1,000 concurrent users of an HR application open a
+  page every 20–40 s (mean 30 s) while they read and fill in forms. With
+  2–6 s between pages, the same 1,150 users would ask for about 280 pages/s.
+- **The limit is the web process:** one Next.js process renders a page with
+  about 20–25 ms of CPU and serves about 40 pages/s at p95 < 500 ms. Postgres
+  stayed under 30 % CPU and Auth near idle once D34 was in.
+- **Growing beyond that:** more web processes behind a load balancer (replicas
+  in Phase 23), not changes in the database.
+- **Pages per second with 20 users and no pause, before → after:**
+  - performance 34 → 63 (D38);
+  - org chart 54 → 66;
+  - skills hub 50 → 61;
+  - dashboard 45 → 51;
+  - employees 38 → 44;
+  - profile 44 → 51.
+- **CI:** the Docker job runs a short version (75 users, 2–6 s pauses, 40 s at
+  full load) so the tooling keeps working and a large regression shows up. The
+  full run is local; see `docs/RUNBOOK.md`.
+
+---
+
+## D37 — Prisma Connection Pool
+
+**Decision:** the Prisma pool is set explicitly instead of Prisma's default
+(2 × CPUs + 1). Phase 9b, PR 5.
+
+- Docker stack: `connection_limit=20&pool_timeout=10` on `DATABASE_URL`.
+  Local Postgres allows 100 connections.
+- Hosted (Phase 23): the same parameters through Supavisor in transaction
+  mode (`:6543`, `pgbouncer=true`), as `.env.example` shows. Transaction mode
+  fits D3 and D35: the RLS context is set with `SET LOCAL` or a local
+  `set_config` inside each transaction.
+- The local stack does not run Supavisor (it is excluded from `supabase
+  start`), so the load test goes straight to Postgres.
+
+---
+
+## D38 — Pagination and Indexes for Large Tenants
+
+**Decision:** no page lists a whole tenant. Long lists are paged, and choosing
+one person is a search. Phase 9b, PR 5.
+
+- **Paged, 20 per page:**
+  - employees (already);
+  - feedback on `/performance` (`?fb=`);
+  - ARCO requests (`?page=`).
+  - Page numbers are validated with zod.
+- **Search instead of a list.**
+  - The feedback recipient and the ARCO subject were `<select>`s holding
+    every employee (999 in `load-big`). They are now `components/person-search.tsx`
+    over `GET /api/colleagues?q=`:
+    - zod (2–60 characters);
+    - `limitApi()` (D28);
+    - the caller's own tenant, active people only, at most 20;
+    - the search text quoted in the `or()` filter (D28);
+    - read under RLS with the caller's session;
+    - the caller left out unless `self=1`, which ARCO uses.
+  - `/performance` went from 34 to 63 pages/s.
+- **Bounded by the person, kept as they are:** the viewer's own team (direct
+  reports), their own skills and goals, the skill catalog and the roles.
+- **Not a list:** the org chart draws the tenant's positions as a tree. Loading
+  it by level is a product decision for its own phase.
+- **Index:** `d38_users_active_by_name (tenant_id, last_name, first_name)
+  WHERE deleted_at IS NULL AND status = 'ACTIVE'`. The employee list now reads
+  its 20 rows in order instead of every employee of the tenant plus a sort;
+  it was used 11,814 times in the final run.
+- **Index review with the load data:** 29 of the 199 indexes of `public` were
+  used. The unused ones are primary keys and unique constraints, the covering
+  indexes of foreign keys (required by the advisors, D25) and modules outside
+  the load mix. None is dropped without production statistics. The tables with
+  effective dates (`ec_*`) keep their GiST exclusion indexes on (user, date
+  range), which also serve lookups by user.
+
+---
+
+## D39 — Least-Privilege Tokens in Every Workflow; One Parser for the Static Checks
+
+**Decision:** the two follow-ups of Phase 9b PR 4. Phase 9b, PR 5.
+
+- **`db-remote-sync.yml`:** `permissions: contents: read` at the root, like
+  `ci.yml` (D33). Its checkout uses `persist-credentials: false`, since no
+  later step runs git; the scripts and the Supabase CLI that follow do not see
+  the token.
+- **One parser for the static checks.** `__tests__/static/source-exports.ts`
+  reads exports with the TypeScript parser and is shared by the rate-limit
+  coverage test (D28) and the zod test (D31).
+  - `export const x = async (...) =>` actions are checked too, and so are
+    route handlers written as `const GET = …`.
+  - Each body is only its own.
+  - Any export the parser does not recognize in a `"use server"` file fails
+    both tests.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.
