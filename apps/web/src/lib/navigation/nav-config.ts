@@ -1,4 +1,5 @@
 import type { ModuleFlags } from "@/lib/tenant/module-flags";
+import { messages } from "@/lib/i18n/es-MX";
 
 export interface NavItemConfig {
   href: string;
@@ -13,16 +14,19 @@ export interface NavItemConfig {
   permissionKey?: string;
 }
 
+const nav = messages.nav;
+
+/** D43: the names come from the es-MX module, without module codes. */
 export const NAV_ITEMS: NavItemConfig[] = [
-  { href: "/dashboard", label: "Inicio (BizX)", shortLabel: "Inicio" },
-  { href: "/employees", label: "Empleados (EC)", shortLabel: "Emplea\u00ADdos", moduleFlag: "is_ec_active", permissionKey: "ec.view_org_chart" },
-  { href: "/profile", label: "Mi Perfil", shortLabel: "Perfil" },
-  { href: "/org-chart", label: "Organigrama (EC)", shortLabel: "Organi\u00ADgrama", moduleFlag: "is_ec_active", permissionKey: "ec.view_org_chart" },
-  { href: "/performance", label: "Desempeño (PMGM)", shortLabel: "Desem\u00ADpeño", moduleFlag: "is_pmgm_active", permissionKey: "pmgm.view_own_goals" },
-  { href: "/lms", label: "Formación (LMS)", shortLabel: "Forma\u00ADción", moduleFlag: "is_lms_active", permissionKey: "lms.access" },
-  { href: "/skills-hub", label: "Talent Hub (TIH)", shortLabel: "Talento", moduleFlag: "is_tih_active", permissionKey: "tih.employee_skills" },
-  { href: "/admin/arco", label: "Derechos ARCO", shortLabel: "ARCO", permissionKey: "arco.manage" },
-  { href: "/admin-center", label: "Admin Center", shortLabel: "Admin", permissionKey: "admin_center.access" },
+  { href: "/dashboard", label: nav.dashboard.label, shortLabel: nav.dashboard.short },
+  { href: "/employees", label: nav.employees.label, shortLabel: nav.employees.short, moduleFlag: "is_ec_active", permissionKey: "ec.view_org_chart" },
+  { href: "/profile", label: nav.profile.label, shortLabel: nav.profile.short },
+  { href: "/org-chart", label: nav.orgChart.label, shortLabel: nav.orgChart.short, moduleFlag: "is_ec_active", permissionKey: "ec.view_org_chart" },
+  { href: "/performance", label: nav.performance.label, shortLabel: nav.performance.short, moduleFlag: "is_pmgm_active", permissionKey: "pmgm.view_own_goals" },
+  { href: "/lms", label: nav.lms.label, shortLabel: nav.lms.short, moduleFlag: "is_lms_active", permissionKey: "lms.access" },
+  { href: "/skills-hub", label: nav.skills.label, shortLabel: nav.skills.short, moduleFlag: "is_tih_active", permissionKey: "tih.employee_skills" },
+  { href: "/admin/arco", label: nav.arco.label, shortLabel: nav.arco.short, permissionKey: "arco.manage" },
+  { href: "/admin-center", label: nav.adminCenter.label, shortLabel: nav.adminCenter.short, permissionKey: "admin_center.access" },
 ];
 
 export function filterNavByFlags(

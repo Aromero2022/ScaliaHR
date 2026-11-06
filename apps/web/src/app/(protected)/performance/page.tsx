@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { z } from "zod";
 import { formatDateOnly, formatInstant } from "@/lib/format/dates";
 import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
+import { messages } from "@/lib/i18n/es-MX";
 
 // D38: the feedback list is paged; the recipient is searched, not listed.
 const FEEDBACK_PAGE_SIZE = 20;
@@ -119,9 +120,9 @@ export default async function PerformancePage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-fg">Desempeño y Objetivos</h1>
+        <h1 className="text-2xl font-bold text-fg">{messages.performance.heading}</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          PMGM — Gestiona tus objetivos SMART y da/recibe feedback continuo
+          {messages.performance.subheading}
         </p>
       </div>
       <PerformanceDashboard

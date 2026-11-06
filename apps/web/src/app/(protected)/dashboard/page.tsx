@@ -4,6 +4,8 @@ import { can } from "@/lib/authz/can";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { enumLabel, messages } from "@/lib/i18n/es-MX";
 import { formatDateOnly } from "@/lib/format/dates";
+import { StatCard } from "@/components/ui/stat-card";
+import { Badge } from "@/components/ui/badge";
 
 const t = messages.dashboard;
 const fields = messages.fields;
@@ -74,28 +76,12 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {canViewTenantKpis && (
           <>
-            <KpiCard
-              label={t.activeEmployees}
-              value={totalEmployees ?? 0}
-              accent="indigo"
-            />
-            <KpiCard
-              label={t.departments}
-              value={totalDepts ?? 0}
-              accent="emerald"
-            />
+            <StatCard label={t.activeEmployees} value={totalEmployees ?? 0} tone="accent" />
+            <StatCard label={t.departments} value={totalDepts ?? 0} tone="success" />
           </>
         )}
-        <KpiCard
-          label={t.performanceScore}
-          value={profile.performance_score ?? messages.common.empty}
-          accent="amber"
-        />
-        <KpiCard
-          label={t.potentialScore}
-          value={profile.potential_score ?? messages.common.empty}
-          accent="violet"
-        />
+        <StatCard label={t.performanceScore} value={profile.performance_score ?? messages.common.empty} tone="warning" />
+        <StatCard label={t.potentialScore} value={profile.potential_score ?? messages.common.empty} tone="category-2" />
       </div>
 
       {/* Profile Summary */}
@@ -132,7 +118,7 @@ export default async function DashboardPage() {
                     {formatDateOnly(g.period_start)} → {formatDateOnly(g.period_end)}
                   </p>
                 </div>
-                <GoalBadge status={g.status} />
+                <Badge enumName="GoalStatus" value={g.status} />
               </div>
             ))}
           </div>
@@ -146,42 +132,6 @@ export default async function DashboardPage() {
   );
 }
 
-function KpiCard({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string | number;
-  accent: string;
-}) {
-  const ring: Record<string, string> = {
-    indigo: "border-accent-line",
-    emerald: "border-success-line",
-    amber: "border-warning-line",
-    violet: "border-category-2-line",
-  };
-  const text: Record<string, string> = {
-    indigo: "text-accent-fg",
-    emerald: "text-success-fg",
-    amber: "text-warning-fg",
-    violet: "text-category-2-fg",
-  };
-
-  return (
-    <div
-      className={`rounded-xl border bg-surface p-5 ${ring[accent] ?? "border-line"}`}
-    >
-      <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
-        {label}
-      </p>
-      <p className={`mt-2 text-3xl font-bold ${text[accent] ?? "text-fg"}`}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -190,23 +140,5 @@ function Field({ label, value }: { label: string; value: string }) {
       </dt>
       <dd className="mt-1 text-sm text-fg">{value}</dd>
     </div>
-  );
-}
-
-function GoalBadge({ status }: { status: string }) {
-  const map: Record<string, { bg: string; text: string }> = {
-    NOT_STARTED: { bg: "bg-surface-raised", text: "text-fg-muted" },
-    ON_TRACK: { bg: "bg-success-subtle", text: "text-success-fg" },
-    AT_RISK: { bg: "bg-warning-subtle", text: "text-warning-fg" },
-    COMPLETED: { bg: "bg-accent-subtle", text: "text-accent-fg" },
-    CANCELLED: { bg: "bg-danger-subtle", text: "text-danger-fg" },
-  };
-  const style = map[status] ?? map.NOT_STARTED;
-  return (
-    <span
-      className={`rounded-full px-3 py-1 text-xs font-medium ${style.bg} ${style.text}`}
-    >
-      {enumLabel("GoalStatus", status)}
-    </span>
   );
 }

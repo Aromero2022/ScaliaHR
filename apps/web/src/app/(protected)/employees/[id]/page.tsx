@@ -10,6 +10,7 @@ import ActionMenu from "./action-menu";
 import { enumLabel, messages } from "@/lib/i18n/es-MX";
 import { calendarDateIn, formatDateOnly } from "@/lib/format/dates";
 import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
+import { Badge } from "@/components/ui/badge";
 
 const t = messages.employeeDetail;
 const fields = messages.fields;
@@ -181,14 +182,6 @@ export default async function EmployeeDetailPage({
 
   const initials = `${(employee.first_name as string)?.[0] ?? ""}${(employee.last_name as string)?.[0] ?? ""}`.toUpperCase();
 
-  const statusColors: Record<string, { bg: string; text: string }> = {
-    ACTIVE: { bg: "bg-success-subtle", text: "text-success-fg" },
-    INACTIVE: { bg: "bg-surface-raised", text: "text-fg-muted" },
-    ON_LEAVE: { bg: "bg-warning-subtle", text: "text-warning-fg" },
-    TERMINATED: { bg: "bg-danger-subtle", text: "text-danger-fg" },
-  };
-  const statusStyle = statusColors[employee.status as string] ?? statusColors.INACTIVE;
-
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
@@ -205,11 +198,7 @@ export default async function EmployeeDetailPage({
               {rel(employee.departments)?.name ?? messages.common.noDepartment}
             </p>
           </div>
-          <span
-            className={`ml-2 self-start rounded-full px-3 py-1 text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}
-          >
-            {enumLabel("EmployeeStatus", employee.status as string)}
-          </span>
+          <Badge enumName="EmployeeStatus" value={employee.status as string} className="ml-2 self-start" />
         </div>
         {adminView.allowed && <ActionMenu employeeId={id} today={today} />}
       </div>

@@ -140,3 +140,42 @@
     outline-offset: 2px;
   }
 }
+
+/* D43: page skeleton. It shows only after 400 ms, with CSS alone (no script, so
+   the nonce CSP of D29 is untouched), and the shimmer stops with
+   prefers-reduced-motion. */
+@layer components {
+  .skeleton-region {
+    opacity: 0;
+    animation: skeleton-reveal 1ms linear 400ms forwards;
+  }
+
+  .skeleton-block {
+    background-color: var(--theme-surface-raised);
+    background-image: linear-gradient(90deg, transparent 0%, var(--theme-surface-hover) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-block {
+      background-image: none;
+      animation: none;
+    }
+  }
+}
+
+@keyframes skeleton-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}

@@ -3,9 +3,14 @@
 import { useState, useTransition, useRef, useEffect } from "react";
 import { createArcoRequest, processArcoRequest, exportUserData } from "./actions";
 import PersonSearch from "@/components/person-search";
-import { enumLabel } from "@/lib/i18n/es-MX";
+import { messages } from "@/lib/i18n/es-MX";
+import { Badge } from "@/components/ui/badge";
+import { StatCard } from "@/components/ui/stat-card";
 
 // D42: dates and "overdue" arrive from the server, computed in the tenant's time zone; this client component never formats dates.
+// D43: stat cards and badges from components/ui; the texts come from the es-MX module.
+
+const t = messages.arco;
 
 type ArcoRow = {
   id: string;
@@ -22,20 +27,6 @@ type ArcoRow = {
   subjectName: string;
   subjectEmail: string;
   subjectId: string;
-};
-
-const typeColors: Record<string, string> = {
-  acceso: "bg-category-1-subtle text-category-1-fg",
-  rectificacion: "bg-warning-subtle text-warning-fg",
-  cancelacion: "bg-danger-subtle text-danger-fg",
-  oposicion: "bg-category-2-subtle text-category-2-fg",
-};
-
-const statusColors: Record<string, string> = {
-  pending: "bg-warning-subtle text-warning-fg",
-  in_progress: "bg-info-subtle text-info-fg",
-  completed: "bg-success-subtle text-success-fg",
-  rejected: "bg-danger-subtle text-danger-fg",
 };
 
 export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
@@ -65,7 +56,7 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
         description: form.get("description") as string,
       });
       if (result.success) {
-        setFeedback({ ok: true, msg: "Solicitud ARCO creada" });
+        setFeedback({ ok: true, msg: t.created });
         setTimeout(() => {
           setShowCreate(false);
           setFeedback(null);
@@ -84,15 +75,12 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
         requestId: selectedRequest.id,
         action,
         resolutionNotes:
-          action === "reject" ? "Rechazada por administrador" : "Procesada",
+          action === "reject" ? t.rejectedNote : t.processedNote,
       });
       if (result.success) {
         setFeedback({
           ok: true,
-          msg:
-            action === "approve"
-              ? "Solicitud procesada correctamente"
-              : "Solicitud rechazada",
+          msg: action === "approve" ? t.processed : t.rejected,
         });
         setTimeout(() => {
           setSelectedRequest(null);
@@ -118,7 +106,7 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
         URL.revokeObjectURL(url);
         setFeedback({
           ok: true,
-          msg: `Exportado. SHA-256: ${result.data.hash.slice(0, 16)}…`,
+          msg: t.exported(result.data.hash.slice(0, 16)),
         });
       } else {
         setFeedback({ ok: false, msg: result.error });
@@ -133,31 +121,19 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
     <>
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Total" value={requests.length} color="text-fg" />
-        <StatCard
-          label="Pendientes"
-          value={pending.length}
-          color="text-warning-fg"
-        />
-        <StatCard
-          label="Completadas"
-          value={resolved.filter((r) => r.status === "completed").length}
-          color="text-success-fg"
-        />
-        <StatCard
-          label="Rechazadas"
-          value={resolved.filter((r) => r.status === "rejected").length}
-          color="text-danger-fg"
-        />
+        <StatCard label={t.stats.total} value={requests.length} />
+        <StatCard label={t.stats.pending} value={pending.length} tone="warning" />
+        <StatCard label={t.stats.completed} value={resolved.filter((r) => r.status === "completed").length} tone="success" />
+        <StatCard label={t.stats.rejected} value={resolved.filter((r) => r.status === "rejected").length} tone="danger" />
       </div>
 
       {/* Actions bar */}
       <div className="flex justify-end">
         <button
           onClick={() => setShowCreate(true)}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
+          className="min-h-11 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
         >
-          Nueva Solicitud ARCO
+          {t.newRequest}
         </button>
       </div>
 
@@ -165,7 +141,7 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
       {pending.length > 0 && (
         <section className="rounded-xl border border-line bg-surface p-6">
           <h2 className="mb-4 text-lg font-semibold text-fg">
-            Solicitudes Pendientes
+            {t.pendingHeading}
           </h2>
           <div className="space-y-3">
             {pending.map((r) => (
@@ -182,10 +158,10 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
       {/* Resolved requests */}
       <section className="rounded-xl border border-line bg-surface p-6">
         <h2 className="mb-4 text-lg font-semibold text-fg">
-          Historial de Solicitudes
+          {t.historyHeading}
         </h2>
         {resolved.length === 0 ? (
-          <p className="text-sm text-fg-subtle">Sin solicitudes resueltas.</p>
+          <p className="text-sm text-fg-subtle">{t.noResolved}</p>
         ) : (
           <div className="space-y-3">
             {resolved.map((r) => (
@@ -209,13 +185,14 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
         <div className="p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-fg">
-              Nueva Solicitud ARCO
+              {t.newRequest}
             </h2>
             <button
               onClick={() => setShowCreate(false)}
-              className="text-fg-subtle hover:text-fg"
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-fg-subtle hover:bg-surface-hover hover:text-fg"
             >
-              ✕
+              <span aria-hidden="true">✕</span>
+              <span className="sr-only">{messages.common.close}</span>
             </button>
           </div>
 
@@ -226,47 +203,48 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
           <form action={handleCreateSubmit} className="space-y-4">
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                Titular de los datos <span className="text-danger-fg">*</span>
+                {t.form.subject} <span className="text-danger-fg">*</span>
               </span>
-              <PersonSearch name="subjectId" label="Buscar titular de los datos" includeSelf showEmail />
+              <PersonSearch name="subjectId" label={t.form.subjectSearch} includeSelf showEmail />
             </label>
 
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                Tipo de derecho <span className="text-danger-fg">*</span>
+                {t.form.type} <span className="text-danger-fg">*</span>
               </span>
               <select
                 name="requestType"
                 required
                 className="w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg focus:border-focus focus:outline-none focus:ring-1 focus:ring-focus"
               >
-                <option value="">— Seleccionar —</option>
-                <option value="acceso">Acceso — Consultar datos personales</option>
-                <option value="rectificacion">Rectificación — Corregir datos inexactos</option>
-                <option value="cancelacion">Cancelación — Eliminar datos personales</option>
-                <option value="oposicion">Oposición — Oponerse al tratamiento</option>
+                <option value="">{t.form.choose}</option>
+                {Object.entries(t.form.typeOptions).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
 
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                Descripción <span className="text-danger-fg">*</span>
+                {t.form.description} <span className="text-danger-fg">*</span>
               </span>
               <textarea
                 name="description"
                 required
                 rows={3}
                 className="w-full rounded-lg border border-control bg-surface-raised px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-focus focus:outline-none focus:ring-1 focus:ring-focus"
-                placeholder="Detalle de la solicitud…"
+                placeholder={t.form.descriptionPlaceholder}
               />
             </label>
 
             <button
               type="submit"
               disabled={isPending}
-              className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-11 w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isPending ? "Creando…" : "Crear Solicitud"}
+              {isPending ? t.form.submitting : t.form.submit}
             </button>
           </form>
         </div>
@@ -285,13 +263,14 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
           <div className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-fg">
-                Detalle de Solicitud
+                {t.detail.heading}
               </h2>
               <button
                 onClick={() => setSelectedRequest(null)}
-                className="text-fg-subtle hover:text-fg"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-fg-subtle hover:bg-surface-hover hover:text-fg"
               >
-                ✕
+                <span aria-hidden="true">✕</span>
+                <span className="sr-only">{messages.common.close}</span>
               </button>
             </div>
 
@@ -300,39 +279,39 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
             )}
 
             <dl className="space-y-3 text-sm">
-              <DetailRow label="Tipo">
-                <TypeBadge type={selectedRequest.requestType} />
+              <DetailRow label={t.detail.type}>
+                <Badge enumName="arco_request_type" value={selectedRequest.requestType} />
               </DetailRow>
-              <DetailRow label="Estado">
-                <StatusBadge status={selectedRequest.status} />
+              <DetailRow label={t.detail.status}>
+                <Badge enumName="arco_request_status" value={selectedRequest.status} />
               </DetailRow>
-              <DetailRow label="Titular">
+              <DetailRow label={t.detail.subject}>
                 {selectedRequest.subjectName} ({selectedRequest.subjectEmail})
               </DetailRow>
-              <DetailRow label="Solicitante">
+              <DetailRow label={t.detail.requester}>
                 {selectedRequest.requesterName}
               </DetailRow>
-              <DetailRow label="Descripción">
+              <DetailRow label={t.detail.description}>
                 {selectedRequest.description}
               </DetailRow>
-              <DetailRow label="Fecha límite">
+              <DetailRow label={t.detail.due}>
                 {selectedRequest.dueLabel}
               </DetailRow>
-              <DetailRow label="Creada">
+              <DetailRow label={t.detail.created}>
                 {selectedRequest.createdLabel}
               </DetailRow>
               {selectedRequest.completedLabel && (
-                <DetailRow label="Resuelta">
+                <DetailRow label={t.detail.resolved}>
                   {selectedRequest.completedLabel}
                 </DetailRow>
               )}
               {selectedRequest.resolutionNotes && (
-                <DetailRow label="Notas">
+                <DetailRow label={t.detail.notes}>
                   {selectedRequest.resolutionNotes}
                 </DetailRow>
               )}
               {selectedRequest.exportHash && (
-                <DetailRow label="Hash exportación">
+                <DetailRow label={t.detail.exportHash}>
                   <code className="break-all text-xs text-fg-muted">
                     {selectedRequest.exportHash}
                   </code>
@@ -349,7 +328,7 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
                     disabled={isPending}
                     className="w-full rounded-lg border border-info-line bg-info-subtle px-4 py-2 text-sm font-medium text-info-fg transition hover:bg-surface-hover disabled:opacity-50"
                   >
-                    {isPending ? "Exportando…" : "Exportar datos (JSON)"}
+                    {isPending ? t.detail.exporting : t.detail.export}
                   </button>
                 )}
                 <div className="grid grid-cols-2 gap-3">
@@ -358,14 +337,14 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
                     disabled={isPending}
                     className="rounded-lg bg-success px-4 py-2 text-sm font-medium text-on-success transition hover:bg-success-hover disabled:opacity-50"
                   >
-                    {isPending ? "Procesando…" : "Aprobar"}
+                    {isPending ? t.detail.processing : t.detail.approve}
                   </button>
                   <button
                     onClick={() => handleProcess("reject")}
                     disabled={isPending}
                     className="rounded-lg bg-danger px-4 py-2 text-sm font-medium text-on-danger transition hover:bg-danger-hover disabled:opacity-50"
                   >
-                    {isPending ? "Procesando…" : "Rechazar"}
+                    {isPending ? t.detail.processing : t.detail.reject}
                   </button>
                 </div>
               </div>
@@ -374,25 +353,6 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
         )}
       </dialog>
     </>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color: string;
-}) {
-  return (
-    <div className="rounded-xl border border-line bg-surface p-4">
-      <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
-        {label}
-      </p>
-      <p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p>
-    </div>
   );
 }
 
@@ -410,11 +370,11 @@ function RequestCard({
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <TypeBadge type={request.requestType} />
-          <StatusBadge status={request.status} />
+          <Badge enumName="arco_request_type" value={request.requestType} />
+          <Badge enumName="arco_request_status" value={request.status} />
           {request.isOverdue && (
             <span className="rounded-full bg-danger-subtle px-2 py-0.5 text-xs font-medium text-danger-fg">
-              Vencida
+              {t.overdue}
             </span>
           )}
         </div>
@@ -423,11 +383,11 @@ function RequestCard({
           {request.description.length > 80 && "…"}
         </p>
         <p className="mt-0.5 text-xs text-fg-subtle">
-          Solicitante: {request.requesterName} · Límite:{" "}
-          {request.dueLabel}
+          {t.card.requester} {request.requesterName} · {t.card.due} {request.dueLabel}
         </p>
       </div>
       <svg
+        aria-hidden="true"
         className="ml-3 h-4 w-4 shrink-0 text-fg-subtle"
         fill="none"
         viewBox="0 0 24 24"
@@ -441,22 +401,6 @@ function RequestCard({
         />
       </svg>
     </button>
-  );
-}
-
-function TypeBadge({ type }: { type: string }) {
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[type] ?? "bg-surface-raised text-fg-muted"}`}>
-      {enumLabel("arco_request_type", type)}
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[status] ?? "bg-surface-raised text-fg-muted"}`}>
-      {enumLabel("arco_request_status", status)}
-    </span>
   );
 }
 
