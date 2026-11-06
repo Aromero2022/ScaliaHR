@@ -2040,13 +2040,20 @@ and high-contrast dark:
   solid color and its hover.
 - 3:1 for components: `control` and `focus` against the surfaces; `accent`,
   the states and `surface-strong` as indicators (progress bars, active tabs,
-  status dots) against the surfaces.
-- High contrast raises text to 7:1 and boundaries to 4.5:1.
+  status dots) against the surfaces. Indicators rest on `canvas`, `surface`,
+  `surface-muted` and `surface-raised`; `surface-hover` is transient and only
+  carries text, which is tested on it.
+- High contrast raises text to 7:1 and boundaries to 4.5:1. The derivation
+  (`deriveHighContrast()`) removes the tints (every `-subtle` becomes the
+  plain surface), makes muted and subtle text equal to `fg`, turns tinted
+  borders into their text color, and gives each solid fill black or white text
+  at 7:1. `ensureContrast()` does the adjusting; Phase 11 uses it for tenant
+  brand colors.
 
 **Other tokens:**
 - Radii: `--radius-xs` … `--radius-2xl` and `full`. Clean keeps Tailwind's
   values.
-- Shadows: `--shadow-sm` … `--shadow-2xl`, per mode.
+- Shadows: `--shadow-2xs` … `--shadow-2xl`, per mode (Tailwind's values in light, darker in dark).
 - Spacing: Tailwind's 4 px step (`--spacing: 0.25rem`), plus the form spacing
   of D19 as `form-label` (8 px), `form-help` (4 px), `form-field` (20 px) and
   `form-section` (24 px).
@@ -2078,6 +2085,54 @@ background whose text is not its `on-` token.
 `fonts.gstatic.com`; fonts and styles come from `'self'` only, and
 `scripts/check-csp.mjs` fails if an external origin appears in `font-src` or
 `style-src`.
+
+**Implementation (PR 1 of Phase 9c):**
+- `src/lib/theme/`: `tokens.ts` (names and types), `presets/clean.ts` (the
+  values), `contrast.ts` (WCAG ratio, pairs, `ensureContrast()`),
+  `high-contrast.ts`, `css.ts` (`themeCss()`), `boot-script.ts` and `index.ts`
+  (the CSS and attributes the app renders today).
+- `src/app/layout.tsx` renders `data-preset`, `data-theme` and `data-contrast`
+  on `<html>`, the boot script with the nonce and the theme `<style>`.
+  `global-error.tsx` renders its own `<html>` with the same tokens.
+- `src/fonts/inter/`: Inter variable, latin subset (U+0000–00FF, which covers
+  Spanish), from `@fontsource-variable/inter` 5.3.0, with `OFL.txt` and its
+  SHA-256 in a README.
+- Migration: 883 palette classes in 30 files, plus the two hex colors of
+  `global-error.tsx`. Two components built class names at runtime
+  (`bg-${color}-600/20`), which Tailwind cannot see; they now use fixed maps of
+  semantic tones. The org chart avatar showed `text-fg` on the accent fill and
+  now uses `on-accent`.
+- Category labels: skill types and the ARCO types "Acceso" and "Oposición"
+  use `category-1` and `category-2`. "Rectificación" and "Cancelación" keep
+  the warning and danger tints they had.
+
+**Tests:**
+- `__tests__/theme/contrast.test.ts`: the math against reference ratios, the
+  pair list, and every preset in light, dark and both high-contrast variants.
+  Clean: 121 pairs per mode; the lowest are 4.50:1 (text) and 3.03:1
+  (components) in dark, 7.00:1 and 5.09:1 in high contrast.
+- `__tests__/theme/theme-css.test.ts`: the selectors for each mode and
+  contrast, that `themeCss()` refuses anything but plain colors, lengths and
+  shadows (`;}`, `url()` and unknown fonts throw), that `globals.css` maps
+  exactly the token list, and that the boot script sets only allowed values
+  and survives blocked storage.
+- `__tests__/static/no-literal-colors.test.ts`: palette classes, arbitrary
+  colors, hex and color functions, opacity modifiers on tokens, class names
+  built at runtime, unknown tokens, radii or shadows outside the tokens, and
+  the wrong text on a solid fill.
+- `check-csp` over the production image's `/login`, and a browser run over the
+  same image: 8 pages in light, dark, high-contrast light and high-contrast
+  dark with no CSP violation and no console error, Inter loaded from the app,
+  and a stored choice already applied when `<body>` is created.
+
+**Accepted for now:**
+- With `data-theme="system"` as the default, people whose OS is light see the
+  light Clean theme; before this PR the app was always dark.
+- There is no theme control in the UI yet. The user preferences of Phase 11
+  write the two storage keys the boot script reads (`scalia.theme`,
+  `scalia.contrast`).
+- The email templates (`packages/email`) keep literal colors: email clients do
+  not read CSS variables. Their brand values come from D20.
 
 ---
 
