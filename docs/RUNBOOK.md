@@ -182,7 +182,24 @@ THINK_MIN=2 THINK_MAX=6 LOAD_VUS=150 SMALL_VUS=10 npm run load:test
 
 La prueba deja los tenants `load-*` en la base local; la siguiente corrida o `supabase db reset` los borra.
 
-## 10. Diferencias que llegan en la Fase 23
+## 10. e2e y accesibilidad (D44)
+
+Con la pila arriba (`npm run local:up`), y Chromium de Playwright instalado una vez (`npx playwright install chromium` en `apps/web`):
+
+```bash
+npm run e2e
+```
+
+Qué hace:
+
+1. Crea tres cuentas `@e2e.scaliahr.test` ligadas a empleadas del tenant demo (empleada, admin con TOTP y admin sin factor), con una contraseña nueva y aleatoria. Solo acepta la base local. La contraseña, el secreto TOTP y las sesiones quedan en una carpeta temporal privada, fuera del repositorio.
+2. Corre la suite de Playwright de `apps/web` contra `http://localhost:3000`: logins, páginas protegidas, diálogos y "Más" con el teclado, zoom, skeleton y axe en claro y oscuro.
+3. Busca la contraseña y los secretos TOTP en los artefactos (también dentro del reporte HTML) y corre gitleaks sobre ellos; si algo aparece, borra los artefactos.
+4. Siempre borra las cuentas, sus sesiones y sus factores, así que se puede repetir sin `supabase db reset`.
+
+Resultados en `apps/web/e2e-artifacts` (fuera de git): `report/index.html`, `axe/axe-summary.md`, las capturas en `captures/` y la evidencia del skeleton en `skeleton/`. Para una sola parte, los argumentos van a Playwright: `npm run e2e -- zoom.spec.ts`.
+
+## 11. Diferencias que llegan en la Fase 23
 
 - Respaldos diarios del plan Pro y PITR para producción (D15); los exports por tenant van a almacenamiento privado y cifrado en lugar de un volumen local, y se programan a diario para tenants con licencia.
 - Rollback en Railway a la imagen anterior, y procedimiento de restauración sobre staging antes de producción.

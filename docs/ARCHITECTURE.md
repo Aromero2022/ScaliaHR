@@ -2522,6 +2522,233 @@ deleted; nothing imported them.
 
 ---
 
+## D44 — Accessibility in CI: axe, e2e and Closing Screenshots
+
+**Decision:** the Playwright suite of `apps/web` runs real flows against the
+production image of the local stack, in the Docker job of CI after
+`npm run local:up`, with axe on every existing screen in light and dark, the
+zoom checks of WCAG 1.4.4 and 1.4.10, and the closing screenshots at 360, 768
+and 1280 px. Phase 9c, PR 5. The goal is WCAG 2.2 AA.
+
+**axe policy:**
+- A scan fails on any violation of a rule tagged `wcag2a`, `wcag2aa`,
+  `wcag21a`, `wcag21aa` or `wcag22aa`. Rules tagged `best-practice` run too;
+  their findings are listed in the report and do not fail.
+- No rule is disabled and nothing is excluded from a scan. If an exclusion
+  ever becomes unavoidable, it goes in this section with its reason, the exact
+  selector and the phase that removes it. Today there is none.
+- The report keeps each rule, its impact, the CSS selectors of the nodes and
+  axe's failure summary; never a node's HTML or text, which can carry what is
+  on screen.
+- Before a scan the test waits for the theme's color transitions (D40) to end
+  and for the page's `<title>`: Next.js streams the metadata of a dynamic page,
+  so after a client-side navigation the title arrives a moment after the
+  content. A page that never gets a title still fails, by timeout.
+
+**Where it runs:** `npm run e2e` (`scripts/e2e.sh`), against
+`http://localhost:3000`. In CI, a step installs Chromium for Playwright, the
+next one runs the suite, and the artifact `e2e-artifacts` (HTML report, axe
+report, screenshots, skeleton evidence) is uploaded for 14 days.
+`playwright.config.ts`: `retries: 0` (a failure is rerun at most once, by
+rerunning the job; retries inside would hide a flaky test), `forbidOnly` in CI,
+one worker, the `list` reporter in the log and the `html` reporter as a file
+that never opens a server. No trace, video or automatic screenshot: they would
+record what the tests type.
+
+**Test accounts (`scripts/e2e-accounts.mjs`):**
+- Local stack only, with the guard of the load test: `assertLocalStack()` now
+  lives in `load/seed.mjs` and both scripts call it (the Supabase API on this
+  machine and a local database URL without query parameters).
+- Three accounts under `@e2e.scaliahr.test`, each linked to an employee of the
+  demo tenant that has no account: Gabriela Morales (e11) as `employee`; Ana
+  Torres (e04, All Administrators) as `hr_admin` with a TOTP factor enrolled
+  and verified through the Auth API; Valeria Gutiérrez (e23) as `hr_admin`
+  without a factor, for the forced enrollment. Setup refuses if one of those
+  employees already has an account.
+- The password is new and random on every run. The password, the TOTP secret
+  and the browser sessions live only in `E2E_PRIVATE_DIR`, a `mktemp` folder
+  with mode 700 outside the repository and outside the artifacts.
+- `scripts/e2e.sh` always runs the cleanup (a shell trap): the employees go
+  back to having no account, and deleting the auth users removes their
+  sessions, refresh tokens, identities, MFA factors, memberships and settings;
+  the cleanup counts what is left and fails unless it is zero. Setup first
+  removes what a broken run left. Two runs in a row passed without
+  `supabase db reset`. The audit entries of the run (`AUTH_LOGIN`,
+  `MFA_VERIFY`, `MFA_ENROLL`) stay: the log is insert-only (D25).
+- The tests create no data: the goal and feedback dialogs are not submitted,
+  and creating a role is still a simulation (D43).
+
+**Secrets never reach logs, artifacts or screenshots:**
+- Playwright writes the value of `fill()` into the step title (`Fill "…"`), so
+  the password and the TOTP codes are typed with `fillSecret()`, the native
+  value setter and an input event (its step is "Evaluate").
+- A failing page or locator assertion adds an ARIA snapshot of the page to the
+  report, and that snapshot shows what a password field holds and any text on
+  screen. `signIn()` waits for the landing page with `waitForURL()`, which
+  adds no snapshot, and empties the password field if the page stays on
+  `/login`. The enrollment test reads the secret the page shows, registers it
+  for the scan before any assertion on it, takes it off the page once axe is
+  done, and leaves the page at `about:blank` when the test ends. No screenshot
+  of `/mfa/enroll` is taken.
+- After the run, `e2e-accounts.mjs scan` looks for the password and every TOTP
+  secret of the run (the registered one included), as is and URL-encoded, in
+  every artifact, including the zip that the HTML report embeds; then
+  `check:secrets` (gitleaks, now `scripts/check-secrets.sh`, which also takes
+  directories) runs over the artifacts and over the report's extracted files.
+  If the scan fails or never runs, `scripts/e2e.sh` deletes the artifacts. It
+  writes `escaneo-de-secretos.txt` only when both pass, and CI uploads the
+  artifact only when that file exists, so a cancelled run uploads nothing.
+- The scan earned its place while this PR was built: it caught the TOTP
+  secret and the password in Playwright's error context of failing local runs,
+  before the measures above existed, and deleted those artifacts.
+
+**What the suite covers (49 tests):**
+- Employee login with the company code, landing on the dashboard; the Admin
+  Center still asks her for MFA (checked as a redirect, without rendering the
+  enrollment page).
+- Admin login with MFA: `hr_admin` is sent to `/mfa/verify`, the TOTP code
+  opens the dashboard, and the Admin Center opens at AAL2.
+- Forced enrollment: an `hr_admin` without a factor goes to `/mfa/enroll`,
+  enrolls with the code of the secret on screen and lands where she was going.
+- Every protected page for each account that can open it (7 for the employee,
+  10 for the admin) and the login, at 360, 768 and 1280 px in light and dark:
+  status 200 and no redirect, no console error and no CSP violation, no
+  horizontal scroll, no navigation outside the window, axe, and a full-page
+  screenshot.
+- The three Dialogs of D43 with the keyboard only, at 1280 px light and 360 px
+  dark: opened with Enter, modal and named by its title, focus inside; 25 Tab
+  and 25 Shift+Tab never put the focus on the page behind and keep bringing it
+  back (with a native modal dialog the browser may send it to its own address
+  bar for one press, which headless Chrome shows as no focus); Esc from inside
+  closes it and the focus returns to its button. axe with each dialog open in
+  light and dark, and the role is created with the keyboard and its toast is
+  announced in the `aria-live` region.
+- The dock and "Más" at 360 px for both accounts: five entries of at least
+  44 × 44 px, "Más" opened with Enter, its focus trap, Esc, `aria-expanded`
+  and `aria-controls`, axe with it open, and a link inside it that navigates
+  and closes it. The rail at 768 px; the sidebar at 1280 px, collapsed with the
+  keyboard and still collapsed after a reload (server-rendered, D41).
+- Zoom: every page and the login at 640 px (what a 1280 px window shows at
+  200 % zoom: reflow, WCAG 1.4.10) and at 1280 px with the root font size at
+  200 % (WCAG 1.4.4). Measured in the page: horizontal scroll, text cut by a
+  box that hides its overflow only at 200 %, text or controls drawn on top of
+  each other within a layer (the page, or one fixed or sticky bar; content
+  passing under the dock is not an overlap), text off the left edge, and text
+  of a fixed or sticky bar outside the window (a full-page screenshot
+  stretches the window and hides that). Evidence in `captures/zoom`.
+- The skeleton experiment below.
+
+**Skeleton experiment:** pages load in under 400 ms, so D43 never saw the
+skeleton in a browser. The test, and only the test, holds the RSC answer of a
+navigation (dashboard → employees) for 2 s with `page.route()`; the app is not
+changed. A sampler in the page records, every frame from the click, whether the
+skeleton is in the page and its opacity. Result in the production image: the
+loading boundary inserts it 26 ms after the click, it stays at opacity 0 and
+becomes visible 417 ms after it was inserted (443 ms after the click), the
+page replaces it when the answer arrives (2,094 ms), and with
+`prefers-reduced-motion` it appears the same with no shimmer. Evidence:
+`skeleton/*-linea-de-tiempo.json` and screenshots before and after 400 ms.
+
+**What the suite found, fixed in this PR:**
+- Grids whose column count followed only the window width, so at 200 % text
+  their columns were too narrow (horizontal scroll and overlaps on the
+  dashboard, profile, employee detail, ARCO and Admin Center). Their columns
+  now have a minimum width in `rem` (`repeat(auto-fit|auto-fill,
+  minmax(min(100%, Nrem), 1fr))`, the auto-fit grid of D19): the same window
+  holds fewer, wider columns when the text grows, and at 100 % the column
+  counts stay as they were. Field values wrap anywhere (long emails).
+- The employee detail header did not wrap: "Tomar Acción" stuck out 9 px at
+  360 px. The Admin Center quick links' icons shrank and their SVG covered the
+  text at 200 %; they no longer shrink.
+- The org chart's horizontally scrolling tree could not be reached by
+  keyboard (axe `scrollable-region-focusable`, WCAG 2.1.1): it is a focusable
+  region named "Árbol de posiciones".
+- Habilidades: the "Tú" and "Req" labels sat on the colored fills of the bars
+  (axe `color-contrast`, 1.4.3); they now sit under the bar, which is
+  `aria-hidden`. The "Evaluar" button, visible only on hover, also shows on
+  keyboard focus (2.4.7); the catalog search has a visible label (3.3.2); the
+  section titles follow the h1 (h2, then h3). The file's texts moved to the
+  es-MX module (D42 rule), with "Jefe directo" where it said "Manager".
+- The expanded sidebar is as tall as the window: at 200 % text its last
+  modules and "Cerrar sesión" fell below the window, out of reach. Its list now
+  scrolls in its own box.
+- The login has a `main` landmark (axe best practice).
+- MFA enrollment: after a correct code the person stayed on `/mfa/enroll`
+  with the factor already active. The session becomes AAL2 in the browser, and
+  the refresh that follows the audit Server Action won the race against
+  `router.push()`; `router.replace()` alone did the same. It now does a full
+  navigation (`window.location.replace`), so the next page loads with the AAL2
+  session.
+
+**Test tooling stays out of production:** `check:prod-build` fails if
+`axe-core`, `@axe-core`, `playwright`, `playwright-core` or `@playwright` is in
+a `node_modules` of `.next/standalone`, or if `.next/static` carries axe's or
+Playwright's marks ("Deque Systems", `axe-core`, `playwright-core`); those two
+folders are what the image copies. The Docker job also searches the image's
+filesystem for those packages.
+
+**License:** `@axe-core/playwright` 4.14.0 and `axe-core` 4.14.0, both
+MPL-2.0, are dev dependencies of `apps/web`, used only by the tests and not
+modified. They reach neither the bundle nor the image (checked above).
+
+**`onboarding.spec.ts` is deleted.** It went through `/signup`,
+`/app/onboarding` and `/app/dashboard`, routes the app does not have, and never
+ran in CI. Self-service signup and tenant creation belong to Phase 12, where
+their e2e lands (ROADMAP). The forced MFA enrollment it also covered is in
+`mfa-enroll.spec.ts`.
+
+**Implementation:**
+- `scripts/e2e.sh`, `scripts/e2e-accounts.mjs` (`setup`, `scan`, `cleanup`),
+  `scripts/check-secrets.sh` (`npm run check:secrets`, with or without
+  directories), `npm run e2e`; `apps/web/e2e-artifacts/` is git-ignored.
+- `apps/web/__tests__/e2e/`: `login.setup.ts` (the two logins, which keep the
+  sessions for the other tests: the login limit is 5 per minute per account,
+  D28), `mfa-enroll.spec.ts`, `pages.spec.ts`, `dialogs.spec.ts`,
+  `navigation.spec.ts`, `zoom.spec.ts`, `skeleton.spec.ts`, and `support/`
+  (`env.ts`, `axe.ts`, `axe-summary.ts` as the global teardown, `pages.ts`).
+- `watchPage()` ignores one console message: the 404 of `/favicon.ico` that
+  full Chrome asks for on its own (the headless shell of CI does not). The app
+  has no favicon yet; the tenant's comes with the Theme Manager (Phase 11).
+
+**Tests:**
+- `__tests__/scripts/e2e-accounts.test.ts`: setup and cleanup refuse a remote
+  Supabase, a remote database and a URL with query parameters before touching
+  anything; the private folder must be outside the repository and gets mode
+  700; the scan needs this run's secrets (registered ones included) and finds
+  them in a file, URL-encoded, and inside a stored or deflated entry of the
+  zip embedded in an HTML report, and passes clean artifacts.
+- `__tests__/scripts/check-prod-build.test.ts`: axe and Playwright in the
+  standalone server's `node_modules` or axe's mark in the client bundle fail
+  the build; names that only contain "axe" (`get-font-axes.js`,
+  `wasm-relaxed-simd.js`) do not.
+- The suite itself, run twice in a row on the production image: 49 passed,
+  130 axe scans with no WCAG violation, the scans of 173 files found no
+  secret, and the cleanup deleted 3 accounts and 2 factors each time.
+
+**Accepted for now:**
+- Icon-only navigation (the collapsed sidebar and the rail) with the root
+  font size at 200 %: its list can be taller than the window. A scrolling box
+  would cut the tooltips, which open to the right (D41). With the browser's
+  own font size setting the breakpoints, in `rem`, move a 1280 px window to
+  the dock, so this happens only when the root alone grows. To be solved in
+  PR 6 of Phase 9c, with the rest of the navigation work (⌘K).
+- axe "incomplete" results (to review by hand), listed in the report:
+  `color-contrast` on glyphs with no text ("—", "✓", "•") and on elements
+  partly under others; `aria-valid-attr-value` on the "Más" button, where axe
+  cannot confirm an `aria-controls` next to `aria-haspopup` (the e2e checks
+  that it names the open dialog).
+- The login and MFA verification still call `router.push()` and
+  `router.refresh()` together, the pattern that failed in the enrollment. Both
+  passed every run; if the suite ever shows them failing, they get the same
+  fix.
+- Found by the screenshots, not fixed here: the employee detail shows "Sin
+  información laboral registrada" for everyone, to the admin too. Its query
+  embeds `business_units` and `legal_entities`, which have no foreign key from
+  `ec_job_information`; PostgREST answers PGRST200 and the page shows the empty
+  state. Deciding where those two fields come from is a change of its own.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.
