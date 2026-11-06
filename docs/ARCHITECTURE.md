@@ -2248,17 +2248,25 @@ conversion. Phase 9c, PR 3.
 - One typed `as const` object grouped by screen, plus the labels of every
   enum created in `supabase/migrations`, keyed by the enum's name.
 - It holds the texts of the screens this PR touches: login, the app
-  metadata, dashboard, profile, employee list and detail, org chart and MFA
-  enrollment. Screens already in Spanish move into the module when they are
-  next touched (ROADMAP).
+  metadata, dashboard, profile, employee list and detail (with the history
+  component), org chart and MFA enrollment. Screens already in Spanish keep
+  their texts in the component and move into the module when they are next
+  touched (ROADMAP): performance, Talent Hub, roles and permissions, ARCO,
+  Admin Center, MFA verification and the employee change dialogs.
 - Terms: "Iniciar sesión", "Correo electrónico", "Contraseña",
   "Calificación de desempeño", "Calificación de potencial", "Número de
   empleado", "Jefe directo", "Por contratar" and "App de autenticación" (the
   name of the MFA factor). Product names stay (Authy, 1Password).
 - Enum values stored in the database (`ACTIVE`, `ON_TRACK`…) do not change;
-  they are translated only when shown. `ON_LEAVE` is "Con permiso"
-  everywhere. The label maps repeated in five components give way to the
-  module; the color maps stay keyed by value.
+  they are translated only when shown, with `enumLabel()`. `ON_LEAVE` is
+  "Con permiso" everywhere. The label maps repeated in five components
+  (dashboard, employee list and detail, performance, ARCO) give way to the
+  module, and so do the feedback form's options; the color maps stay keyed
+  by value.
+- Goal states agree with the interface's noun, "objetivo": "Sin iniciar",
+  "En curso", "En riesgo", "Completado", "Cancelado" (the proposal's table
+  said "Completada" and "Cancelada"). `MANAGER_ONLY` feedback is "Solo jefe
+  directo", in line with "Jefe directo".
 
 **Dates (`src/lib/format/dates.ts`):** two explicit functions, chosen by the
 caller. Neither guesses from the column name or the shape of the value.
@@ -2307,31 +2315,67 @@ caller. Neither guesses from the column name or the shape of the value.
   `platform.locale` (`es`) for every new tenant. Until now only the demo
   tenant had them. This is code, not a migration.
 
+**Implementation:**
+- `src/lib/i18n/es-MX.ts` (`messages`, `ENUM_LABELS`, `enumLabel()`),
+  `src/lib/format/dates.ts` (`formatDateOnly`, `formatInstant`,
+  `calendarDateIn`, `canonicalTimeZone`), `src/lib/tenant/get-tenant-time-zone.ts`
+  (`getTenantTimeZone`, `readTenantTimeZone`, `getSessionTimeZone`,
+  `tenantTimeZoneTag`) and `src/lib/tenant/platform-defaults.ts`.
+- Migration `20261106030000_d42_tenant_time_zone.sql`; `create-tenant.ts`
+  inserts both keys in the same transaction as the rest of the tenant.
+- Server pages format and pass text: performance (`dueLabel`,
+  `createdLabel`), ARCO (`dueLabel`, `createdLabel`, `completedLabel`,
+  `isOverdue`), the employee detail (history periods and the tenant's
+  "today" for the change dialogs), profile and Admin Center (audit times).
+- ARCO "overdue" now means the due date has passed in the tenant's zone;
+  before, a request became overdue at 00:00 UTC of its due date.
+- `src/lib/supabase/mfa.ts` (`enrollTotp`) also named the factor
+  "Authenticator App" and now uses the module. Nothing imports it; it stays.
+
 **Tests:**
-- A static test walks the `.tsx` files with the TypeScript compiler and
-  checks only visible text (JSX text, the `label`, `placeholder`, `title`,
-  `alt` and `aria-label` attributes, and the metadata). It fails on known
-  English texts ("Sign In", "Password", "ACTIVE", "ON TRACK", "Performance
-  Score" and the others found), with a negative control.
-- Every value of every enum in the migrations has a label.
-- A static test fails if a `"use client"` file formats a date.
-- Unit tests of both date functions (moments near midnight, a zone with
-  daylight saving time, an invalid zone, calendar dates under any process
-  `TZ`).
-- Integration tests against the local database: the function's access
-  (`prisma_app` yes, the Data API signed in or not 42501), one tenant never
-  gets another's zone, a tenant made by `create-tenant` has both keys and
-  needs no fallback, a tenant without the key falls back, the UTC session,
-  and the value the database returns for a date-only column.
+- `__tests__/static/no-english-ui-text.test.ts`: walks every source file
+  with the TypeScript parser and reads only what a user can see (JSX text,
+  the `label`, `placeholder`, `title`, `alt` and `aria-label` attributes,
+  visible properties such as `label`, `title`, `description`,
+  `friendlyName` or `error`, and every string of the messages module). It
+  fails on the English texts that were on screen ("Sign In", "Password",
+  "ACTIVE", "ON TRACK", "Performance Score", "Employee ID", "To Be Hired",
+  "Authenticator App"…). Negative controls: it finds each of them in a
+  fixture, and does not count `.eq("status", "ACTIVE")`, a comparison, an
+  `<option value>` or "1Password".
+- `__tests__/static/no-client-date-formatting.test.ts`: a `"use client"` file
+  fails on `toLocale*String`, `toISOString`, `Intl.DateTimeFormat`,
+  `new Date()` or an import of `lib/format/dates`, with a negative control.
+- `__tests__/i18n/enum-labels.test.ts`: reads every `CREATE TYPE … AS ENUM`
+  and `ADD VALUE` in public from the migrations (15 enums) and requires
+  exactly those values to have a label.
+- `__tests__/format/dates.test.ts` and `__tests__/tenant/tenant-time-zone.test.ts`:
+  moments near midnight in two zones, daylight saving time, calendar dates
+  under six process zones, values that are refused instead of guessed,
+  invalid zones and the fallback, the cache key, tag and revalidation.
+- Integration, against the local database: `tenant-time-zone.test.ts`
+  (`prisma_app` gets the demo tenant's zone; anon, an employee and a tenant
+  admin get 42501 from the Data API; two tenants each get their own; a
+  tenant without the key or an unknown id gets null and the fallback; a
+  stored value that is not a zone falls back; the function's definition and
+  privileges), `dates-utc-session.test.ts` (`SHOW timezone` is UTC for the
+  migration role and `prisma_app`, and a goal written through the Data API
+  comes back as `2026-01-01T00:00:00+00:00`, "1 ene 2026"; it fails with an
+  explicit message if a session zone changes) and `create-tenant.test.ts`
+  (a new tenant has both keys and `getTenantTimeZone()` needs no fallback).
 - In the production image, with the browser in America/Mexico_City and in
-  Asia/Tokyo: the same dates in both, no console error (hydration included),
-  no CSP violation, and no English text from the list or raw ISO date on the
-  page. Screenshots of dashboard, performance and login in light and dark.
+  Asia/Tokyo: the same dates in both on dashboard, performance, profile,
+  employee list and detail, org chart, ARCO and Admin Center; no console
+  error (hydration included), no CSP violation, and no English text from the
+  list or raw ISO date on any page. Screenshots of login, dashboard and
+  performance in light and dark at 360 and 1280 px.
 
 **Accepted for now:**
 - The module labels of the navigation keep their codes ("Inicio (BizX)",
   "Talent Hub (TIH)", "Admin Center"). D41 left them for this PR, but the
   approved proposal did not include them; they need a decision of their own.
+- "Feedback", "Coaching" and "9-Box" stay: they are the terms HR uses in
+  Spanish.
 
 ---
 
