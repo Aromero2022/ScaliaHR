@@ -2184,6 +2184,56 @@ reference widths):
 **Left for PR 3:** the interface texts still in English and the dates, which
 will follow the tenant's time zone (`platform.timezone`).
 
+**Implementation:**
+- `src/lib/navigation/shell.ts` (cookie, dock split, active link),
+  `focus-trap.ts`, and `nav-config.ts` with a short label per module for the
+  dock. Long labels carry soft hyphens (`Organi\u00ADgrama`): at 320 px they
+  break onto a second line with a hyphen instead of being cut off.
+- `src/components/navigation/app-navigation.tsx` (sidebar, rail, dock and the
+  "Más" dialog) and `nav-icons.tsx`; the old `components/sidebar.tsx` is gone.
+- The header's sign-out button under 768 px opens its tooltip below and to
+  the left. Opened to the right it pushed a 320 px page 87 px wider even while
+  invisible.
+- `src/lib/auth/demo-hint.ts` (`server-only`); `login/page.tsx` passes the
+  hint to the form. `docker-compose.yml` forwards an empty
+  `SCALIA_DEMO_LOGIN_HINT` unless `.env.docker` sets it.
+- `/skills-hub` now refuses a user without `tih.employee_skills` (view), like
+  every other module page. The menu already hid it, but the page opened. Every
+  role of the demo RBP holds that permission, so nobody loses access today.
+- `jsdom` 30.1.3 (MIT) is a dev dependency for the DOM tests, and Vitest
+  compiles JSX for them.
+
+**Tests:**
+- `__tests__/navigation/shell.test.ts`: the cookie with valid and invalid
+  values, the dock split, the dock labels, the active link and the demo hint
+  (including production with a host that is not local).
+- `__tests__/navigation/navigation-dom.test.ts` (jsdom): the "Más" dialog
+  with the keyboard (initial focus, Tab and Shift+Tab wrap, Esc and the close
+  button return the focus to "Más"), rail names and tooltips, Esc on a
+  tooltip, the sidebar cookie, the header tooltip placement, and the same
+  links in the three variants.
+- `__tests__/navigation/hidden-routes-guarded.test.ts`: every module the menu
+  can hide, opened with its module off and without its permission, is hidden
+  by the menu and refused by the server.
+- `check:prod-build` fails on the demo password or email in `.next/static`;
+  the Docker job checks the image's `/login`.
+- In the production image, with a browser: 6 pages × 4 widths (320, 360,
+  768, 1280) × light and dark with no horizontal scroll, the dock, rail or
+  sidebar at the right width, every navigation target at least 44 × 44 px,
+  no CSP violation and no console error; the skip link first; focus never
+  under the dock or header while tabbing through a page at 360 px; the "Más"
+  dialog with the keyboard; a rail tooltip on focus; and the collapsed
+  sidebar rendered by the server after a reload. The demo hint shows only
+  when the local stack sets the variable.
+
+**Accepted for now:**
+- Dock labels are 12 px, below the 16 px body text of D19; the full name is
+  in the text and the dialog.
+- The module labels keep their codes ("Inicio (BizX)"); they change with the
+  texts of PR 3.
+- Under 768 px, sign-out sits in the header, since the dock keeps its five
+  places for modules.
+
 ---
 
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
