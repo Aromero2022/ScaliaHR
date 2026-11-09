@@ -4,6 +4,9 @@ import { enumLabel, messages } from "@/lib/i18n/es-MX";
 import { formatDateOnly, formatInstant } from "@/lib/format/dates";
 import { getSessionTimeZone } from "@/lib/tenant/get-tenant-time-zone";
 import { Badge } from "@/components/ui/badge";
+import { LoadError, PageLoadError } from "@/components/ui/load-error";
+import { safeError } from "@/lib/errors/safe-error";
+import { queryErrorMessage } from "@/lib/errors/query-error";
 
 const t = messages.profile;
 const fields = messages.fields;
@@ -17,12 +20,17 @@ export default async function ProfilePage() {
 
   if (!authUser) redirect("/login");
 
-  const { data: profile } = await supabase
+  // D45: the main query. maybeSingle: an account without an employee row is a
+  // valid case and says so; a failed read is the page's error.
+  const { data: profile, error: profileError } = await supabase
     .from("users")
     .select("*, ec_job_information!ec_job_information_user_id_fkey(job_title, department_id, manager_id, start_date, end_date), departments(name)")
     .eq("auth_uid", authUser.id)
-    .single();
+    .maybeSingle();
 
+  if (profileError) {
+    return <PageLoadError title={t.heading} message={await safeError("profile.profile", profileError, messages.common.pageLoadError)} />;
+  }
   if (!profile) {
     return (
       <div className="text-fg-muted">
@@ -40,20 +48,31 @@ export default async function ProfilePage() {
   const dept = Array.isArray(profile.departments) ? profile.departments[0] : profile.departments;
 
   const managerId = currentJob?.manager_id ?? null;
-  const { data: manager } = managerId
-    ? await supabase
-        .from("users")
-        .select("first_name, last_name, email")
-        .eq("id", managerId)
-        .single()
-    : { data: null };
+  let manager: { first_name: string; last_name: string } | null = null;
+  let managerQueryError: unknown = null;
+  if (managerId) {
+    // maybeSingle: the manager may be out of the person's RLS view; the field says "Sin jefe".
+    const { data, error } = await supabase
+      .from("users")
+      .select("first_name, last_name, email")
+      .eq("id", managerId)
+      .maybeSingle();
+    manager = data;
+    managerQueryError = error;
+  }
 
-  const { data: feedback } = await supabase
+  const { data: feedback, error: feedbackQueryError } = await supabase
     .from("continuous_feedbacks")
     .select("*")
     .eq("subject_id", profile.id)
     .order("created_at", { ascending: false })
     .limit(10);
+
+  // D45: the manager is a field of the personal data; each section shows its own error.
+  const [personalError, feedbackError] = await Promise.all([
+    queryErrorMessage("profile.manager", managerQueryError),
+    queryErrorMessage("profile.feedback", feedbackQueryError),
+  ]);
 
   const timeZone = await getSessionTimeZone();
 
@@ -86,21 +105,25 @@ export default async function ProfilePage() {
       {/* Details card */}
       <section className="rounded-xl border border-line bg-surface p-6">
         <h2 className="mb-4 text-lg font-semibold text-fg">{t.personalData}</h2>
-        <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
-          <Field label={fields.email} value={profile.email} />
-          <Field label={fields.employeeNumber} value={profile.employee_id ?? messages.common.empty} />
-          <Field label={fields.status} value={enumLabel("EmployeeStatus", profile.status)} />
-          <Field label={fields.hireDate} value={formatDateOnly(profile.hire_date)} />
-          <Field
-            label={fields.manager}
-            value={
-              manager
-                ? `${manager.first_name} ${manager.last_name}`
-                : fields.noManager
-            }
-          />
-          <Field label={fields.department} value={dept?.name ?? messages.common.empty} />
-        </dl>
+        {personalError ? (
+          <LoadError message={personalError} />
+        ) : (
+          <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
+            <Field label={fields.email} value={profile.email} />
+            <Field label={fields.employeeNumber} value={profile.employee_id ?? messages.common.empty} />
+            <Field label={fields.status} value={enumLabel("EmployeeStatus", profile.status)} />
+            <Field label={fields.hireDate} value={formatDateOnly(profile.hire_date)} />
+            <Field
+              label={fields.manager}
+              value={
+                manager
+                  ? `${manager.first_name} ${manager.last_name}`
+                  : fields.noManager
+              }
+            />
+            <Field label={fields.department} value={dept?.name ?? messages.common.empty} />
+          </dl>
+        )}
       </section>
 
       {/* Job Info card */}
@@ -130,7 +153,9 @@ export default async function ProfilePage() {
         <h2 className="mb-4 text-lg font-semibold text-fg">
           {t.feedbackReceived}
         </h2>
-        {feedback && feedback.length > 0 ? (
+        {feedbackError ? (
+          <LoadError message={feedbackError} />
+        ) : feedback && feedback.length > 0 ? (
           <ul className="space-y-3">
             {feedback.map((f) => (
               <li

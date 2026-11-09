@@ -2607,6 +2607,8 @@ record what the tests type.
   entry is a made-up password of a fixture in the first commit of this PR,
   which gitleaks took for a key; the next commit replaced it with a
   low-entropy value.
+  Removed in D45: the squash merge left that commit out of main's history, so
+  the entry no longer matched anything.
 
 **What the suite covers (49 tests):**
 - Employee login with the company code, landing on the dashboard; the Admin
@@ -2762,7 +2764,194 @@ their e2e lands (ROADMAP). The forced MFA enrollment it also covered is in
   información laboral registrada" for everyone, to the admin too. Its query
   embeds `business_units` and `legal_entities`, which have no foreign key from
   `ec_job_information`; PostgREST answers PGRST200 and the page shows the empty
-  state. Deciding where those two fields come from is a change of its own.
+  state. Deciding where those two fields come from is a change of its own. Fixed
+  in D45.
+
+---
+
+## D45 — A Failed Query Is Not "No Data"
+
+**Decision:** extends D27. A Supabase query that fails is never shown as an
+empty result. The section it feeds shows the error (generic text and request
+id, through `safeError()`), or the whole page does when it is the page's main
+query. A static test with the TypeScript parser fails when a query's `error`
+is not read, in pages, layouts, Server Actions, HTTP routes and the libraries
+they call. Correction PR between PR 5 and PR 6 of Phase 9c.
+
+**The bug that started it:**
+- The employee detail showed "Sin información laboral registrada" to
+  everyone, the admin included (found by the D44 screenshots).
+- Its job query embedded `business_units(name)` and `legal_entities(name)` in
+  `ec_job_information`, which has no foreign key to either table. PostgREST
+  answered PGRST200, `data` was null, and the page read only `data`.
+- A failed PostgREST query resolves with `{ data: null, error }`; it does not
+  throw. Reading only `data` turns every failure into an empty state. The same
+  pattern was in about 70 places.
+
+**Business unit and legal entity:**
+- They come from the department of each job record:
+  `departments(name, business_units(name), legal_entities(name))`
+  (`lib/employees/job-information.ts`, `JOB_INFORMATION_SELECT` and
+  `jobOrganization()`), for the current record and the history. No migration.
+- The department's own business unit and legal entity are read, so the
+  history shows today's values of a past record's department. Whether the two
+  fields move into the job record, as in SuccessFactors, is decided in Phase 14
+  (ROADMAP).
+
+**The rule (`lib/errors/query-error.ts`, `components/ui/load-error.tsx`):**
+- A page with independent queries shows the error per section; the other
+  sections still render. `queryErrorMessage(event, error)` returns the
+  message, or null; `firstError()` picks the first error of the queries that
+  feed one section; `LoadError` shows it with `role="alert"`.
+- The whole page goes to error (`PageLoadError`: the page's heading and the
+  message) only when its main query fails: the record of the employee detail,
+  the own profile on Mi perfil and the dashboard, the employees list, the
+  positions of the org chart and the ARCO requests.
+- Counts and headings that depend on a failed list do not claim zero: the
+  roles, groups, goals and feedback headings drop their count, the stats that
+  come from a failed list are not shown, and the employee header does not say
+  "Sin puesto" when the job query failed.
+- Per page:
+  - Employee detail: page error for the employee; sections for personal
+    data, job (current, history and manager) and compensation.
+  - Employees list: page error for the list and for the direct reports,
+    without which the list cannot tell which rows open a profile.
+  - Dashboard: page error for the profile; sections for the tenant KPIs and
+    the goals.
+  - Mi perfil: page error for the profile; the manager is a field of the
+    personal data section; feedback is its own section.
+  - Desempeño: goals and feedback per tab; the stats come from the goals.
+  - Habilidades: radar (position, classification, required skills, own
+    skills), catalog (ontology, own skills) and team (direct reports, their
+    names and skills) per tab, with their stats.
+  - Administración: stats, system configuration, audit log and rate limits
+    per block. The rate limits show no defaults when the tenant's own values
+    cannot be read: the admin would save over them.
+  - Gestión de roles: roles and groups per list.
+  - Organigrama and Derechos ARCO: page error.
+
+**`maybeSingle()` only where "no record" is a business case.** `.single()`
+answers an error (PGRST116) when there is no row; that error was being read as
+"no row" by code that ignored it. Every query that changed:
+- `getCurrentUser()`: an account without an employee row (D35, null).
+- Employee detail: the employee (no row is a 404: it does not exist or RLS
+  hides it); the current personal, job and compensation records (an employee
+  may have none yet); the manager (out of the caller's RLS view, shown "—").
+- Dashboard and Mi perfil: the profile (no employee row says so); the manager
+  on Mi perfil (out of view, "Sin jefe").
+- Habilidades: the position and its job classification (none, or not
+  readable, means no required skills).
+- "Tomar Acción": the employee's name (not visible is "not found").
+- Server Actions: the employee row of the actor in the employee actions; the
+  ARCO request being processed and the skill being updated ("not found"); the
+  membership in `switchTenant` (a refusal) and the settings row in
+  `revokeMembership` (a person may have none).
+- LMS: the tenant's map in `/lms/launch` and `provisionTenantLms()` (not yet
+  provisioned), in `syncLmsUsers()` (not provisioned) and the user's map in
+  `getEmployeeCompletions()` (no Moodle account, no completions).
+- `.single()` stays after an insert that returns the new row, where a missing
+  row is an error.
+
+**The current user (`lib/auth/current-user.ts`):**
+- A failed read throws `CurrentUserUnavailable`, which carries safeError()'s
+  message; null still means no employee row.
+- The protected layout catches it and renders a shell without menu or page:
+  the header with "Cerrar sesión", "Algo salió mal" and the message with the
+  request id. The person is not sent to the login as if there were no
+  session. The Admin Center layout renders nothing in that case (the
+  protected layout already shows it).
+- Next.js renders the page in parallel with the layout; the page gets the
+  same cached rejection and rethrows it. The user never sees it (the layout
+  does not render the page), and `onRequestError` skips
+  `CurrentUserUnavailable`, already logged by safeError() as
+  `auth.current_user` with the same request id.
+- Server Actions use `currentUserOrError()`, which returns the message
+  instead of throwing: performance, Administración, ARCO and skills actions
+  return it; the MFA and login audit helpers skip the audit (the read failure
+  is already logged). `/api/colleagues` answers 500 "unavailable", not 401.
+
+**"Tomar Acción":**
+- Its six lists were read from the browser with the anon client, and a failed
+  list was an empty select. They now come from the Server Action
+  `loadActionOptions()`: zod (`z.guid()`, the seed's ids are not RFC 4122),
+  `limitRead()` (a token of the api bucket, so reads do not spend the person's
+  writes), `can(ec.manage_employees, edit)` on that employee, and safeError().
+- If a list fails, the dialog shows the error with the request id and its
+  submit buttons are disabled; the next open tries again.
+
+**Routes and libraries:**
+- `/lms/launch` reads the cohort before creating the Moodle account. If the
+  read fails it answers 500 with a safe error and launches nothing, so no
+  account is left outside its cohort and the course is not opened as if the
+  person had been enrolled.
+- `syncLmsUsers()` ends with an error when the tenant map, the employees or
+  the existing maps cannot be read (without the maps it would create every
+  account again), and a failed map insert is that user's error.
+  `provisionTenantLms()` throws when it cannot tell whether the tenant is
+  provisioned, instead of creating a second category and cohort.
+- `revokeMembership()` still signs the person out after revoking (the
+  membership is gone), and logs a failed read or update of the active tenant.
+- `tenantAccessAllowed()` (middleware, D21) still refuses on a failed lookup
+  with the same 404, and now logs it with the request id.
+
+**Static test (`__tests__/static/query-errors.ts` and `.test.ts`):**
+- A query is a call chain that starts at `.from()` or `.rpc()` (not
+  `Array.from`). It is checked where it is awaited: directly, through a
+  variable holding the builder (refined with `query = query.eq()`), inside
+  `await Promise.all([…])`, or as a branch of a conditional.
+- The result must be bound with `error` (or to a name whose `.error` is read)
+  and that error must be read again in the same function. Otherwise it
+  reports: error not destructured, destructured and never read, result thrown
+  away, returned unchecked, awaited inside another expression, a
+  `Promise.all` result not bound one by one, or a builder never awaited.
+- It runs over every file in `src`, and checks that pages, layouts, Server
+  Actions and routes are among them. Negative controls give one reason each
+  for a page, a Server Action and a route, and a positive control covers every
+  pattern the code uses.
+
+**Tests:**
+- Unit: `getCurrentUser()` (null without session or row, the error with
+  request id and its JSON line, `currentUserOrError()`); `/api/colleagues`
+  with the row unavailable; `/lms/launch` with a failed cohort read (500, no
+  Moodle account, no launch, no database text); `onRequestError` skipping
+  `CurrentUserUnavailable`. The Server Action tests now mock the employee row
+  as `getCurrentUser()` reads it.
+- Integration against the local database
+  (`__tests__/integration/employee-job-information.test.ts`): the old embed
+  answers PGRST200; an admin reads an employee's job with business unit and
+  legal entity, and the rendered detail page shows them; with the job query
+  failing for real (PGRST200), the page shows the error with the request id,
+  not "Sin información laboral registrada", the personal section still
+  renders, and the JSON line carries the request id and the code; an employee
+  reads their own job with both fields under RLS, and another tenant's job
+  gives no rows. The two page tests fail against the page before this change.
+- e2e (`employee-detail.spec.ts`): for the employee and the admin, the job
+  section of Gabriela Morales shows Puesto, Departamento, Unidad de negocio
+  and Entidad legal with values, without the empty state or an error.
+- Seen in the browser against the local production build, revoking SELECT
+  from `authenticated` on one table at a time (local only, restored after):
+  the job section's error with the other sections intact; the layout's error
+  page with no menu and no redirect; the rate limits' error without defaults
+  or "Guardar"; and "Tomar Acción" with the error and its buttons disabled.
+
+**RLS checked before writing the employee test:** `ec_job_information` is
+readable by every member of the tenant (`tenant_id = requesting_tenant_id()`),
+so an employee reads their own job; nothing changed in the policies.
+
+**Accepted for now:**
+- Next.js still prints its own non-JSON line for the page's rethrown
+  `CurrentUserUnavailable` (as in D27); it carries the generic message only.
+- Revoking SELECT on `ec_job_information` itself also stops `can()`, whose
+  SQL reads that table, so that failure reaches `error.tsx` before the job
+  query runs. The section error was checked through an embedded table
+  (`job_classifications`).
+- The employee detail renders two "Tomar Acción" buttons, the menu's and the
+  dialog's own, and a choice in the menu does not open the dialog by itself.
+  Seen while checking this PR and left as it was.
+- The employee-change, ARCO and manager-assessment actions validate the
+  employee id with `z.string().uuid()`, which rejects the seed's ids
+  (`e0000000-…`); ids from `gen_random_uuid()` pass. Seen while checking this
+  PR, not changed.
 
 ---
 

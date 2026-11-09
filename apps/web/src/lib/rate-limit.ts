@@ -109,6 +109,16 @@ export async function limitWrite(): Promise<string | null> {
   return result.allowed ? null : rateLimitMessage(result);
 }
 
+/**
+ * First line of a Server Action that only reads (D45: the lists of "Tomar
+ * Acción"): it spends a token of the api bucket, like an HTTP route, so reads
+ * do not use up the person's writes. The message to return, or null to go on.
+ */
+export async function limitRead(): Promise<string | null> {
+  const result = await consumeForCaller("api");
+  return result.allowed ? null : rateLimitMessage(result);
+}
+
 /** First line of every HTTP route: the 429 to return, or null to go on. */
 export async function limitApi(): Promise<Response | null> {
   const result = await consumeForCaller("api");

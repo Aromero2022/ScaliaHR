@@ -44,8 +44,9 @@ function mockProfile(userId: string, tenantId: string) {
   mockFrom.mockReturnValue({
     select: vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
-        single: vi.fn().mockResolvedValue({
-          data: { id: userId, tenant_id: tenantId },
+        // getCurrentUser reads the employee row with maybeSingle (D45).
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { id: userId, tenant_id: tenantId, position_id: null },
           error: null,
         }),
       }),

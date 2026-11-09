@@ -11,6 +11,12 @@ import { enumLabel, messages } from "@/lib/i18n/es-MX";
 import { calendarDateIn, formatDateOnly } from "@/lib/format/dates";
 import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
 import { Badge } from "@/components/ui/badge";
+import { LoadError, PageLoadError } from "@/components/ui/load-error";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { safeError } from "@/lib/errors/safe-error";
+import { firstError, queryErrorMessage } from "@/lib/errors/query-error";
+import { JOB_INFORMATION_SELECT, jobOrganization } from "@/lib/employees/job-information";
+import { z } from "zod";
 
 const t = messages.employeeDetail;
 const fields = messages.fields;
@@ -45,13 +51,11 @@ export default async function EmployeeDetailPage({
   const flags = await getModuleFlags(claims.tenantId);
   if (isModuleRouteBlocked("/employees", flags)) redirect("/dashboard");
 
-  const supabase = await createClient();
-  const { data: currentUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  // D45: the URL's id is external input; one that is not a uuid is not an
+  // employee. guid, not uuid: the seed's ids (e0000000-…) are not RFC 4122.
+  if (!z.guid().safeParse(id).success) notFound();
 
+  const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
 
   const [ownProfile, teamView, adminView] = await Promise.all([
@@ -64,28 +68,36 @@ export default async function EmployeeDetailPage({
     return <AccessDenied />;
   }
 
-  const { data: employee } = await supabase
+  const supabase = await createClient();
+  // D45: the main query. No row (it does not exist or RLS hides it) is a 404;
+  // a failed read is the whole page's error, with its request id.
+  const { data: employee, error: employeeError } = await supabase
     .from("users")
     .select("*, departments(name)")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
+  if (employeeError) {
+    return <PageLoadError title={t.heading} message={await safeError("employee_detail.employee", employeeError, messages.common.pageLoadError)} />;
+  }
   if (!employee) notFound();
 
+  // D45: maybeSingle on the current records: an employee may have no current
+  // personal, job or compensation record yet, and the section says so.
   const [
-    { data: personalCurrent },
-    { data: personalHistory },
-    { data: jobCurrent },
-    { data: jobHistory },
-    { data: compCurrent },
-    { data: compHistory },
+    { data: personalCurrent, error: personalCurrentError },
+    { data: personalHistory, error: personalHistoryError },
+    { data: jobCurrent, error: jobCurrentError },
+    { data: jobHistory, error: jobHistoryError },
+    { data: compCurrent, error: compCurrentError },
+    { data: compHistory, error: compHistoryError },
   ] = await Promise.all([
     supabase
       .from("ec_personal_information")
       .select("*")
       .eq("user_id", id)
       .is("end_date", null)
-      .single(),
+      .maybeSingle(),
     supabase
       .from("ec_personal_information")
       .select("*")
@@ -93,17 +105,13 @@ export default async function EmployeeDetailPage({
       .order("start_date", { ascending: false }),
     supabase
       .from("ec_job_information")
-      .select(
-        "*, positions(title, position_code), departments(name), job_classifications(title), locations(name), business_units(name), legal_entities(name)"
-      )
+      .select(JOB_INFORMATION_SELECT)
       .eq("user_id", id)
       .is("end_date", null)
-      .single(),
+      .maybeSingle(),
     supabase
       .from("ec_job_information")
-      .select(
-        "*, positions(title, position_code), departments(name), job_classifications(title), locations(name), business_units(name), legal_entities(name)"
-      )
+      .select(JOB_INFORMATION_SELECT)
       .eq("user_id", id)
       .order("start_date", { ascending: false }),
     supabase
@@ -111,7 +119,7 @@ export default async function EmployeeDetailPage({
       .select("*")
       .eq("user_id", id)
       .is("end_date", null)
-      .single(),
+      .maybeSingle(),
     supabase
       .from("ec_compensation")
       .select("*")
@@ -120,14 +128,24 @@ export default async function EmployeeDetailPage({
   ]);
 
   let managerName: string = empty;
+  let managerError: unknown = null;
   if (jobCurrent?.manager_id) {
-    const { data: mgr } = await supabase
+    // maybeSingle: the manager may be out of the caller's RLS view; the field shows "—".
+    const { data: mgr, error } = await supabase
       .from("users")
       .select("first_name, last_name")
       .eq("id", jobCurrent.manager_id)
-      .single();
+      .maybeSingle();
+    managerError = error;
     if (mgr) managerName = `${mgr.first_name} ${mgr.last_name}`;
   }
+
+  // D45: each section shows its own error; the others still render.
+  const [personalError, jobError, compError] = await Promise.all([
+    queryErrorMessage("employee_detail.personal", firstError(personalCurrentError, personalHistoryError)),
+    queryErrorMessage("employee_detail.job", firstError(jobCurrentError, jobHistoryError, managerError)),
+    queryErrorMessage("employee_detail.compensation", firstError(compCurrentError, compHistoryError)),
+  ]);
 
   const canViewComp = adminView.allowed || teamView.allowed;
   const today = calendarDateIn((await getTenantTimeZone(claims.tenantId)).timeZone);
@@ -153,20 +171,24 @@ export default async function EmployeeDetailPage({
     ],
   }));
 
-  const jobHistoryRecords = (jobHistory ?? []).map((r) => ({
-    id: r.id as string,
-    ...historyPeriod(r.start_date as string, r.end_date as string | null),
-    eventReason: r.event_reason as string | null,
-    fields: [
-      { label: fields.jobTitle, value: r.job_title ?? empty },
-      { label: fields.position, value: rel(r.positions)?.title ?? empty },
-      { label: fields.department, value: rel(r.departments)?.name ?? empty },
-      { label: fields.classification, value: rel(r.job_classifications)?.title ?? empty },
-      { label: fields.location, value: rel(r.locations)?.name ?? empty },
-      { label: fields.businessUnit, value: rel(r.business_units)?.name ?? empty },
-      { label: fields.legalEntity, value: rel(r.legal_entities)?.name ?? empty },
-    ],
-  }));
+  const jobHistoryRecords = (jobHistory ?? []).map((r) => {
+    const org = jobOrganization(r);
+    return {
+      id: r.id as string,
+      ...historyPeriod(r.start_date as string, r.end_date as string | null),
+      eventReason: r.event_reason as string | null,
+      fields: [
+        { label: fields.jobTitle, value: r.job_title ?? empty },
+        { label: fields.position, value: rel(r.positions)?.title ?? empty },
+        { label: fields.department, value: org.department ?? empty },
+        { label: fields.classification, value: rel(r.job_classifications)?.title ?? empty },
+        { label: fields.location, value: rel(r.locations)?.name ?? empty },
+        { label: fields.businessUnit, value: org.businessUnit ?? empty },
+        { label: fields.legalEntity, value: org.legalEntity ?? empty },
+      ],
+    };
+  });
+  const jobCurrentOrg = jobCurrent ? jobOrganization(jobCurrent) : null;
 
   const compHistoryRecords = (compHistory ?? []).map((r) => ({
     id: r.id as string,
@@ -194,7 +216,12 @@ export default async function EmployeeDetailPage({
               {employee.first_name} {employee.last_name}
             </h1>
             <p className="mt-0.5 text-sm text-fg-muted">
-              {jobCurrent?.job_title ?? messages.common.noJob} &middot;{" "}
+              {/* D45: without the job record the header does not claim "Sin puesto"; the section shows the error. */}
+              {!jobError && (
+                <>
+                  {jobCurrent?.job_title ?? messages.common.noJob} &middot;{" "}
+                </>
+              )}
               {rel(employee.departments)?.name ?? messages.common.noDepartment}
             </p>
           </div>
@@ -207,7 +234,9 @@ export default async function EmployeeDetailPage({
         <h2 className="mb-4 text-lg font-semibold text-fg">
           {t.personalInformation}
         </h2>
-        {personalCurrent ? (
+        {personalError ? (
+          <LoadError message={personalError} />
+        ) : personalCurrent ? (
           <>
             <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
               <Field label={fields.firstName} value={personalCurrent.first_name} />
@@ -265,7 +294,9 @@ export default async function EmployeeDetailPage({
         <h2 className="mb-4 text-lg font-semibold text-fg">
           {t.jobInformation}
         </h2>
-        {jobCurrent ? (
+        {jobError ? (
+          <LoadError message={jobError} />
+        ) : jobCurrent ? (
           <>
             <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
               <Field label={fields.jobTitle} value={jobCurrent.job_title ?? empty} />
@@ -277,12 +308,12 @@ export default async function EmployeeDetailPage({
                     : empty
                 }
               />
-              <Field label={fields.department} value={rel(jobCurrent.departments)?.name ?? empty} />
+              <Field label={fields.department} value={jobCurrentOrg?.department ?? empty} />
               <Field label={fields.classification} value={rel(jobCurrent.job_classifications)?.title ?? empty} />
               <Field label={fields.manager} value={managerName} />
               <Field label={fields.location} value={rel(jobCurrent.locations)?.name ?? empty} />
-              <Field label={fields.businessUnit} value={rel(jobCurrent.business_units)?.name ?? empty} />
-              <Field label={fields.legalEntity} value={rel(jobCurrent.legal_entities)?.name ?? empty} />
+              <Field label={fields.businessUnit} value={jobCurrentOrg?.businessUnit ?? empty} />
+              <Field label={fields.legalEntity} value={jobCurrentOrg?.legalEntity ?? empty} />
               <Field label={fields.effectiveDate} value={formatDateOnly(jobCurrent.start_date)} />
               <Field label={fields.reason} value={jobCurrent.event_reason ?? empty} />
             </dl>
@@ -303,7 +334,9 @@ export default async function EmployeeDetailPage({
           <h2 className="mb-4 text-lg font-semibold text-fg">
             {t.compensation}
           </h2>
-          {compCurrent ? (
+          {compError ? (
+            <LoadError message={compError} />
+          ) : compCurrent ? (
             <>
               <dl className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-x-8 gap-y-4">
                 <Field

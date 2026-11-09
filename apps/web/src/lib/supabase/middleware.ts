@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { appRoleFromClaims, aalFromClaims, mfaStepFor, requiresAal2 } from "@/lib/auth/mfa-policy";
 import { COMPANY_CODE_COOKIE, requestedTenant, tenantAccessAllowed, tenantNotFound } from "@/lib/tenant/host";
-import { TENANT_ID_HEADER } from "@/lib/log/request-context";
+import { REQUEST_ID_HEADER, TENANT_ID_HEADER } from "@/lib/log/request-context";
 import { tenantAccessCache, tenantAccessKey } from "@/lib/tenant/access-cache";
 import { supabaseServerTarget } from "./server-url";
 
@@ -78,7 +78,10 @@ export async function updateSession(request: NextRequest) {
       const key = tenantAccessKey(requested, tokenTenant);
       let allowed = cache.get(key) === true;
       if (!allowed) {
-        allowed = await tenantAccessAllowed(supabase, requested, tokenTenant);
+        allowed = await tenantAccessAllowed(supabase, requested, tokenTenant, {
+          requestId: request.headers.get(REQUEST_ID_HEADER) ?? undefined,
+          tenantId: tokenTenant || undefined,
+        });
         if (allowed) cache.set(key, true);
       }
       if (!allowed) {

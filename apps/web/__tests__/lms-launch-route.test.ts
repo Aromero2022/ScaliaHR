@@ -23,6 +23,7 @@ import * as moodleClient from "@/lib/lms/moodle-client";
 import { GET } from "@/app/(protected)/lms/launch/route";
 import { NextRequest } from "next/server";
 import { toModuleFlags } from "@/lib/tenant/module-flags";
+import { GENERIC_ERROR } from "@/lib/errors/safe-error";
 
 const mockGetModuleFlags = vi.mocked(getModuleFlags);
 const mockMoodle = vi.mocked(moodleClient);
@@ -41,7 +42,10 @@ type FakeUser = {
 
 // The route reads the verified JWT claims: sub, email, user_metadata and the
 // root tenant_id claim written by custom_access_token_hook.
-function mockSupabaseUser(user: FakeUser | null) {
+function mockSupabaseUser(
+  user: FakeUser | null,
+  cohort: { data: unknown; error: unknown } = { data: { moodle_cohort_id: 201 }, error: null },
+) {
   const claims = user && {
     sub: user.id,
     email: user.email,
@@ -55,7 +59,7 @@ function mockSupabaseUser(user: FakeUser | null) {
       const chain: Record<string, unknown> = {};
       chain.select = vi.fn(() => chain);
       chain.eq = vi.fn(() => chain);
-      chain.single = vi.fn().mockResolvedValue({ data: { moodle_cohort_id: 201 }, error: null });
+      chain.maybeSingle = vi.fn().mockResolvedValue(cohort);
       return chain;
     }),
   };
@@ -133,6 +137,27 @@ describe("GET /lms/launch", () => {
       lastName: "Lopez",
     });
     expect(mockMoodle.addCohortMembers).toHaveBeenCalledWith(201, [502]);
+  });
+
+  it("D45: a failed cohort read is a safe error, before any Moodle account or launch", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockSupabaseUser(
+      { id: "user-5", email: "ana@acme.dev", tenant_id: "tenant-1", user_metadata: {} },
+      { data: null, error: { code: "42501", message: "permission denied for table lms_tenant_map" } },
+    );
+    mockGetModuleFlags.mockResolvedValue(toModuleFlags({ is_lms_active: true }));
+    mockMoodle.getUser.mockResolvedValue(null);
+
+    const res = await GET(makeRequest());
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe(GENERIC_ERROR);
+    expect(JSON.stringify(body)).not.toContain("permission denied");
+    expect(mockMoodle.createUser).not.toHaveBeenCalled();
+    expect(mockMoodle.requestLoginUrl).not.toHaveBeenCalled();
+    expect(errorSpy.mock.calls.join("\n")).toContain('"event":"lms.launch_cohort"');
+    errorSpy.mockRestore();
   });
 
   it("returns 403 when user has no tenant", async () => {

@@ -6,6 +6,9 @@ import { enumLabel, messages } from "@/lib/i18n/es-MX";
 import { formatDateOnly } from "@/lib/format/dates";
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
+import { LoadError, PageLoadError } from "@/components/ui/load-error";
+import { safeError } from "@/lib/errors/safe-error";
+import { firstError, queryErrorMessage } from "@/lib/errors/query-error";
 
 const t = messages.dashboard;
 const fields = messages.fields;
@@ -16,12 +19,17 @@ export default async function DashboardPage() {
 
   const bizUser = await getCurrentUser();
 
-  const { data: profile } = await supabase
+  // D45: the main query. maybeSingle: an account without an employee row is a
+  // valid case and says so; a failed read is the page's error.
+  const { data: profile, error: profileError } = await supabase
     .from("users")
     .select("*, ec_job_information!ec_job_information_user_id_fkey(job_title, end_date), departments(name)")
     .eq("auth_uid", claims.userId)
-    .single();
+    .maybeSingle();
 
+  if (profileError) {
+    return <PageLoadError title={messages.nav.dashboard.label} message={await safeError("dashboard.profile", profileError, messages.common.pageLoadError)} />;
+  }
   if (!profile) {
     return (
       <div className="text-fg-muted">
@@ -44,21 +52,24 @@ export default async function DashboardPage() {
 
   let totalEmployees: number | null = null;
   let totalDepts: number | null = null;
+  let kpiError: string | null = null;
   if (canViewTenantKpis) {
     const [empRes, deptRes] = await Promise.all([
       supabase.from("users").select("*", { count: "exact", head: true }).eq("status", "ACTIVE"),
       supabase.from("departments").select("*", { count: "exact", head: true }),
     ]);
+    kpiError = await queryErrorMessage("dashboard.kpis", firstError(empRes.error, deptRes.error));
     totalEmployees = empRes.count;
     totalDepts = deptRes.count;
   }
 
-  const { data: recentGoals } = await supabase
+  const { data: recentGoals, error: goalsQueryError } = await supabase
     .from("performance_goals")
     .select("*")
     .eq("user_id", profile.id)
     .order("created_at", { ascending: false })
     .limit(5);
+  const goalsError = await queryErrorMessage("dashboard.goals", goalsQueryError);
 
   return (
     <div className="space-y-8">
@@ -73,8 +84,9 @@ export default async function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
+      {kpiError && <LoadError message={kpiError} />}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4">
-        {canViewTenantKpis && (
+        {canViewTenantKpis && !kpiError && (
           <>
             <StatCard label={t.activeEmployees} value={totalEmployees ?? 0} tone="accent" />
             <StatCard label={t.departments} value={totalDepts ?? 0} tone="success" />
@@ -105,7 +117,9 @@ export default async function DashboardPage() {
         <h2 className="mb-4 text-lg font-semibold text-fg">
           {t.myGoals}
         </h2>
-        {recentGoals && recentGoals.length > 0 ? (
+        {goalsError ? (
+          <LoadError message={goalsError} />
+        ) : recentGoals && recentGoals.length > 0 ? (
           <div className="space-y-3">
             {recentGoals.map((g) => (
               <div

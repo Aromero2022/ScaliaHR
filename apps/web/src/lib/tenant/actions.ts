@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { safeError } from "@/lib/errors/safe-error";
 import { z } from "zod";
 import { limitWrite } from "@/lib/rate-limit";
+import { reportError } from "@/lib/log/report";
+import { requestContext } from "@/lib/log/request-context";
 
 // Tenant ids of the seed are not RFC 4122 v4 (a0000000-…), so guid, not uuid.
 const TenantId = z.guid("Formato de tenant_id inválido");
@@ -24,13 +26,15 @@ export async function switchTenant(tenantId: string) {
 
   if (!user) return { error: "No autenticado" };
 
-  const { data: membership } = await supabase
+  // D45: maybeSingle: no membership is a refusal; a failed read is a safe error.
+  const { data: membership, error: membershipError } = await supabase
     .from("user_tenant_memberships")
     .select("tenant_id, app_role, is_active")
     .eq("user_id", user.id)
     .eq("tenant_id", tenantId)
-    .single();
+    .maybeSingle();
 
+  if (membershipError) return { error: await safeError("tenant.switchTenant_membership", membershipError) };
   if (!membership || !membership.is_active) {
     return { error: "No tienes membresía activa en este tenant" };
   }
@@ -71,17 +75,23 @@ export async function revokeMembership(tenantId: string) {
 
   if (error) return { error: await safeError("tenant.revokeMembership", error) };
 
-  const { data: settings } = await supabase
+  // D45: the membership is already revoked, so the session ends whatever
+  // happens here; a failed read or update of the active tenant is logged with
+  // the request id instead of being skipped silently. maybeSingle: a person may
+  // have no settings row.
+  const { data: settings, error: settingsError } = await supabase
     .from("user_settings")
     .select("active_tenant_id")
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
 
+  if (settingsError) reportError("tenant.revokeMembership_settings", settingsError, await requestContext());
   if (settings?.active_tenant_id === tenantId) {
-    await supabase
+    const { error: clearError } = await supabase
       .from("user_settings")
       .update({ active_tenant_id: null })
       .eq("user_id", user.id);
+    if (clearError) reportError("tenant.revokeMembership_clear", clearError, await requestContext());
   }
 
   await supabase.auth.signOut();

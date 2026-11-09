@@ -2,10 +2,18 @@
 
 import { useState, useRef, useEffect } from "react";
 import ActionModal from "@/components/action-modal";
-import { createClient } from "@/lib/supabase/client";
+import { loadActionOptions, type ActionOptions } from "./actions";
 
-type SelectOption = { id: string; label: string };
 type ActionType = "job" | "compensation" | "personal" | null;
+
+const NO_OPTIONS: ActionOptions = {
+  positions: [],
+  departments: [],
+  jobClassifications: [],
+  managers: [],
+  locations: [],
+  employeeName: "",
+};
 
 const actions = [
   { key: "job" as const, label: "Cambio de puesto", icon: BriefcaseIcon },
@@ -17,14 +25,9 @@ const actions = [
 export default function ActionMenu({ employeeId, today }: { employeeId: string; today: string }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [modalAction, setModalAction] = useState<ActionType>(null);
-  const [options, setOptions] = useState<{
-    positions: SelectOption[];
-    departments: SelectOption[];
-    jobClassifications: SelectOption[];
-    managers: SelectOption[];
-    locations: SelectOption[];
-    employeeName: string;
-  } | null>(null);
+  const [options, setOptions] = useState<ActionOptions | null>(null);
+  // D45: why the lists could not be loaded; the dialog shows it and does not send.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,23 +43,14 @@ export default function ActionMenu({ employeeId, today }: { employeeId: string; 
   async function loadOptionsAndOpen(action: ActionType) {
     setDropdownOpen(false);
     if (!options) {
-      const supabase = createClient();
-      const [posRes, deptRes, jcRes, mgrRes, locRes, empRes] = await Promise.all([
-        supabase.from("positions").select("id, title, position_code").order("title"),
-        supabase.from("departments").select("id, name").order("name"),
-        supabase.from("job_classifications").select("id, title").order("title"),
-        supabase.from("users").select("id, first_name, last_name").eq("status", "ACTIVE").is("deleted_at", null).order("last_name"),
-        supabase.from("locations").select("id, name").order("name"),
-        supabase.from("users").select("first_name, last_name").eq("id", employeeId).single(),
-      ]);
-      setOptions({
-        positions: (posRes.data ?? []).map((p) => ({ id: p.id, label: `${p.title} (${p.position_code})` })),
-        departments: (deptRes.data ?? []).map((d) => ({ id: d.id, label: d.name })),
-        jobClassifications: (jcRes.data ?? []).map((j) => ({ id: j.id, label: j.title })),
-        managers: (mgrRes.data ?? []).map((m) => ({ id: m.id, label: `${m.first_name} ${m.last_name}` })),
-        locations: (locRes.data ?? []).map((l) => ({ id: l.id, label: l.name })),
-        employeeName: empRes.data ? `${empRes.data.first_name} ${empRes.data.last_name}` : "",
-      });
+      // D45: read on the server (zod, rate limit, can(), safeError); retried on the next open if it failed.
+      const result = await loadActionOptions({ employeeId });
+      if (result.success) {
+        setOptions(result.data);
+        setLoadError(null);
+      } else {
+        setLoadError(result.error);
+      }
     }
     setModalAction(action);
   }
@@ -96,17 +90,18 @@ export default function ActionMenu({ employeeId, today }: { employeeId: string; 
         )}
       </div>
 
-      {modalAction && options && (
+      {modalAction && (options || loadError) && (
         <ActionModal
           employeeId={employeeId}
           today={today}
-          employeeName={options.employeeName}
-          positions={options.positions}
-          departments={options.departments}
-          jobClassifications={options.jobClassifications}
-          managers={options.managers}
-          locations={options.locations}
+          employeeName={(options ?? NO_OPTIONS).employeeName}
+          positions={(options ?? NO_OPTIONS).positions}
+          departments={(options ?? NO_OPTIONS).departments}
+          jobClassifications={(options ?? NO_OPTIONS).jobClassifications}
+          managers={(options ?? NO_OPTIONS).managers}
+          locations={(options ?? NO_OPTIONS).locations}
           currentPersonal={null}
+          loadError={options ? null : loadError}
         />
       )}
     </>

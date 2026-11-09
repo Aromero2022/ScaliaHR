@@ -14,28 +14,41 @@ export async function syncLmsUsers(tenantId: string): Promise<SyncResult> {
   const supabase = await createClient();
   const result: SyncResult = { provisioned: 0, suspended: 0, anonymized: 0, errors: [] };
 
-  const { data: tenantMap } = await supabase
+  // D45: a read that fails is reported and ends the sync with an error; it is
+  // never taken for "no tenant map", "no employees" or "no Moodle accounts yet"
+  // (that last one would create every account again).
+  const failed = async (event: string, error: unknown, message: string) => {
+    reportError(event, error, { ...(await requestContext()), tenantId });
+    result.errors.push(message);
+    return result;
+  };
+
+  const { data: tenantMap, error: tenantMapError } = await supabase
     .from("lms_tenant_map")
     .select("moodle_category_id, moodle_cohort_id")
     .eq("tenant_id", tenantId)
-    .single();
+    .maybeSingle();
 
+  if (tenantMapError) return failed("lms.sync_tenant_map_failed", tenantMapError, "LMS tenant map could not be read");
   if (!tenantMap) {
     result.errors.push("Tenant not provisioned in LMS");
     return result;
   }
 
-  const { data: employees } = await supabase
+  const { data: employees, error: employeesError } = await supabase
     .from("users")
     .select("id, auth_uid, email, first_name, last_name, status, is_anonymized")
     .eq("tenant_id", tenantId);
 
+  if (employeesError) return failed("lms.sync_employees_failed", employeesError, "Employees could not be read");
   if (!employees?.length) return result;
 
-  const { data: existingMaps } = await supabase
+  const { data: existingMaps, error: mapsError } = await supabase
     .from("lms_user_map")
     .select("user_id, moodle_user_id")
     .eq("tenant_id", tenantId);
+
+  if (mapsError) return failed("lms.sync_user_maps_failed", mapsError, "LMS user maps could not be read");
 
   const mapByUserId = new Map(
     (existingMaps ?? []).map((m) => [m.user_id, m.moodle_user_id])
@@ -75,11 +88,13 @@ export async function syncLmsUsers(tenantId: string): Promise<SyncResult> {
           });
         }
 
-        await supabase.from("lms_user_map").insert({
+        const { error: mapInsertError } = await supabase.from("lms_user_map").insert({
           tenant_id: tenantId,
           user_id: emp.id,
           moodle_user_id: mUser.id,
         });
+        // Reported below as this user's failure; without the map the next sync would not know the account.
+        if (mapInsertError) throw mapInsertError;
 
         await moodle.addCohortMembers(tenantMap.moodle_cohort_id, [mUser.id]);
         result.provisioned++;
@@ -105,13 +120,16 @@ export async function getEmployeeCompletions(
 ) {
   const supabase = await createClient();
 
-  const { data: userMap } = await supabase
+  // D45: maybeSingle: a person without a Moodle account has no completions; a
+  // failed read throws instead of looking like that.
+  const { data: userMap, error } = await supabase
     .from("lms_user_map")
     .select("moodle_user_id")
     .eq("tenant_id", tenantId)
     .eq("user_id", userId)
-    .single();
+    .maybeSingle();
 
+  if (error) throw new Error(`Failed to read LMS user map: ${error.message}`);
   if (!userMap) return [];
 
   return moodle.getActivitiesCompletion(courseId, userMap.moodle_user_id);

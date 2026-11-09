@@ -7,6 +7,7 @@ import { can } from "@/lib/authz/can";
 import AccessDenied from "@/components/access-denied";
 import SkillsHubDashboard from "@/components/skills-hub-dashboard";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { firstError, queryErrorMessage } from "@/lib/errors/query-error";
 
 interface SkillOntologyRow {
   id: string;
@@ -57,19 +58,25 @@ export default async function SkillsHubPage() {
   const { allowed } = await can(bizUser.id, "tih.employee_skills", "view");
   if (!allowed) return <AccessDenied />;
 
+  // D45: maybeSingle: a position without a classification, or one the person
+  // cannot read, means no required skills (the radar says so); a failed read is
+  // the radar's error.
   let jobRoleId: string | null = null;
+  let jobRoleError: unknown = null;
   if (bizUser.position_id) {
-    const { data: pos } = await supabase
+    const { data: pos, error: posError } = await supabase
       .from("positions")
       .select("job_classification_id")
       .eq("id", bizUser.position_id)
-      .single();
+      .maybeSingle();
+    jobRoleError = posError;
     if (pos?.job_classification_id) {
-      const { data: jc } = await supabase
+      const { data: jc, error: jcError } = await supabase
         .from("job_classifications")
         .select("job_role_id")
         .eq("id", pos.job_classification_id)
-        .single();
+        .maybeSingle();
+      jobRoleError = jcError;
       jobRoleId = jc?.job_role_id ?? null;
     }
   }
@@ -97,7 +104,7 @@ export default async function SkillsHubPage() {
             "skill_id, required_proficiency_level, skill:skill_ontology!jrs_skill_fk(name, code, category)"
           )
           .eq("job_role_id", jobRoleId)
-      : Promise.resolve({ data: [] as JobRoleSkillRow[] }),
+      : Promise.resolve({ data: [] as JobRoleSkillRow[], error: null }),
   ]);
 
   const ontology: SkillOntologyRow[] = (ontologyRes.data ?? []).map((s) => ({
@@ -146,25 +153,28 @@ export default async function SkillsHubPage() {
     }[];
   };
   let teamMembers: TeamMember[] = [];
+  let teamQueryError: unknown = null;
 
   if (isManager) {
-    const { data: directReports } = await supabase.rpc("get_direct_reports", {});
+    const { data: directReports, error: reportsError } = await supabase.rpc("get_direct_reports", {});
+    teamQueryError = reportsError;
     const reportIds: string[] = (directReports ?? []).map(
       (r: { user_id: string }) => r.user_id
     );
 
     if (reportIds.length > 0) {
-      const { data: reportUsers } = await supabase
+      const { data: reportUsers, error: reportUsersError } = await supabase
         .from("users")
         .select("id, first_name, last_name")
         .in("id", reportIds);
 
-      const { data: reportSkills } = await supabase
+      const { data: reportSkills, error: reportSkillsError } = await supabase
         .from("employee_skills")
         .select(
           "user_id, skill_id, self_assessed_level, manager_assessed_level, skill:skill_ontology!es_skill_fk(name, code, category)"
         )
         .in("user_id", reportIds);
+      teamQueryError = firstError(reportUsersError, reportSkillsError);
 
       const userMap = new Map(
         (reportUsers ?? []).map((u: { id: string; first_name: string | null; last_name: string | null }) => [
@@ -196,6 +206,13 @@ export default async function SkillsHubPage() {
     }
   }
 
+  // D45: each tab shows the error of the queries that feed it; the others still work.
+  const [radarError, catalogError, teamError] = await Promise.all([
+    queryErrorMessage("skills_hub.radar", firstError(jobRoleError, roleSkillsRes.error, mySkillsRes.error)),
+    queryErrorMessage("skills_hub.catalog", firstError(ontologyRes.error, mySkillsRes.error)),
+    queryErrorMessage("skills_hub.team", teamQueryError),
+  ]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -210,6 +227,7 @@ export default async function SkillsHubPage() {
         roleSkills={roleSkills}
         teamMembers={teamMembers}
         isManager={isManager}
+        errors={{ radar: radarError, catalog: catalogError, team: teamError }}
       />
     </div>
   );

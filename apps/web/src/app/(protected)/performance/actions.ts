@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { can } from "@/lib/authz/can";
 import { safeError } from "@/lib/errors/safe-error";
 import { limitWrite } from "@/lib/rate-limit";
+import { currentUserOrError } from "@/lib/auth/current-user";
 import { CreateGoalSchema, SendFeedbackSchema, formFields } from "@/lib/validations/performance";
 
 export async function createGoal(formData: FormData) {
@@ -19,12 +20,9 @@ export async function createGoal(formData: FormData) {
   if (!claims?.tenantId) return { error: "No autenticado" };
 
   const supabase = await createClient();
-  const { data: bizUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
-
+  // D45: a failed read of the employee row returns its safe error, not "not found".
+  const { user: bizUser, error: userError } = await currentUserOrError();
+  if (userError) return { error: userError };
   if (!bizUser) return { error: "Usuario no encontrado" };
 
   const { allowed } = await can(bizUser.id, "pmgm.view_own_goals", "edit");
@@ -64,12 +62,9 @@ export async function sendFeedback(formData: FormData) {
   if (!claims?.tenantId) return { error: "No autenticado" };
 
   const supabase = await createClient();
-  const { data: bizUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
-
+  // D45: a failed read of the employee row returns its safe error, not "not found".
+  const { user: bizUser, error: userError } = await currentUserOrError();
+  if (userError) return { error: userError };
   if (!bizUser) return { error: "Usuario no encontrado" };
 
   const { allowed } = await can(bizUser.id, "pmgm.give_feedback", "edit");

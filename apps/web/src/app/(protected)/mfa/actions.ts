@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/lib/audit/log";
 import { createClient } from "@/lib/supabase/server";
 import { consumeRateLimit, limitWrite, rateLimitMessage } from "@/lib/rate-limit";
 import { mfaErrorMessage } from "@/lib/auth/messages";
+import { currentUserOrError } from "@/lib/auth/current-user";
 
 const MfaCode = z.object({
   factorId: z.uuid(),
@@ -43,13 +44,9 @@ export async function logMfaEnroll(): Promise<void> {
   const claims = await getClaims();
   if (!claims?.tenantId) return;
 
-  const sb = await createClient();
-  const { data: bizUser } = await sb
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
-
+  // D45: without the employee row there is no actor to audit; a failed read is
+  // already logged with the request id by getCurrentUser.
+  const { user: bizUser } = await currentUserOrError();
   if (!bizUser) return;
 
   await writeAuditLog({
@@ -64,13 +61,9 @@ async function logMfaVerify(): Promise<void> {
   const claims = await getClaims();
   if (!claims?.tenantId) return;
 
-  const sb = await createClient();
-  const { data: bizUser } = await sb
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
-
+  // D45: without the employee row there is no actor to audit; a failed read is
+  // already logged with the request id by getCurrentUser.
+  const { user: bizUser } = await currentUserOrError();
   if (!bizUser) return;
 
   await writeAuditLog({
@@ -86,13 +79,9 @@ export async function logMfaEnrollFailed(): Promise<void> {
   const claims = await getClaims();
   if (!claims?.tenantId) return;
 
-  const sb = await createClient();
-  const { data: bizUser } = await sb
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
-
+  // D45: without the employee row there is no actor to audit; a failed read is
+  // already logged with the request id by getCurrentUser.
+  const { user: bizUser } = await currentUserOrError();
   if (!bizUser) return;
 
   await writeAuditLog({
@@ -107,13 +96,9 @@ async function logMfaVerifyFailed(): Promise<void> {
   const claims = await getClaims();
   if (!claims?.tenantId) return;
 
-  const sb = await createClient();
-  const { data: bizUser } = await sb
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
-
+  // D45: without the employee row there is no actor to audit; a failed read is
+  // already logged with the request id by getCurrentUser.
+  const { user: bizUser } = await currentUserOrError();
   if (!bizUser) return;
 
   await writeAuditLog({

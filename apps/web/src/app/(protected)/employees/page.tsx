@@ -12,6 +12,7 @@ import { safeError } from "@/lib/errors/safe-error";
 import { ilikeAnyOf } from "@/lib/postgrest/filters";
 import { EmployeeListParams } from "@/lib/validations/employees";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { PageLoadError } from "@/components/ui/load-error";
 import { messages } from "@/lib/i18n/es-MX";
 import { Table } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -61,19 +62,7 @@ export default async function EmployeesPage({
   const { data: employees, count, error: queryError } = await query;
 
   if (queryError) {
-    const message = await safeError("employees.list", queryError, t.loadError);
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-fg">{t.heading}</h1>
-        </div>
-        <div className="rounded-xl border border-danger-line bg-danger-subtle p-6 text-center">
-          <p className="text-sm text-danger-fg">
-            {message}
-          </p>
-        </div>
-      </div>
-    );
+    return <PageLoadError title={t.heading} message={await safeError("employees.list", queryError, t.loadError)} />;
   }
 
   const total = count ?? 0;
@@ -86,15 +75,18 @@ export default async function EmployeesPage({
     const ids = new Set<string>();
     ids.add(bizUser.id);
 
-    const { data: reports } = await supabase
+    const { data: reports, error: reportsError } = await supabase
       .from("ec_job_information")
       .select("user_id")
       .eq("manager_id", bizUser.id)
       .is("end_date", null);
 
-    if (reports) {
-      for (const r of reports) ids.add(r.user_id as string);
+    // D45: without the direct reports the list cannot tell which rows open a
+    // profile; it shows the list's error instead of rows that do not open.
+    if (reportsError) {
+      return <PageLoadError title={t.heading} message={await safeError("employees.reports", reportsError, t.loadError)} />;
     }
+    for (const r of reports) ids.add(r.user_id as string);
 
     viewableIds = ids;
   }

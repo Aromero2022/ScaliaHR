@@ -7,6 +7,10 @@ import { z } from "zod";
 import ArcoPanel from "./arco-panel";
 import { calendarDateIn, formatDateOnly, formatInstant } from "@/lib/format/dates";
 import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { PageLoadError } from "@/components/ui/load-error";
+import { safeError } from "@/lib/errors/safe-error";
+import { messages } from "@/lib/i18n/es-MX";
 
 // D38: the request list is paged; the subject is searched, not listed.
 const ARCO_PAGE_SIZE = 20;
@@ -21,13 +25,7 @@ export default async function ArcoPage({
   const claims = await requireAuth();
   if (!claims.tenantId) redirect("/login");
 
-  const supabase = await createClient();
-  const { data: currentUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
-
+  const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
 
   const { allowed } = await can(currentUser.id, "arco.manage", "view");
@@ -43,7 +41,8 @@ export default async function ArcoPage({
     );
   }
 
-  const { data: requests, count } = await supabase
+  const supabase = await createClient();
+  const { data: requests, count, error } = await supabase
     .from("arco_requests")
     .select(
       "*, requester:users!arco_requests_requester_id_fkey(first_name, last_name), subject:users!arco_requests_subject_id_fkey(first_name, last_name, email)",
@@ -51,6 +50,10 @@ export default async function ArcoPage({
     )
     .order("created_at", { ascending: false })
     .range((page - 1) * ARCO_PAGE_SIZE, page * ARCO_PAGE_SIZE - 1);
+  // D45: the request list is the page; if it cannot be read, nothing else is shown.
+  if (error) {
+    return <PageLoadError title="Derechos ARCO" message={await safeError("arco.requests", error, messages.common.pageLoadError)} />;
+  }
   const pages = Math.max(1, Math.ceil((count ?? 0) / ARCO_PAGE_SIZE));
 
   // D42: due_date is a calendar date; created_at and completed_at are moments in the tenant's zone.

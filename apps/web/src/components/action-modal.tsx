@@ -33,6 +33,8 @@ type ActionModalProps = {
     emergencyContactName?: string;
     emergencyContactPhone?: string;
   } | null;
+  /** D45: the lists could not be loaded; the dialog shows this and no form can be sent. */
+  loadError?: string | null;
 };
 
 type ActionType = "job" | "compensation" | "personal" | null;
@@ -47,6 +49,7 @@ export default function ActionModal({
   managers,
   locations,
   currentPersonal,
+  loadError = null,
 }: ActionModalProps) {
   const [open, setOpen] = useState(false);
   const [actionType, setActionType] = useState<ActionType>(null);
@@ -73,6 +76,7 @@ export default function ActionModal({
   }
 
   async function handleJobSubmit(form: FormData) {
+    if (loadError) return;
     setFeedback(null);
     startTransition(async () => {
       const result = await createJobChange({
@@ -96,6 +100,7 @@ export default function ActionModal({
   }
 
   async function handleCompSubmit(form: FormData) {
+    if (loadError) return;
     setFeedback(null);
     startTransition(async () => {
       const result = await createCompensationChange({
@@ -117,6 +122,7 @@ export default function ActionModal({
   }
 
   async function handlePersonalSubmit(form: FormData) {
+    if (loadError) return;
     setFeedback(null);
     startTransition(async () => {
       const result = await createPersonalInfoChange({
@@ -163,12 +169,18 @@ export default function ActionModal({
         <div className="p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-fg">
-              Tomar Acción — {employeeName}
+              {employeeName ? `Tomar Acción — ${employeeName}` : "Tomar Acción"}
             </h2>
             <button onClick={close} className="text-fg-subtle hover:text-fg">
               ✕
             </button>
           </div>
+
+          {loadError && (
+            <div role="alert" className="mb-4 rounded-lg border border-danger-line bg-danger-subtle px-4 py-2 text-sm text-danger-fg">
+              {loadError}
+            </div>
+          )}
 
           {feedback && (
             <div
@@ -221,7 +233,7 @@ export default function ActionModal({
               <SelectField name="managerId" label="Manager" options={managers} />
               <SelectField name="locationId" label="Ubicación" options={locations} />
               <InputField name="eventReason" label="Motivo" required />
-              <SubmitButton pending={isPending} label="Registrar Cambio" />
+              <SubmitButton pending={isPending} blocked={!!loadError} label="Registrar Cambio" />
             </form>
           )}
 
@@ -261,7 +273,7 @@ export default function ActionModal({
               </div>
               <InputField name="bonusTargetPct" label="Bono Objetivo (%)" type="number" />
               <InputField name="eventReason" label="Motivo" required />
-              <SubmitButton pending={isPending} label="Registrar Cambio" />
+              <SubmitButton pending={isPending} blocked={!!loadError} label="Registrar Cambio" />
             </form>
           )}
 
@@ -295,7 +307,7 @@ export default function ActionModal({
               <InputField name="emergencyContactName" label="Contacto de Emergencia" defaultValue={currentPersonal?.emergencyContactName} />
               <InputField name="emergencyContactPhone" label="Tel. Emergencia" defaultValue={currentPersonal?.emergencyContactPhone} />
               <InputField name="eventReason" label="Motivo" required />
-              <SubmitButton pending={isPending} label="Guardar Cambios" />
+              <SubmitButton pending={isPending} blocked={!!loadError} label="Guardar Cambios" />
             </form>
           )}
         </div>
@@ -387,11 +399,11 @@ function SelectField({
   );
 }
 
-function SubmitButton({ pending, label }: { pending: boolean; label: string }) {
+function SubmitButton({ pending, blocked, label }: { pending: boolean; blocked: boolean; label: string }) {
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || blocked}
       className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
     >
       {pending ? "Procesando…" : label}

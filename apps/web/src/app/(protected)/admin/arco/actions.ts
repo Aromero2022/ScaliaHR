@@ -9,6 +9,7 @@ import { can } from "@/lib/authz/can";
 import { createHash } from "crypto";
 import { safeError } from "@/lib/errors/safe-error";
 import { limitWrite } from "@/lib/rate-limit";
+import { currentUserOrError } from "@/lib/auth/current-user";
 
 const uuidSchema = z.string().uuid();
 
@@ -16,20 +17,16 @@ type ActionResult<T = unknown> =
   | { success: true; data: T }
   | { success: false; error: string };
 
+/** The actor of the action, or the message to return (D45: a failed read is not "No autenticado"). */
 async function getActorContext() {
   const claims = await getClaims();
-  if (!claims?.tenantId) return null;
+  if (!claims?.tenantId) return "No autenticado";
 
-  const supabase = await createClient();
-  const { data: profile } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  const { user, error } = await currentUserOrError();
+  if (error) return error;
+  if (!user) return "No autenticado";
 
-  if (!profile) return null;
-
-  return { supabase, actorId: profile.id, tenantId: claims.tenantId };
+  return { supabase: await createClient(), actorId: user.id, tenantId: claims.tenantId };
 }
 
 // ─── Create ARCO Request ──────────────────────────────────────
@@ -52,12 +49,13 @@ export async function createArcoRequest(
   }
 
   const ctx = await getActorContext();
-  if (!ctx) return { success: false, error: "No autenticado" };
+  if (typeof ctx === "string") return { success: false, error: ctx };
 
   const { allowed } = await can(ctx.actorId, "arco.manage", "view");
   if (!allowed) return { success: false, error: "Sin permiso para gestionar ARCO" };
 
-  const { data: dueDate } = await ctx.supabase.rpc("compute_arco_due_date");
+  const { data: dueDate, error: dueDateError } = await ctx.supabase.rpc("compute_arco_due_date");
+  if (dueDateError) return { success: false, error: await safeError("arco.due_date", dueDateError) };
 
   const { data, error } = await ctx.supabase
     .from("arco_requests")
@@ -109,17 +107,19 @@ export async function processArcoRequest(
   }
 
   const ctx = await getActorContext();
-  if (!ctx) return { success: false, error: "No autenticado" };
+  if (typeof ctx === "string") return { success: false, error: ctx };
 
   const { allowed } = await can(ctx.actorId, "arco.manage", "view");
   if (!allowed) return { success: false, error: "Sin permiso para gestionar ARCO" };
 
-  const { data: request } = await ctx.supabase
+  // maybeSingle: an id that is not (or no longer) visible is "not found"; a failed read is not.
+  const { data: request, error: requestError } = await ctx.supabase
     .from("arco_requests")
     .select("*")
     .eq("id", parsed.data.requestId)
-    .single();
+    .maybeSingle();
 
+  if (requestError) return { success: false, error: await safeError("arco.process_read", requestError) };
   if (!request) return { success: false, error: "Solicitud no encontrada" };
   if (request.status === "completed" || request.status === "rejected") {
     return { success: false, error: "Solicitud ya procesada" };
@@ -231,7 +231,7 @@ export async function exportUserData(
   if (!valid.success) return { success: false, error: "ID inválido" };
 
   const ctx = await getActorContext();
-  if (!ctx) return { success: false, error: "No autenticado" };
+  if (typeof ctx === "string") return { success: false, error: ctx };
 
   const { allowed } = await can(ctx.actorId, "arco.manage", "view");
   if (!allowed) return { success: false, error: "Sin permiso para gestionar ARCO" };
