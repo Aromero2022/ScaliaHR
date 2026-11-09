@@ -2955,6 +2955,107 @@ so an employee reads their own job; nothing changed in the policies.
 
 ---
 
+## D46 — No Hard Delete from the Data API; Ids Validated with `z.guid()`
+
+**Decision:** anon and authenticated cannot delete rows anywhere in `public`:
+no DELETE privilege, no PERMISSIVE DELETE policy and no default privilege that
+would give it to a new relation. Every id in Server Actions and routes is
+validated with `z.guid()`, which accepts the seed's ids. Security PR between
+PR 5 and PR 6 of Phase 9c, from the findings of D45; the read side (RLS by RBP
+population) is D47.
+
+**What was there (`supabase/migrations/20261109010000_d46_no_hard_delete.sql`):**
+- Fifteen PERMISSIVE DELETE policies from the first migrations allowed a delete
+  inside the caller's tenant, for the role `public` (anon and authenticated):
+  `business_rules`, `continuous_feedbacks`, `departments`,
+  `job_classifications`, `job_families`, `job_informations`, `job_roles`,
+  `object_definitions`, `performance_goals`, `positions`,
+  `succession_nominees`, `succession_plans`, `talent_pool_entries`,
+  `talent_pools` and `users`.
+- Each was neutralized by a RESTRICTIVE `no_hard_delete_authenticated`
+  policy (`USING false`), and anon has no tenant, so nothing could be deleted.
+  But dropping one RESTRICTIVE policy would have opened its table.
+- Supabase's default grants gave DELETE to anon and authenticated on 36 of the
+  39 tables, and the default privileges of `postgres` in `public` kept giving
+  it to every new table (D25 removed TRUNCATE, TRIGGER, REFERENCES and
+  MAINTAIN, not DELETE).
+- No screen deletes: there is no `.delete()` of Supabase or Prisma in the app,
+  the worker or the packages. Only the operator scripts delete
+  (`restore-tenant`, `e2e-accounts`), connected as `postgres`. The two SQL
+  functions that delete (`rate_limit_consume`, `purge_expired_rate_limits`)
+  are SECURITY DEFINER, and neither anon nor authenticated may execute them.
+  Nothing had to move to soft delete.
+
+**The change:**
+- The fifteen PERMISSIVE policies are dropped. The RESTRICTIVE `false` ones
+  stay as a second lock: they can only take rows away.
+- `REVOKE DELETE ON ALL TABLES IN SCHEMA public FROM anon, authenticated`
+  (tables, partitioned tables, views, materialized views and foreign tables),
+  and the same on the default privileges of `postgres` in `public`.
+- `supabase_admin`'s own default privileges still grant DELETE. They apply only
+  to relations `supabase_admin` creates, a migration (run as `postgres`)
+  cannot change them on the hosted project, and the catalog test below checks
+  every relation whatever its owner.
+- A delete from the Data API now gets 42501 instead of an empty result.
+
+**Ids (`z.guid()`):**
+- `z.uuid()` and `z.string().uuid()` require an RFC 4122 version and variant.
+  The seed's ids (`e0000000-…` employees, `5c000000-…` skills, `aa100000-…`
+  job roles) have neither, so on demo data the employee changes ("Tomar
+  Acción"), ARCO and the skills actions ("Evaluar") answered "Invalid UUID"
+  and saved nothing.
+- The nine validations (employee changes, ARCO, five in the skills actions and
+  MFA's `factorId`) use `z.guid()`. Supabase Auth's factor ids are v4 and pass
+  either way; the rule has no exceptions.
+
+**Tests:**
+- `__tests__/integration/no-hard-delete.test.ts`, against the catalog: it
+  fails if anon or authenticated hold DELETE on any relation of `public`
+  (directly or through PUBLIC), if a PERMISSIVE DELETE or ALL policy applies to
+  them, or if the default privileges of `postgres` give it back. Negative
+  control: inside a transaction that is rolled back, a table with a DELETE
+  grant, a permissive policy and a default privilege are all reported, and a
+  RESTRICTIVE `false` policy is not. It also checks that a new table and view
+  start without DELETE, that the fifteen tables keep their RESTRICTIVE lock,
+  and that an admin's delete through the Data API gets 42501 with the row
+  intact.
+- Six existing checks that tried to delete (in `db-privileges`,
+  `tih-rls-integration`, `rate-limiting`, `tenants-policies` and
+  `rls-isolation`) accepted "refused or no rows"; they now expect 42501. None
+  was removed.
+- `__tests__/static/no-uuid-validation.test.ts`, with the TypeScript parser:
+  it fails on a call named `uuid`, `uuidv4`, `uuidv6` or `uuidv7` whose chain
+  starts at a name imported from `zod`, in every file of `src`. Negative
+  controls cover `z.uuid()`, `z.string().uuid()`, `z.string().trim().uuid()`,
+  `z.uuidv4()`, a namespace import and a renamed import; positive controls
+  cover `z.guid()`, `crypto.randomUUID()` and uuid calls that are not zod.
+- e2e (`save-demo-data.spec.ts`), on the seed's data:
+  - The admin saves a job change with "Tomar Acción" for Patricia Castro
+    (e13), keeping her title and department, and after a reload her job
+    section shows the new reason.
+  - The employee rates herself with "Evaluar" on a skill the setup adds with a
+    seed-shaped id, and after a reload the catalog shows her level.
+  - Both fail against the previous validations.
+- `scripts/e2e-accounts.mjs` undoes those writes after the run, as `postgres`
+  and with the same local guard: the job changes marked `[e2e]` go and the
+  record each one closed is current again; the skill goes with its
+  assessments. It fails if anything is left, and it runs before the setup too,
+  for a run that did not finish. The audit entries of those writes stay, like
+  the logins of every run.
+
+**Found by the new e2e (the zoom check, which runs after it):**
+- Habilidades: a long self-assessed skill name scrolled the page sideways
+  (81 px) at 1280 px with the root font at 200 %. The "additional skills" list
+  now uses columns with a rem minimum and names that wrap, like the other
+  grids of D44.
+- Administración: the zoom check took the lines of an audit diff below its
+  `<pre>` box (`overflow: auto`, so they scroll into view) for text drawn over
+  the next entry. It now clips text by its own element's box when that box
+  scrolls, as its description already said; a control's own box changes
+  nothing.
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.

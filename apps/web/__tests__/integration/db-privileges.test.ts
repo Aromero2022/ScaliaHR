@@ -101,7 +101,9 @@ describe("audit log is insert-only for the app (D25)", () => {
     const before = await auditCount();
     expect(before).toBeGreaterThan(0);
     await tenant.admin.client.from("audit_logs").update({ action: "D25_TAMPERED" }).eq("tenant_id", tenant.id);
-    await tenant.admin.client.from("audit_logs").delete().eq("tenant_id", tenant.id);
+    // D46: authenticated holds no DELETE privilege, so the request is refused outright.
+    const deleted = await tenant.admin.client.from("audit_logs").delete().eq("tenant_id", tenant.id);
+    expect(deleted.error?.code).toBe("42501");
     expect(await auditCount()).toBe(before);
     const { rows } = await db.query("SELECT 1 FROM public.audit_logs WHERE action = 'D25_TAMPERED'");
     expect(rows).toEqual([]);
@@ -116,9 +118,11 @@ describe("audit log is insert-only for the app (D25)", () => {
         JSON.stringify({ tenant_id: tenant.id, app_role: "owner", sub: tenant.admin.authId }),
       ]);
       const updated = await app.query("UPDATE public.audit_logs SET action = 'D25_TAMPERED' WHERE tenant_id = $1", [tenant.id]);
-      const deleted = await app.query("DELETE FROM public.audit_logs WHERE tenant_id = $1", [tenant.id]);
       expect(updated.rowCount).toBe(0);
-      expect(deleted.rowCount).toBe(0);
+      // D46: authenticated holds no DELETE privilege; the savepoint keeps the transaction usable.
+      await app.query("SAVEPOINT d46_delete");
+      await expect(app.query("DELETE FROM public.audit_logs WHERE tenant_id = $1", [tenant.id])).rejects.toMatchObject({ code: "42501" });
+      await app.query("ROLLBACK TO SAVEPOINT d46_delete");
       await expect(app.query("TRUNCATE public.audit_logs")).rejects.toMatchObject({ code: "42501" });
     } finally {
       await app.query("ROLLBACK");

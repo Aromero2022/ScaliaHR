@@ -192,10 +192,10 @@ npm run e2e
 
 Qué hace:
 
-1. Crea tres cuentas `@e2e.scaliahr.test` ligadas a empleadas del tenant demo (empleada, admin con TOTP y admin sin factor), con una contraseña nueva y aleatoria. Solo acepta la base local. La contraseña, el secreto TOTP y las sesiones quedan en una carpeta temporal privada, fuera del repositorio.
-2. Corre la suite de Playwright de `apps/web` contra `http://localhost:3000`: logins, páginas protegidas, diálogos y "Más" con el teclado, zoom, skeleton y axe en claro y oscuro.
+1. Crea tres cuentas `@e2e.scaliahr.test` ligadas a empleadas del tenant demo (empleada, admin con TOTP y admin sin factor), con una contraseña nueva y aleatoria. Solo acepta la base local. La contraseña, el secreto TOTP y las sesiones quedan en una carpeta temporal privada, fuera del repositorio. También agrega la habilidad "Prueba e2e de autoevaluación" (D46).
+2. Corre la suite de Playwright de `apps/web` contra `http://localhost:3000`: logins, páginas protegidas, diálogos y "Más" con el teclado, zoom, skeleton y axe en claro y oscuro, y el guardado con datos demo (D46): un cambio de puesto de Patricia Castro con motivo `[e2e]` y una autoevaluación en esa habilidad.
 3. Busca la contraseña y los secretos TOTP en los artefactos (también dentro del reporte HTML) y corre gitleaks sobre ellos; si algo aparece, borra los artefactos.
-4. Siempre borra las cuentas, sus sesiones y sus factores, así que se puede repetir sin `supabase db reset`.
+4. Siempre borra las cuentas, sus sesiones y sus factores, y deshace lo guardado con datos demo (el cambio de puesto y la habilidad de prueba), así que se puede repetir sin `supabase db reset`. Las entradas de la bitácora de esas acciones se quedan, como las de los logins.
 
 Resultados en `apps/web/e2e-artifacts` (fuera de git): `report/index.html`, `axe/axe-summary.md`, las capturas en `captures/` y la evidencia del skeleton en `skeleton/`. Para una sola parte, los argumentos van a Playwright: `npm run e2e -- zoom.spec.ts`.
 

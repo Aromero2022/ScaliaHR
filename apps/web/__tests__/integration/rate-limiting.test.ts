@@ -178,7 +178,9 @@ describe("tenant_rate_limits (D28)", () => {
       .insert({ tenant_id: tenant.id, action: "write", max_tokens: 600, window_seconds: 10 });
     expect(crossInsert.error?.code).toBe("42501");
 
-    await tenant.admin.client.from("tenant_rate_limits").delete().eq("tenant_id", tenant.id);
+    // D46: authenticated holds no DELETE privilege.
+    const removed = await tenant.admin.client.from("tenant_rate_limits").delete().eq("tenant_id", tenant.id);
+    expect(removed.error?.code).toBe("42501");
     const { rows } = await db.query("SELECT max_tokens FROM public.tenant_rate_limits WHERE tenant_id = $1", [tenant.id]);
     expect(rows).toEqual([{ max_tokens: 50 }]);
   });

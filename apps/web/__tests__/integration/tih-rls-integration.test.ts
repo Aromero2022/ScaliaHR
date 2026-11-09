@@ -124,7 +124,8 @@ describe("TIH RLS Integration", () => {
       .delete()
       .eq("user_id", tenant.employee.userId)
       .eq("skill_id", skillId);
-    if (error) expect(error.code).toBe("42501");
+    // D46: authenticated holds no DELETE privilege.
+    expect(error?.code).toBe("42501");
     const { rows } = await db.query(
       "SELECT 1 FROM public.employee_skills WHERE user_id = $1 AND skill_id = $2",
       [tenant.employee.userId, skillId],

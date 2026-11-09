@@ -382,7 +382,8 @@ describe.each(TABLES)("no hard delete on public.%s", (table) => {
     const admin = await asA.rpc("is_tenant_admin");
     expect(admin.data, "attacker A is no longer a tenant admin").toBe(true);
     const { error } = await asA.from(table).delete().eq("tenant_id", tenantA.tenantId);
-    expectDeniedOrNoop(error, `A delete on ${table}`);
+    // D46: authenticated holds no DELETE privilege on any table, so it is refused, not a no-op.
+    expect(error?.code, `A delete on ${table}: ${error?.message}`).toBe("42501");
     expect(await fixtureIntact(table, tenantA), `A deleted its own ${table} row`).toBe(true);
   });
 });

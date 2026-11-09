@@ -7,7 +7,9 @@ import type { Locator, Page } from "@playwright/test";
 
 export type AccountKey = "empleada" | "admin" | "adminSinFactor";
 type Account = { email: string; userId: string; totp?: { secret: string } };
-type Accounts = { password: string; accounts: Record<AccountKey, Account> };
+/** D46: what the e2e saves on demo data (scripts/e2e-accounts.mjs undoes it after the run). */
+type DemoWrites = { jobChangeEmployeeId: string; reason: string; skillName: string };
+type Accounts = { password: string; accounts: Record<AccountKey, Account>; demo: DemoWrites };
 
 function privateDir(): string {
   const dir = process.env.E2E_PRIVATE_DIR;

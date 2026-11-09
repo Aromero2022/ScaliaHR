@@ -12,14 +12,16 @@ import { currentUserOrError } from "@/lib/auth/current-user";
 
 type ActionResult = { success: true } | { error: string };
 
+// D46: guid, not uuid. The seed's ids (e0000000-…, 5c000000-…, aa100000-…) are
+// not RFC 4122, and z.uuid() refused them, so nothing could be saved on demo data.
 const SelfAssessmentSchema = z.object({
-  skillId: z.string().uuid(),
+  skillId: z.guid(),
   level: z.coerce.number().int().min(1).max(5),
 });
 
 const ManagerAssessmentSchema = z.object({
-  userId: z.string().uuid(),
-  skillId: z.string().uuid(),
+  userId: z.guid(),
+  skillId: z.guid(),
   level: z.coerce.number().int().min(1).max(5),
 });
 
@@ -31,7 +33,7 @@ const CreateSkillSchema = z.object({
 });
 
 const UpdateSkillSchema = z.object({
-  skillId: z.string().uuid(),
+  skillId: z.guid(),
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).optional(),
   category: z.enum(["technical", "soft", "language"]).optional(),
@@ -39,8 +41,8 @@ const UpdateSkillSchema = z.object({
 });
 
 const JobRoleSkillSchema = z.object({
-  jobRoleId: z.string().uuid(),
-  skillId: z.string().uuid(),
+  jobRoleId: z.guid(),
+  skillId: z.guid(),
   requiredProficiencyLevel: z.coerce.number().int().min(1).max(5),
 });
 

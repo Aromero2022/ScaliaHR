@@ -111,10 +111,16 @@ export async function layoutProblems(page: Page): Promise<LayoutReport> {
       right: Math.min(a.right, b.right),
       bottom: Math.min(a.bottom, b.bottom),
     });
-    /** The part of a box that is not clipped away by a scrolling or clipping ancestor. */
+    /**
+     * The part of a box that is not clipped away by a scrolling or clipping box.
+     * For text that box can be its own element (a <pre> with overflow: auto,
+     * seen in D46 with an audit diff): the lines below its visible box are
+     * scrolled into view, not drawn over the next entry. For a control, its own
+     * box changes nothing.
+     */
     const visiblePart = (el: Element, box: Box): Box | null => {
       let out = box;
-      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      for (let p: Element | null = el; p && p !== document.body; p = p.parentElement) {
         const s = getComputedStyle(p);
         if (s.overflowX !== "visible" || s.overflowY !== "visible") out = intersect(out, p.getBoundingClientRect());
         if (out.right - out.left <= 0 || out.bottom - out.top <= 0) return null;

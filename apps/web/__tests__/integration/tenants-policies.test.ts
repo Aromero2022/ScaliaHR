@@ -130,7 +130,8 @@ describe("tenants — insert and delete", () => {
   it("authenticated users cannot delete their tenant", async () => {
     for (const user of [owner, tenant.admin]) {
       const { error } = await user.client.from("tenants").delete().eq("id", tenant.id);
-      if (error) expect(error.code).toBe("42501");
+      // D46: authenticated holds no DELETE privilege.
+      expect(error?.code).toBe("42501");
     }
     expect(await tenantRow(tenant.id)).toBeDefined();
   });

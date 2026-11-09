@@ -291,13 +291,14 @@ function SkillRadar({ mySkills, roleSkills }: { mySkills: MySkill[]; roleSkills:
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-fg-muted">
             {t.additional}
           </h2>
-          <div className="grid gap-3 sm:grid-cols-2">
+          {/* Columns with a rem minimum and names that wrap (D44): a long skill name scrolled the page at 200 % (D46). */}
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-3">
             {unmatched.map((ms) => (
               <div
                 key={ms.skill_id}
-                className="flex items-center justify-between rounded-lg border border-line bg-surface-muted px-4 py-3"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface-muted px-4 py-3"
               >
-                <div>
+                <div className="min-w-0 wrap-anywhere">
                   <span className="text-sm font-medium text-fg">{ms.skill_name}</span>
                   <span
                     className={clsx(
