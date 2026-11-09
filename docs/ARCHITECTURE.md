@@ -3043,6 +3043,17 @@ population) is D47.
   for a run that did not finish. The audit entries of those writes stay, like
   the logins of every run.
 
+**Found by the new e2e (the zoom check, which runs after it):**
+- Habilidades: a long self-assessed skill name scrolled the page sideways
+  (81 px) at 1280 px with the root font at 200 %. The "additional skills" list
+  now uses columns with a rem minimum and names that wrap, like the other
+  grids of D44.
+- Administración: the zoom check took the lines of an audit diff below its
+  `<pre>` box (`overflow: auto`, so they scroll into view) for text drawn over
+  the next entry. It now clips text by its own element's box when that box
+  scrolls, as its description already said; a control's own box changes
+  nothing.
+
 ---
 
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
