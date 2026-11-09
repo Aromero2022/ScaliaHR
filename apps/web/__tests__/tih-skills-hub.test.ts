@@ -110,11 +110,20 @@ function mockSupabase(options?: {
     options?.rpcResult ?? { data: null, error: null }
   );
 
+  // getCurrentUser reads the employee row with maybeSingle (D45); every other table uses the chain.
+  const usersChain: Record<string, ReturnType<typeof vi.fn>> = {};
+  usersChain.select = vi.fn(() => usersChain);
+  usersChain.eq = vi.fn(() => usersChain);
+  usersChain.maybeSingle = vi.fn().mockResolvedValue({
+    data: { id: "user-1", tenant_id: "tenant-1", position_id: null },
+    error: null,
+  });
+
   const supabase = {
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
     },
-    from: vi.fn(() => chain),
+    from: vi.fn((table: string) => (table === "users" ? usersChain : chain)),
     rpc: rpcFn,
   };
 

@@ -6,8 +6,9 @@ import { canMany } from "@/lib/authz/can";
 import { NAV_ITEMS, filterNavByFlags } from "@/lib/navigation/nav-config";
 import { SIDEBAR_COOKIE, isSidebarCollapsed } from "@/lib/navigation/shell";
 import { DockNav, RailNav, SidebarNav, SignOutButton, type ShellNavItem } from "@/components/navigation/app-navigation";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { CurrentUserUnavailable, getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { ToastProvider } from "@/components/ui/toast";
+import { LoadError } from "@/components/ui/load-error";
 
 const SIDEBAR_PERMISSION_KEYS = [
   ...new Set(
@@ -33,7 +34,15 @@ export default async function ProtectedLayout({
   const grantedPermissions: string[] = [];
 
   if (claims.tenantId) {
-    const bizUser = await getCurrentUser();
+    let bizUser: CurrentUser | null;
+    try {
+      bizUser = await getCurrentUser();
+    } catch (error) {
+      // D45: without the employee row there is no menu to build and no page to
+      // show; the person sees the error with its request id, not the login.
+      if (error instanceof CurrentUserUnavailable) return <UnavailableShell message={error.userMessage} />;
+      throw error;
+    }
 
     if (bizUser) {
       const results = await canMany(bizUser.id, SIDEBAR_PERMISSION_KEYS, "view");
@@ -81,5 +90,26 @@ export default async function ProtectedLayout({
       <DockNav items={items} />
     </div>
     </ToastProvider>
+  );
+}
+
+/** D45: the shell without menu or page, when the signed-in person's employee row could not be read. */
+function UnavailableShell({ message }: { message: string }) {
+  return (
+    <div className="min-h-dvh bg-canvas">
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface px-4 md:px-6">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-on-accent" aria-hidden="true">
+          S
+        </div>
+        <span className="text-lg font-bold text-fg">Scalia HR</span>
+        <div className="ml-auto">
+          <SignOutButton />
+        </div>
+      </header>
+      <main id="contenido" tabIndex={-1} className="mx-auto max-w-md px-4 pt-12 focus:outline-none">
+        <h1 className="mb-4 text-center text-lg font-semibold text-fg">Algo salió mal</h1>
+        <LoadError message={message} />
+      </main>
+    </div>
   );
 }

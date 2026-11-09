@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { CurrentUserUnavailable, getCurrentUser } from "@/lib/auth/current-user";
 import { reportError } from "@/lib/log/report";
 import { requestContext } from "@/lib/log/request-context";
 import { ilikeAnyOf } from "@/lib/postgrest/filters";
@@ -24,7 +24,14 @@ export async function GET(request: NextRequest): Promise<Response> {
   const limited = await limitApi();
   if (limited) return limited;
 
-  const me = await getCurrentUser();
+  let me;
+  try {
+    me = await getCurrentUser();
+  } catch (error) {
+    // D45: the caller's employee row could not be read (already logged with the request id).
+    if (error instanceof CurrentUserUnavailable) return Response.json({ error: "unavailable" }, { status: 500 });
+    throw error;
+  }
   if (!me) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const params = request.nextUrl.searchParams;

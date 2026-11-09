@@ -11,6 +11,8 @@ import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
 import { messages } from "@/lib/i18n/es-MX";
 import { ButtonLink } from "@/components/ui/button";
 import { StatCard, type StatTone } from "@/components/ui/stat-card";
+import { LoadError } from "@/components/ui/load-error";
+import { firstError, queryErrorMessage } from "@/lib/errors/query-error";
 
 // D43: one primary per view; "Gestionar roles" is navigation, so it is secondary
 // and the rate limits' "Guardar" is the view's primary. Texts from es-MX.
@@ -89,6 +91,15 @@ export default async function AdminCenterPage() {
         : Promise.resolve({ data: [], error: null }),
     ]);
 
+  // D45: each block shows its own error. The rate limits show no defaults when
+  // the tenant's own values could not be read: the admin would save over them.
+  const [statsError, configError, auditError, limitsError] = await Promise.all([
+    queryErrorMessage("admin_center.stats", firstError(rolesRes.error, groupsRes.error, permsRes.error, usersRes.error)),
+    queryErrorMessage("admin_center.config", configsRes.error),
+    queryErrorMessage("admin_center.audit", auditRes.error),
+    queryErrorMessage("admin_center.rate_limits", limitsRes.error),
+  ]);
+
   const stats: Stat[] = [
     { label: t.stats.roles, value: rolesRes.count ?? 0, icon: "shield", tone: "accent" },
     { label: t.stats.groups, value: groupsRes.count ?? 0, icon: "users", tone: "success" },
@@ -131,11 +142,15 @@ export default async function AdminCenterPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4">
-        {stats.map((s) => (
-          <StatCard key={s.label} label={s.label} value={s.value} tone={s.tone} icon={<StatIcon name={s.icon} />} />
-        ))}
-      </div>
+      {statsError ? (
+        <LoadError message={statsError} />
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4">
+          {stats.map((s) => (
+            <StatCard key={s.label} label={s.label} value={s.value} tone={s.tone} icon={<StatIcon name={s.icon} />} />
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,24rem),1fr))] gap-6">
         {/* System Configuration — requires admin.manage_config:edit */}
@@ -144,28 +159,32 @@ export default async function AdminCenterPage() {
             <h2 className="mb-4 text-lg font-semibold text-fg">
               {t.configHeading}
             </h2>
-            <div className="space-y-3">
-              {configs.map((c) => (
-                <div
-                  key={c.key}
-                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg bg-surface-muted px-4 py-3"
-                >
-                  <span className="text-sm font-medium text-fg-muted">
-                    {c.key}
-                  </span>
-                  <span className="min-w-0 break-all text-sm text-fg-muted">
-                    {typeof c.value_json === "string"
-                      ? c.value_json
-                      : JSON.stringify(c.value_json)}
-                  </span>
-                </div>
-              ))}
-              {configs.length === 0 && (
-                <p className="text-sm text-fg-subtle">
-                  {t.noConfig}
-                </p>
-              )}
-            </div>
+            {configError ? (
+              <LoadError message={configError} />
+            ) : (
+              <div className="space-y-3">
+                {configs.map((c) => (
+                  <div
+                    key={c.key}
+                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg bg-surface-muted px-4 py-3"
+                  >
+                    <span className="text-sm font-medium text-fg-muted">
+                      {c.key}
+                    </span>
+                    <span className="min-w-0 break-all text-sm text-fg-muted">
+                      {typeof c.value_json === "string"
+                        ? c.value_json
+                        : JSON.stringify(c.value_json)}
+                    </span>
+                  </div>
+                ))}
+                {configs.length === 0 && (
+                  <p className="text-sm text-fg-subtle">
+                    {t.noConfig}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -175,7 +194,7 @@ export default async function AdminCenterPage() {
             <h2 className="mb-4 text-lg font-semibold text-fg">
               {t.rateLimits.heading}
             </h2>
-            <RateLimitSettings settings={rateLimits} />
+            {limitsError ? <LoadError message={limitsError} /> : <RateLimitSettings settings={rateLimits} />}
           </div>
         )}
 
@@ -185,48 +204,52 @@ export default async function AdminCenterPage() {
             <h2 className="mb-4 text-lg font-semibold text-fg">
               {t.auditHeading}
             </h2>
-            <div className="space-y-3">
-              {auditEntries.map((a, i) => {
-                const usr = Array.isArray(a.user) ? a.user[0] : a.user;
-                return (
-                  <div
-                    key={i}
-                    className="rounded-lg bg-surface-muted px-4 py-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="inline-block rounded-full bg-accent-subtle px-2.5 py-0.5 text-xs font-medium text-accent-fg">
-                        {a.action}
-                      </span>
-                      <span className="text-xs text-fg-subtle">
-                        {formatInstant(a.created_at, timeZone)}
-                      </span>
+            {auditError ? (
+              <LoadError message={auditError} />
+            ) : (
+              <div className="space-y-3">
+                {auditEntries.map((a, i) => {
+                  const usr = Array.isArray(a.user) ? a.user[0] : a.user;
+                  return (
+                    <div
+                      key={i}
+                      className="rounded-lg bg-surface-muted px-4 py-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="inline-block rounded-full bg-accent-subtle px-2.5 py-0.5 text-xs font-medium text-accent-fg">
+                          {a.action}
+                        </span>
+                        <span className="text-xs text-fg-subtle">
+                          {formatInstant(a.created_at, timeZone)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-fg-muted">
+                        {usr
+                          ? `${(usr as Record<string, string>).first_name} ${(usr as Record<string, string>).last_name}`
+                          : t.system}
+                        {a.entity ? ` — ${a.entity}` : ""}
+                        {a.entity_id ? ` (${a.entity_id})` : ""}
+                        {a.details_json &&
+                        typeof a.details_json === "object" &&
+                        "description" in a.details_json
+                          ? ` — ${a.details_json.description}`
+                          : ""}
+                      </p>
+                      {a.diff && Object.keys(a.diff).length > 0 && (
+                        <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-surface px-2 py-1 text-xs text-fg-subtle">
+                          {JSON.stringify(a.diff, null, 2)}
+                        </pre>
+                      )}
                     </div>
-                    <p className="mt-1 text-sm text-fg-muted">
-                      {usr
-                        ? `${(usr as Record<string, string>).first_name} ${(usr as Record<string, string>).last_name}`
-                        : t.system}
-                      {a.entity ? ` — ${a.entity}` : ""}
-                      {a.entity_id ? ` (${a.entity_id})` : ""}
-                      {a.details_json &&
-                      typeof a.details_json === "object" &&
-                      "description" in a.details_json
-                        ? ` — ${a.details_json.description}`
-                        : ""}
-                    </p>
-                    {a.diff && Object.keys(a.diff).length > 0 && (
-                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-surface px-2 py-1 text-xs text-fg-subtle">
-                        {JSON.stringify(a.diff, null, 2)}
-                      </pre>
-                    )}
-                  </div>
-                );
-              })}
-              {auditEntries.length === 0 && (
-                <p className="text-sm text-fg-subtle">
-                  {t.noAudit}
-                </p>
-              )}
-            </div>
+                  );
+                })}
+                {auditEntries.length === 0 && (
+                  <p className="text-sm text-fg-subtle">
+                    {t.noAudit}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -10,7 +10,7 @@ import { isServerActionFile, moduleExports, sourceFiles } from "./source-exports
  * not recognize fails the test.
  */
 
-const LIMITER = /\b(?:limitWrite|limitApi|consumeRateLimit)\(/;
+const LIMITER = /\b(?:limitWrite|limitRead|limitApi|consumeRateLimit)\(/;
 
 // Healthchecks: limiting them would cost the same database round trip as the check itself.
 const UNLIMITED_ROUTES = new Set(["app/api/health/route.ts"]);

@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { COMPANY_CODE_COOKIE, TenantSlug, requestedTenant } from "@/lib/tenant/host";
 import { clientIp, consumeRateLimit, limitWrite, rateLimitMessage } from "@/lib/rate-limit";
 import { signInErrorMessage } from "@/lib/auth/messages";
+import { currentUserOrError } from "@/lib/auth/current-user";
 import { log } from "@/lib/log/logger";
 import { requestContext } from "@/lib/log/request-context";
 
@@ -79,13 +80,9 @@ async function auditLogin(): Promise<void> {
   const claims = await getClaims();
   if (!claims?.tenantId) return;
 
-  const sb = await createClient();
-  const { data: bizUser } = await sb
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
-
+  // D45: without the employee row there is no actor to audit; a failed read is
+  // already logged with the request id by getCurrentUser.
+  const { user: bizUser } = await currentUserOrError();
   if (!bizUser) return;
 
   await writeAuditLog({

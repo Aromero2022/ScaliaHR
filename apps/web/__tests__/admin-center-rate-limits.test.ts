@@ -12,7 +12,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({
     from: (table: string) =>
       table === "users"
-        ? { select: () => ({ eq: () => ({ single: async () => ({ data: { id: "biz-1" } }) }) }) }
+        ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: "biz-1", tenant_id: "t-1", position_id: null }, error: null }) }) }) }
         : { upsert: (...args: unknown[]) => upsert(...args) },
   })),
 }));

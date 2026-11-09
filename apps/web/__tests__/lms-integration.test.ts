@@ -48,6 +48,7 @@ function setupSupabase(fromResults: QR[]) {
     chain.select = vi.fn(() => chain);
     chain.eq = vi.fn(() => chain);
     chain.single = vi.fn(resolve);
+    chain.maybeSingle = vi.fn(resolve);
     chain.insert = vi.fn(resolve);
     chain.then = (onfulfilled: (v: QR) => unknown) => resolve().then(onfulfilled);
     return chain;

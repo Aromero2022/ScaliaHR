@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import type { LogContext } from "@/lib/log/logger";
+import { reportError } from "@/lib/log/report";
 
 // D21 — which tenant a request targets: `<slug>.<app host>` (acme-corp.localhost
 // locally) or, on the app host itself, the company code chosen at login.
@@ -59,16 +61,22 @@ export async function tenantAccessAllowed(
   supabase: SupabaseClient,
   requested: string | null,
   tokenTenantId: string,
+  ctx: LogContext = {},
 ): Promise<boolean> {
   if (requested === null && tokenTenantId === "") return true;
   if (requested !== null && !TenantSlug.safeParse(requested).success) return false;
 
-  const query = supabase.from("tenants").select("id, suspended_at");
   const { data, error } = await (requested !== null
-    ? query.eq("slug", requested)
-    : query.eq("id", tokenTenantId)
+    ? supabase.from("tenants").select("id, suspended_at").eq("slug", requested)
+    : supabase.from("tenants").select("id, suspended_at").eq("id", tokenTenantId)
   ).maybeSingle<{ id: string; suspended_at: string | null }>();
-  if (error || !data) return false;
+  // D45: still refused (fail closed, the same 404), but the failure is in the
+  // logs with the request id, not hidden behind "unknown tenant".
+  if (error) {
+    reportError("tenant.access_lookup", error, ctx);
+    return false;
+  }
+  if (!data) return false;
   return data.id === tokenTenantId && data.suspended_at === null;
 }
 

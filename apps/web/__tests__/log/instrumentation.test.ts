@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { onRequestError } from "@/instrumentation";
+import { CurrentUserUnavailable } from "@/lib/auth/current-user";
 
 describe("onRequestError (D27)", () => {
   it("reports unhandled errors as JSON with the middleware's ids and no query string", async () => {
@@ -22,6 +23,17 @@ describe("onRequestError (D27)", () => {
       error: { digest: "4242", message: "relation does not exist, rfc [RFC]" },
     });
     expect(JSON.stringify(line)).not.toContain("GODE561231GR8");
+    err.mockRestore();
+  });
+
+  it("D45: does not report CurrentUserUnavailable again; safeError already logged it with the same request id", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    await onRequestError(
+      new CurrentUserUnavailable("No se pudo cargar esta página. Código: req-8"),
+      { path: "/dashboard", method: "GET", headers: { "x-request-id": "req-8" } },
+      { routerKind: "App Router", routePath: "/dashboard", routeType: "render", renderSource: "react-server-components", revalidateReason: undefined },
+    );
+    expect(err).not.toHaveBeenCalled();
     err.mockRestore();
   });
 });

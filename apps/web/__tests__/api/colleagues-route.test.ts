@@ -6,7 +6,14 @@ import { NextRequest } from "next/server";
 const limitApi = vi.fn(async () => null as Response | null);
 vi.mock("@/lib/rate-limit", () => ({ limitApi: () => limitApi() }));
 const getCurrentUser = vi.fn();
-vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: () => getCurrentUser() }));
+const { CurrentUserUnavailable } = vi.hoisted(() => ({
+  CurrentUserUnavailable: class extends Error {
+    constructor(readonly userMessage: string) {
+      super("unavailable");
+    }
+  },
+}));
+vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: () => getCurrentUser(), CurrentUserUnavailable }));
 vi.mock("@/lib/log/report", () => ({ reportError: vi.fn() }));
 vi.mock("@/lib/log/request-context", () => ({ requestContext: async () => ({}) }));
 
@@ -65,6 +72,14 @@ describe("GET /api/colleagues (D38)", () => {
     expect((await get("?q=ana")).status).toBe(401);
     limitApi.mockResolvedValueOnce(new Response(null, { status: 429 }));
     expect((await get("?q=ana")).status).toBe(429);
+  });
+
+  it("D45: answers 500 unavailable, not 401, when the caller's employee row cannot be read", async () => {
+    getCurrentUser.mockRejectedValueOnce(new CurrentUserUnavailable("No se pudo cargar esta página. Código: req-1"));
+    const res = await get("?q=ana");
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual({ error: "unavailable" });
+    expect(calls).toEqual([]);
   });
 
   it("hides database errors", async () => {

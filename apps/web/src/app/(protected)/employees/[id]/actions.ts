@@ -6,7 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { writeAuditLog } from "@/lib/audit/log";
 import { can } from "@/lib/authz/can";
 import { safeError } from "@/lib/errors/safe-error";
-import { limitWrite } from "@/lib/rate-limit";
+import { limitRead, limitWrite } from "@/lib/rate-limit";
+import { firstError } from "@/lib/errors/query-error";
+import { messages } from "@/lib/i18n/es-MX";
 
 const uuidSchema = z.string().uuid();
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD requerido");
@@ -15,23 +17,88 @@ type ActionResult<T = unknown> =
   | { success: true; data: T }
   | { success: false; error: string };
 
+/** The actor of the action, or the message to return (D45: a failed read is not "No autenticado"). */
 async function getActorContext() {
   const supabase = await createClient();
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser();
 
-  if (!authUser) return null;
+  if (!authUser) return "No autenticado";
 
-  const { data: profile } = await supabase
+  const { data: profile, error } = await supabase
     .from("users")
     .select("id, tenant_id")
     .eq("auth_uid", authUser.id)
-    .single();
+    .maybeSingle();
 
-  if (!profile) return null;
+  if (error) return await safeError("ec.actor", error);
+  if (!profile) return "No autenticado";
 
   return { supabase, actorId: profile.id, tenantId: profile.tenant_id };
+}
+
+// ─── "Tomar Acción" options ────────────────────────────────────────
+
+type SelectOption = { id: string; label: string };
+
+export type ActionOptions = {
+  positions: SelectOption[];
+  departments: SelectOption[];
+  jobClassifications: SelectOption[];
+  managers: SelectOption[];
+  locations: SelectOption[];
+  employeeName: string;
+};
+
+// guid, not uuid: the seed's ids (e0000000-…) are not RFC 4122.
+const actionOptionsSchema = z.object({ employeeId: z.guid() });
+
+/**
+ * D45: the lists of the "Tomar Acción" dialog, read on the server under the
+ * caller's RLS. Before, the browser read them itself and a failed list showed
+ * as an empty select; now any failure is a safe error (request id) and the
+ * dialog does not let the form be sent.
+ */
+export async function loadActionOptions(input: z.input<typeof actionOptionsSchema>): Promise<ActionResult<ActionOptions>> {
+  const limited = await limitRead();
+  if (limited) return { success: false, error: limited };
+
+  const parsed = actionOptionsSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  const ctx = await getActorContext();
+  if (typeof ctx === "string") return { success: false, error: ctx };
+
+  const { allowed } = await can(ctx.actorId, "ec.manage_employees", "edit", parsed.data.employeeId);
+  if (!allowed) return { success: false, error: "Sin permiso para gestionar empleados" };
+
+  const { supabase } = ctx;
+  const [posRes, deptRes, jcRes, mgrRes, locRes, empRes] = await Promise.all([
+    supabase.from("positions").select("id, title, position_code").order("title"),
+    supabase.from("departments").select("id, name").order("name"),
+    supabase.from("job_classifications").select("id, title").order("title"),
+    supabase.from("users").select("id, first_name, last_name").eq("status", "ACTIVE").is("deleted_at", null).order("last_name"),
+    supabase.from("locations").select("id, name").order("name"),
+    // maybeSingle: an employee the caller cannot see is "not found", not a failure.
+    supabase.from("users").select("first_name, last_name").eq("id", parsed.data.employeeId).maybeSingle(),
+  ]);
+
+  const error = firstError(posRes.error, deptRes.error, jcRes.error, mgrRes.error, locRes.error, empRes.error);
+  if (error) return { success: false, error: await safeError("ec.action_options", error, messages.common.sectionLoadError) };
+  if (!empRes.data) return { success: false, error: "Empleado no encontrado" };
+
+  return {
+    success: true,
+    data: {
+      positions: (posRes.data ?? []).map((p) => ({ id: p.id, label: `${p.title} (${p.position_code})` })),
+      departments: (deptRes.data ?? []).map((d) => ({ id: d.id, label: d.name })),
+      jobClassifications: (jcRes.data ?? []).map((j) => ({ id: j.id, label: j.title })),
+      managers: (mgrRes.data ?? []).map((m) => ({ id: m.id, label: `${m.first_name} ${m.last_name}` })),
+      locations: (locRes.data ?? []).map((l) => ({ id: l.id, label: l.name })),
+      employeeName: `${empRes.data.first_name} ${empRes.data.last_name}`,
+    },
+  };
 }
 
 // ─── Job Change ────────────────────────────────────────────────────
@@ -60,7 +127,7 @@ export async function createJobChange(
   }
 
   const ctx = await getActorContext();
-  if (!ctx) return { success: false, error: "No autenticado" };
+  if (typeof ctx === "string") return { success: false, error: ctx };
 
   const { allowed } = await can(ctx.actorId, "ec.manage_employees", "edit", parsed.data.userId);
   if (!allowed) return { success: false, error: "Sin permiso para gestionar empleados" };
@@ -123,7 +190,7 @@ export async function createCompensationChange(
   }
 
   const ctx = await getActorContext();
-  if (!ctx) return { success: false, error: "No autenticado" };
+  if (typeof ctx === "string") return { success: false, error: ctx };
 
   const { allowed } = await can(ctx.actorId, "ec.manage_employees", "edit", parsed.data.userId);
   if (!allowed) return { success: false, error: "Sin permiso para gestionar empleados" };
@@ -202,7 +269,7 @@ export async function createPersonalInfoChange(
   }
 
   const ctx = await getActorContext();
-  if (!ctx) return { success: false, error: "No autenticado" };
+  if (typeof ctx === "string") return { success: false, error: ctx };
 
   const { allowed } = await can(ctx.actorId, "ec.manage_employees", "edit", parsed.data.userId);
   if (!allowed) return { success: false, error: "Sin permiso para gestionar empleados" };

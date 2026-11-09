@@ -16,6 +16,9 @@ export const messages = {
     noJob: "Sin puesto",
     noJobAssigned: "Sin puesto asignado",
     noDepartment: "Sin departamento",
+    // D45: what a section or a page shows when its query fails; safeError() adds the request id.
+    sectionLoadError: "No se pudo cargar esta información.",
+    pageLoadError: "No se pudo cargar esta página.",
   },
   app: {
     name: "Scalia HR",
@@ -145,6 +148,7 @@ export const messages = {
     next: "Siguiente →",
   },
   employeeDetail: {
+    heading: "Empleado",
     personalInformation: "Información Personal",
     address: "Dirección",
     emergencyContact: "Contacto de emergencia",
@@ -167,9 +171,10 @@ export const messages = {
     heading: "Desempeño y Objetivos",
     subheading: "PMGM — Gestiona tus objetivos SMART y da/recibe feedback continuo",
     stats: { goals: "Objetivos", avgProgress: "Progreso Promedio", onTrack: "En Curso", atRisk: "En Riesgo" },
+    // D45: null when the list could not be read; the tab does not claim zero.
     tabs: {
-      goals: (count: number) => `Mis Objetivos (${count})`,
-      feedback: (count: number) => `Feedback Continuo (${count})`,
+      goals: (count: number | null) => (count === null ? "Mis Objetivos" : `Mis Objetivos (${count})`),
+      feedback: (count: number | null) => (count === null ? "Feedback Continuo" : `Feedback Continuo (${count})`),
     },
     newGoal: "+ Nuevo Objetivo",
     sendFeedback: "+ Enviar Feedback",
@@ -216,7 +221,8 @@ export const messages = {
     },
   },
   roles: {
-    rolesHeading: (count: number) => `Roles de Permiso (${count})`,
+    // D45: null when the list could not be read; the heading does not claim zero.
+    rolesHeading: (count: number | null) => (count === null ? "Roles de Permiso" : `Roles de Permiso (${count})`),
     newRole: "+ Nuevo Rol",
     adminBadge: "Administrador",
     noDescription: "Sin descripción",
@@ -229,7 +235,7 @@ export const messages = {
     targetPopulation: "Población objetivo:",
     noGrants: "Sin asignaciones",
     noRoles: "No hay roles de permiso configurados.",
-    groupsHeading: (count: number) => `Grupos de Permiso (${count})`,
+    groupsHeading: (count: number | null) => (count === null ? "Grupos de Permiso" : `Grupos de Permiso (${count})`),
     membership: "membresía vía group_members",
     noGroups: "No hay grupos de permiso configurados.",
     createDialog: {

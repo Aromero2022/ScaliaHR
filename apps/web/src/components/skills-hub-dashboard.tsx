@@ -7,6 +7,7 @@ import {
   setManagerAssessment,
 } from "@/app/(protected)/skills-hub/actions";
 import { messages } from "@/lib/i18n/es-MX";
+import { LoadError } from "@/components/ui/load-error";
 
 const t = messages.skillsHub;
 
@@ -56,6 +57,8 @@ interface Props {
   roleSkills: RoleSkill[];
   teamMembers?: TeamMember[];
   isManager?: boolean;
+  /** D45: the request id message of each tab whose data could not be read; that tab shows it. */
+  errors?: { radar?: string | null; catalog?: string | null; team?: string | null };
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -73,6 +76,7 @@ export default function SkillsHubDashboard({
   roleSkills,
   teamMembers = [],
   isManager = false,
+  errors = {},
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabKey>("radar");
 
@@ -98,12 +102,16 @@ export default function SkillsHubDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
+      {/* Stats: each one only when the data it counts was read (D45). */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-4">
-        <StatTile label={t.stats.assessed} value={assessedCount} />
-        <StatTile label={t.stats.gaps} value={gapCount} accent="amber" />
-        <StatTile label={t.stats.average} value={avgLevel} accent="indigo" />
-        {isManager && (
+        {!errors.radar && (
+          <>
+            <StatTile label={t.stats.assessed} value={assessedCount} />
+            <StatTile label={t.stats.gaps} value={gapCount} accent="amber" />
+            <StatTile label={t.stats.average} value={avgLevel} accent="indigo" />
+          </>
+        )}
+        {isManager && !errors.team && (
           <StatTile label={t.stats.directReports} value={teamMembers.length} accent="emerald" />
         )}
       </div>
@@ -127,9 +135,11 @@ export default function SkillsHubDashboard({
       </div>
 
       {activeTab === "radar" ? (
-        <SkillRadar mySkills={mySkills} roleSkills={roleSkills} />
+        errors.radar ? <LoadError message={errors.radar} /> : <SkillRadar mySkills={mySkills} roleSkills={roleSkills} />
       ) : activeTab === "team" ? (
-        <TeamView members={teamMembers} />
+        errors.team ? <LoadError message={errors.team} /> : <TeamView members={teamMembers} />
+      ) : errors.catalog ? (
+        <LoadError message={errors.catalog} />
       ) : (
         <SkillCatalog ontology={ontology} mySkills={mySkills} />
       )}

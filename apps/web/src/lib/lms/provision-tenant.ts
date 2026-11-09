@@ -4,12 +4,17 @@ import * as moodle from "@/lib/lms/moodle-client";
 export async function provisionTenantLms(tenantId: string, tenantName: string) {
   const supabase = await createClient();
 
-  const { data: existing } = await supabase
+  // D45: maybeSingle: no map yet means "provision it"; a failed read must not
+  // be taken for that, or the tenant gets a second category and cohort.
+  const { data: existing, error: existingError } = await supabase
     .from("lms_tenant_map")
     .select("id")
     .eq("tenant_id", tenantId)
-    .single();
+    .maybeSingle();
 
+  if (existingError) {
+    throw new Error(`Failed to read LMS tenant map: ${existingError.message}`);
+  }
   if (existing) {
     return { alreadyProvisioned: true };
   }

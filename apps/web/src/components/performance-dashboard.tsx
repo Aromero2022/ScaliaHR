@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { InputField, SelectField, TextareaField } from "@/components/ui/field";
 import { StatCard } from "@/components/ui/stat-card";
+import { LoadError } from "@/components/ui/load-error";
 import { useToast } from "@/components/ui/toast";
 
 // D42: dates arrive formatted by the server (dueLabel, createdLabel); this client component never formats them.
@@ -49,6 +50,9 @@ interface Props {
   feedbackTotal: number;
   feedbackPage: number;
   feedbackPageSize: number;
+  /** D45: the request id message of a list that could not be read; its tab shows it instead of rows. */
+  goalsError?: string | null;
+  feedbackError?: string | null;
 }
 
 /** Progress ring and bar colors by goal state; the state's name is always shown as text (Badge). */
@@ -60,7 +64,15 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
   CANCELLED: { color: "text-danger-fg", bg: "bg-danger" },
 };
 
-export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, feedbackPage, feedbackPageSize }: Props) {
+export default function PerformanceDashboard({
+  goals,
+  feedbacks,
+  feedbackTotal,
+  feedbackPage,
+  feedbackPageSize,
+  goalsError = null,
+  feedbackError = null,
+}: Props) {
   const [goalOpen, setGoalOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"goals" | "feedback">(feedbackPage > 1 ? "feedback" : "goals");
@@ -75,12 +87,15 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-4">
-        <StatCard label={t.stats.goals} value={goals.length} tone="accent" />
-        <StatCard label={t.stats.avgProgress} value={`${avgProgress}%`} tone="info" />
-        <StatCard label={t.stats.onTrack} value={onTrack} tone="success" />
-        <StatCard label={t.stats.atRisk} value={atRisk} tone="warning" />
-      </div>
+      {/* The stats come from the goals; without them there is nothing to count. */}
+      {!goalsError && (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-4">
+          <StatCard label={t.stats.goals} value={goals.length} tone="accent" />
+          <StatCard label={t.stats.avgProgress} value={`${avgProgress}%`} tone="info" />
+          <StatCard label={t.stats.onTrack} value={onTrack} tone="success" />
+          <StatCard label={t.stats.atRisk} value={atRisk} tone="warning" />
+        </div>
+      )}
 
       <div className="flex items-center gap-2 border-b border-line">
         <button
@@ -90,7 +105,7 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
             activeTab === "goals" ? "border-b-2 border-accent text-accent-fg" : "text-fg-muted hover:text-fg"
           }`}
         >
-          {t.tabs.goals(goals.length)}
+          {t.tabs.goals(goalsError ? null : goals.length)}
         </button>
         <button
           onClick={() => setActiveTab("feedback")}
@@ -99,7 +114,7 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
             activeTab === "feedback" ? "border-b-2 border-accent text-accent-fg" : "text-fg-muted hover:text-fg"
           }`}
         >
-          {t.tabs.feedback(feedbackTotal)}
+          {t.tabs.feedback(feedbackError ? null : feedbackTotal)}
         </button>
       </div>
 
@@ -109,7 +124,9 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
             <Button onClick={() => setGoalOpen(true)}>{t.newGoal}</Button>
           </div>
 
-          {goals.length === 0 ? (
+          {goalsError ? (
+            <LoadError message={goalsError} />
+          ) : goals.length === 0 ? (
             <EmptyState message={t.noGoals} />
           ) : (
             <div className="space-y-3">
@@ -127,7 +144,9 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
             <Button onClick={() => setFeedbackOpen(true)}>{t.sendFeedback}</Button>
           </div>
 
-          {feedbacks.length === 0 ? (
+          {feedbackError ? (
+            <LoadError message={feedbackError} />
+          ) : feedbacks.length === 0 ? (
             <EmptyState message={t.noFeedback} />
           ) : (
             <div className="space-y-3">
@@ -136,7 +155,7 @@ export default function PerformanceDashboard({ goals, feedbacks, feedbackTotal, 
               ))}
             </div>
           )}
-          {feedbackPages > 1 && (
+          {!feedbackError && feedbackPages > 1 && (
             <div className="flex items-center justify-between text-sm text-fg-muted">
               {feedbackPage > 1 ? (
                 <Link href={`/performance?fb=${feedbackPage - 1}`} className="inline-flex min-h-11 items-center hover:text-fg">

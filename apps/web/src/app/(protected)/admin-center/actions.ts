@@ -8,6 +8,7 @@ import { safeError } from "@/lib/errors/safe-error";
 import { limitWrite } from "@/lib/rate-limit";
 import { getClaims } from "@/lib/supabase/claims";
 import { createClient } from "@/lib/supabase/server";
+import { currentUserOrError } from "@/lib/auth/current-user";
 
 // Same bounds as the CHECK constraints of public.tenant_rate_limits (D28).
 const TenantRateLimit = z.object({
@@ -33,7 +34,9 @@ export async function updateTenantRateLimit(input: unknown): Promise<{ error?: s
   if (claims.aal !== "aal2") return { error: "Verifica tu identidad con MFA para cambiar la configuración" };
 
   const supabase = await createClient();
-  const { data: bizUser } = await supabase.from("users").select("id").eq("auth_uid", claims.userId).single();
+  // D45: a failed read of the employee row returns its safe error, not "No autenticado".
+  const { user: bizUser, error: userError } = await currentUserOrError();
+  if (userError) return { error: userError };
   if (!bizUser) return { error: "No autenticado" };
 
   const { allowed } = await can(bizUser.id, "admin.manage_config", "edit");

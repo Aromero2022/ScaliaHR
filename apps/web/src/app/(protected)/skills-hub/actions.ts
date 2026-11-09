@@ -8,6 +8,7 @@ import { can } from "@/lib/authz/can";
 import { writeAuditLog } from "@/lib/audit/log";
 import { safeError } from "@/lib/errors/safe-error";
 import { limitWrite } from "@/lib/rate-limit";
+import { currentUserOrError } from "@/lib/auth/current-user";
 
 type ActionResult = { success: true } | { error: string };
 
@@ -43,20 +44,16 @@ const JobRoleSkillSchema = z.object({
   requiredProficiencyLevel: z.coerce.number().int().min(1).max(5),
 });
 
+/** The actor of the action, or the message to return (D45: a failed read is not "No autenticado"). */
 async function getAuthContext() {
   const claims = await getClaims();
-  if (!claims?.tenantId) return null;
+  if (!claims?.tenantId) return "No autenticado";
 
-  const supabase = await createClient();
-  const { data: profile } = await supabase
-    .from("users")
-    .select("id")
-    .eq("auth_uid", claims.userId)
-    .single();
+  const { user, error } = await currentUserOrError();
+  if (error) return error;
+  if (!user) return "No autenticado";
 
-  if (!profile) return null;
-
-  return { supabase, actorId: profile.id, tenantId: claims.tenantId };
+  return { supabase: await createClient(), actorId: user.id, tenantId: claims.tenantId };
 }
 
 export async function updateSelfAssessment(
@@ -69,7 +66,7 @@ export async function updateSelfAssessment(
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const ctx = await getAuthContext();
-  if (!ctx) return { error: "No autenticado" };
+  if (typeof ctx === "string") return { error: ctx };
 
   const { supabase, actorId, tenantId } = ctx;
   const { skillId, level } = parsed.data;
@@ -98,7 +95,7 @@ export async function setManagerAssessment(
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const ctx = await getAuthContext();
-  if (!ctx) return { error: "No autenticado" };
+  if (typeof ctx === "string") return { error: ctx };
 
   const { supabase, actorId } = ctx;
   const { userId, skillId, level } = parsed.data;
@@ -126,7 +123,7 @@ export async function createSkill(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const ctx = await getAuthContext();
-  if (!ctx) return { error: "No autenticado" };
+  if (typeof ctx === "string") return { error: ctx };
 
   const { supabase, actorId, tenantId } = ctx;
 
@@ -168,7 +165,7 @@ export async function updateSkill(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const ctx = await getAuthContext();
-  if (!ctx) return { error: "No autenticado" };
+  if (typeof ctx === "string") return { error: ctx };
 
   const { supabase, actorId, tenantId } = ctx;
 
@@ -177,13 +174,15 @@ export async function updateSkill(input: unknown): Promise<ActionResult> {
 
   const { skillId, ...updates } = parsed.data;
 
-  const { data: before } = await supabase
+  // maybeSingle: an unknown skill is "not found"; a failed read is not.
+  const { data: before, error: beforeError } = await supabase
     .from("skill_ontology")
     .select("name, description, category, is_active")
     .eq("id", skillId)
     .eq("tenant_id", tenantId)
-    .single();
+    .maybeSingle();
 
+  if (beforeError) return { error: await safeError("skills.updateSkill_read", beforeError) };
   if (!before) return { error: "Habilidad no encontrada" };
 
   const payload: Record<string, unknown> = {};
@@ -235,7 +234,7 @@ export async function updateJobRoleSkill(
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const ctx = await getAuthContext();
-  if (!ctx) return { error: "No autenticado" };
+  if (typeof ctx === "string") return { error: ctx };
 
   const { supabase, actorId, tenantId } = ctx;
 
@@ -245,13 +244,15 @@ export async function updateJobRoleSkill(
 
   const { jobRoleId, skillId, requiredProficiencyLevel } = parsed.data;
 
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("job_role_skills")
     .select("required_proficiency_level")
     .eq("tenant_id", tenantId)
     .eq("job_role_id", jobRoleId)
     .eq("skill_id", skillId)
     .maybeSingle();
+  // The old level goes to the audit diff; without it the change is not saved.
+  if (existingError) return { error: await safeError("skills.updateJobRoleSkill_read", existingError) };
 
   const oldLevel = existing?.required_proficiency_level ?? null;
 

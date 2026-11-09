@@ -9,6 +9,8 @@ import OrgTree from "@/components/org-tree";
 import type { PositionNode } from "@/components/org-tree";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { messages } from "@/lib/i18n/es-MX";
+import { PageLoadError } from "@/components/ui/load-error";
+import { safeError } from "@/lib/errors/safe-error";
 
 export default async function OrgChartPage() {
   const claims = await requireAuth();
@@ -26,12 +28,16 @@ export default async function OrgChartPage() {
   const { allowed } = await can(bizUser.id, "ec.view_org_chart", "view");
   if (!allowed) return <AccessDenied />;
 
-  const { data: positions } = await supabase
+  const { data: positions, error } = await supabase
     .from("positions")
     .select(
       "id, position_code, title, is_vacant, parent_position_id, departments(name), job_classifications(title), occupants:users(first_name, last_name, email)"
     )
     .order("title", { ascending: true });
+  // D45: the positions are the page; a failed read is its error, not an empty chart.
+  if (error) {
+    return <PageLoadError title={messages.orgChart.heading} message={await safeError("org_chart.positions", error, messages.common.pageLoadError)} />;
+  }
 
   const nodes: PositionNode[] = (positions ?? []).map((p) => {
     const dept = Array.isArray(p.departments)

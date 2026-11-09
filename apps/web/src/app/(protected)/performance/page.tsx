@@ -12,6 +12,7 @@ import { z } from "zod";
 import { formatDateOnly, formatInstant } from "@/lib/format/dates";
 import { getTenantTimeZone } from "@/lib/tenant/get-tenant-time-zone";
 import { messages } from "@/lib/i18n/es-MX";
+import { queryErrorMessage } from "@/lib/errors/query-error";
 
 // D38: the feedback list is paged; the recipient is searched, not listed.
 const FEEDBACK_PAGE_SIZE = 20;
@@ -117,6 +118,12 @@ export default async function PerformancePage({
     };
   });
 
+  // D45: goals and feedback are independent; each tab shows its own error.
+  const [goalsError, feedbackError] = await Promise.all([
+    queryErrorMessage("performance.goals", goalsRes.error),
+    queryErrorMessage("performance.feedback", feedbackRes.error),
+  ]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -131,6 +138,8 @@ export default async function PerformancePage({
         feedbackTotal={feedbackRes.count ?? feedbacks.length}
         feedbackPage={feedbackPage}
         feedbackPageSize={FEEDBACK_PAGE_SIZE}
+        goalsError={goalsError}
+        feedbackError={feedbackError}
       />
     </div>
   );

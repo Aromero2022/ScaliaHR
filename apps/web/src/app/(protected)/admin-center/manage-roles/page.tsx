@@ -6,6 +6,7 @@ import Link from "next/link";
 import RoleManager from "@/components/role-manager";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { messages } from "@/lib/i18n/es-MX";
+import { queryErrorMessage } from "@/lib/errors/query-error";
 
 export interface RoleGrantRow {
   id: string;
@@ -33,7 +34,7 @@ export default async function ManageRolesPage() {
   const { allowed } = await can(bizUser.id, "admin.manage_roles", "edit");
   if (!allowed) notFound();
 
-  const { data: roles } = await supabase
+  const { data: roles, error: rolesError } = await supabase
     .from("permission_roles")
     .select(
       `id, name, description, is_admin_role,
@@ -42,10 +43,16 @@ export default async function ManageRolesPage() {
     )
     .order("name");
 
-  const { data: groups } = await supabase
+  const { data: groups, error: groupsError } = await supabase
     .from("permission_groups")
     .select("id, name, description")
     .order("name");
+
+  // D45: the two lists are independent; each shows its own error.
+  const [rolesMessage, groupsMessage] = await Promise.all([
+    queryErrorMessage("manage_roles.roles", rolesError),
+    queryErrorMessage("manage_roles.groups", groupsError),
+  ]);
 
   const roleRows: PermissionRoleRow[] = (roles ?? []).map((r) => ({
     id: r.id,
@@ -93,7 +100,7 @@ export default async function ManageRolesPage() {
         </div>
       </div>
 
-      <RoleManager roles={roleRows} groups={groupList} />
+      <RoleManager roles={roleRows} groups={groupList} rolesError={rolesMessage} groupsError={groupsMessage} />
     </div>
   );
 }
