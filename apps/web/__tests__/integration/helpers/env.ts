@@ -15,6 +15,8 @@ export interface IntegrationEnv {
   jwtSecret: string;
   dbUrl: string;
   prismaDbUrl: string;
+  /** prisma_app, the role DATABASE_URL uses in the app (can() runs its functions, D47). */
+  prismaAppDbUrl: string;
 }
 
 export function integrationEnv(): IntegrationEnv {
@@ -43,5 +45,12 @@ export function integrationEnv(): IntegrationEnv {
     jwtSecret: process.env.SUPABASE_JWT_SECRET!,
     dbUrl: process.env.SUPABASE_TEST_DB_URL!,
     prismaDbUrl: process.env.PRISMA_TEST_DB_URL ?? process.env.SUPABASE_TEST_DB_URL!,
+    prismaAppDbUrl: requirePrismaAppUrl(),
   };
+}
+
+function requirePrismaAppUrl(): string {
+  const url = process.env.PRISMA_APP_TEST_DB_URL;
+  if (!url) throw new Error("PRISMA_APP_TEST_DB_URL is not set: source scripts/supabase-test-env.sh");
+  return url;
 }

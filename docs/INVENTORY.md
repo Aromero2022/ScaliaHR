@@ -11,7 +11,7 @@
 
 | Tabla | RLS | Politicas | Notas |
 |-------|-----|-----------|-------|
-| `users` | ENABLE+FORCE | SELECT/INSERT/UPDATE tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | FKs compuestos a department, job_info, position |
+| `users` | ENABLE+FORCE | SELECT/INSERT/UPDATE tenant isolation; RESTRICTIVE `no_hard_delete_authenticated`; SELECT por columna (D47): `performance_score` y `potential_score` no se leen como columna (anon, authenticated, prisma_app), solo con `talent_scores()` | FKs compuestos a department, job_info, position |
 | `departments` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | Jerarquia via `parent_id` |
 | `legal_entities` | ENABLE+FORCE | SELECT (all tenant), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | |
 | `business_units` | ENABLE+FORCE | SELECT (all tenant), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | FK compuesto a legal_entity |
@@ -20,9 +20,9 @@
 | `job_roles` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | FK compuesto a job_family |
 | `job_classifications` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | FK compuesto a job_role |
 | `positions` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | FKs a department, classification, parent_position |
-| `ec_job_information` | ENABLE+FORCE | SELECT/INSERT/UPDATE tenant isolation; RESTRICTIVE `no_hard_delete_authenticated`; RESTRICTIVE admin-only INSERT/UPDATE (`is_tenant_admin()`) | Effective-dated con EXCLUDE btree_gist |
-| `ec_compensation` | ENABLE+FORCE | SELECT (own+manager+admin), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | Effective-dated; PII policy RESTRICTIVE |
-| `ec_personal_information` | ENABLE+FORCE | SELECT (own+manager+admin), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | Effective-dated; PII policy RESTRICTIVE |
+| `ec_job_information` | ENABLE+FORCE | SELECT/INSERT/UPDATE tenant isolation; RESTRICTIVE `ec_job_info_rbp_select` (own + `ec.view_team_profiles` + `ec.manage_employees`, D47); RESTRICTIVE `no_hard_delete_authenticated`; RESTRICTIVE admin-only INSERT/UPDATE (`is_tenant_admin()`) | Effective-dated con EXCLUDE btree_gist |
+| `ec_compensation` | ENABLE+FORCE | SELECT (own + `ec.view_compensation`, D47), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | Effective-dated; PII policy RESTRICTIVE |
+| `ec_personal_information` | ENABLE+FORCE | SELECT (own + `ec.view_team_profiles` + `ec.manage_employees`, D47), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | Effective-dated; PII policy RESTRICTIVE |
 | `object_definitions` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | Metadata de objetos |
 | `business_rules` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | Reglas de negocio |
 
@@ -91,9 +91,9 @@ Sin tests dedicados (cubierto por authz-matrix.test.ts).
 | `permission_groups` | ENABLE+FORCE | SELECT (all tenant), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | |
 | `permission_roles` | ENABLE+FORCE | SELECT (all tenant), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | |
 | `role_permissions` | ENABLE+FORCE | SELECT (all tenant), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | Columns: `permission_key`, `field_key`, `action` (v2) |
-| `group_members` | ENABLE+FORCE | SELECT (all tenant), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | FKs compuestos a group y user |
-| `role_grants` | ENABLE+FORCE | SELECT (all tenant), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | FKs a role y granted_group |
-| `audit_logs` | ENABLE+FORCE | SELECT (admin-only); INSERT revocado a authenticated (via `write_audit_log()` SECURITY DEFINER); RESTRICTIVE `no_update`/`no_delete` | Inmutable una vez escrito |
+| `group_members` | ENABLE+FORCE | SELECT (own + `admin.manage_roles`, D47), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | FKs compuestos a group y user |
+| `role_grants` | ENABLE+FORCE | SELECT (grants de los grupos propios + `admin.manage_roles`, D47), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | FKs a role y granted_group |
+| `audit_logs` | ENABLE+FORCE | SELECT (`admin.view_audit_logs`, D47); INSERT revocado a authenticated (via `write_audit_log()` SECURITY DEFINER); RESTRICTIVE `no_update`/`no_delete` | Inmutable una vez escrito |
 | `system_configurations` | ENABLE+FORCE | SELECT (admin-only), INSERT/UPDATE (admin-only); RESTRICTIVE `no_hard_delete_authenticated` | |
 
 ### Rutas
@@ -139,8 +139,8 @@ Layout de admin-center verifica `admin_center.access:view`.
 
 | Tabla | RLS | Politicas | Notas |
 |-------|-----|-----------|-------|
-| `performance_goals` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `goals_user_visibility` (own+admin), `goals_user_insert` (own), `goals_user_update` (own+admin); `no_hard_delete_authenticated` | FK compuesto a user |
-| `continuous_feedbacks` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `feedback_participant_visibility` (author+subject+admin), `feedback_author_insert` (own), `feedback_author_update` (own+admin); `no_hard_delete_authenticated` | FKs a author y subject |
+| `performance_goals` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `goals_user_visibility` (own + `pmgm.manage_team_goals` + `pmgm.manage_goal_plans`, D47), `goals_user_insert` (own), `goals_user_update` (own+admin); `no_hard_delete_authenticated` | FK compuesto a user |
+| `continuous_feedbacks` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `feedback_participant_visibility` (autor + sujeto + `pmgm.view_team_feedback` si no es PRIVATE, D47), `feedback_author_insert` (own), `feedback_author_update` (own+admin); `no_hard_delete_authenticated` | FKs a author y subject |
 
 ### Rutas
 
@@ -181,7 +181,7 @@ Layout de admin-center verifica `admin_center.access:view`.
 |-------|-----|-----------|-------|
 | `skill_ontology` | ENABLE+FORCE | SELECT (all tenant), INSERT/UPDATE (admin-only); `no_hard_delete_authenticated` | CHECK en status y category |
 | `job_role_skills` | ENABLE+FORCE | SELECT (all tenant), INSERT/UPDATE (admin-only); `no_hard_delete_authenticated` | PK compuesto (tenant, job_role, skill) |
-| `employee_skills` | ENABLE+FORCE | SELECT (own+admin+manager), INSERT (own, sin campos manager), UPDATE (own, column-level GRANT restringe manager_assessed_*); `no_hard_delete_authenticated` | PK compuesto (tenant, user, skill); funciones SECURITY DEFINER para manager assessment |
+| `employee_skills` | ENABLE+FORCE | SELECT (own + `tih.employee_skills`, D47), INSERT (own, sin campos manager), UPDATE (own, column-level GRANT restringe manager_assessed_*); `no_hard_delete_authenticated` | PK compuesto (tenant, user, skill); funciones SECURITY DEFINER para manager assessment |
 
 ### Rutas
 
@@ -232,7 +232,7 @@ Layout de admin-center verifica `admin_center.access:view`.
 | Tabla | RLS | Politicas | Notas |
 |-------|-----|-----------|-------|
 | `lms_tenant_map` | ENABLE+FORCE | SELECT/INSERT/UPDATE (tenant isolation via `requesting_tenant_id()`); sin DELETE | Mapeo tenant Scalia ↔ Moodle |
-| `lms_user_map` | ENABLE+FORCE | SELECT/INSERT/UPDATE (tenant isolation via `requesting_tenant_id()`); sin DELETE | Mapeo usuario Scalia ↔ Moodle |
+| `lms_user_map` | ENABLE+FORCE | SELECT (own + `admin.manage_roles`, D47), INSERT/UPDATE (tenant isolation via `requesting_tenant_id()`); sin DELETE | Mapeo usuario Scalia ↔ Moodle |
 
 ### Rutas
 
@@ -261,7 +261,7 @@ Layout de admin-center verifica `admin_center.access:view`.
 
 | Tabla | RLS | Politicas | Notas |
 |-------|-----|-----------|-------|
-| `arco_requests` | ENABLE+FORCE | SELECT (own como subject + admin), INSERT (admin-only), UPDATE (admin-only); sin DELETE | Funciones: `anonymize_user()`, `export_user_data()`, `scrub_personal_data()` |
+| `arco_requests` | ENABLE+FORCE | SELECT (own como subject + `arco.manage`, D47), INSERT (admin-only), UPDATE (admin-only); sin DELETE | Funciones: `anonymize_user()`, `export_user_data()`, `scrub_personal_data()` |
 
 ### Rutas
 
@@ -303,9 +303,9 @@ Layout de admin-center verifica `admin_center.access:view`.
 | Tabla | RLS | Politicas | Notas |
 |-------|-----|-----------|-------|
 | `talent_pools` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | |
-| `talent_pool_entries` | ENABLE+FORCE | Tenant isolation via parent join (EXISTS on talent_pools); RESTRICTIVE `no_hard_delete_authenticated` | |
+| `talent_pool_entries` | ENABLE+FORCE | Tenant isolation via parent join (EXISTS on talent_pools); RESTRICTIVE `no_hard_delete_authenticated`; RESTRICTIVE `talent_pool_entries_closed` (`false` para anon y authenticated hasta la Fase 18a, D47) | |
 | `succession_plans` | ENABLE+FORCE | CRUD tenant isolation; RESTRICTIVE `no_hard_delete_authenticated` | |
-| `succession_nominees` | ENABLE+FORCE | Tenant isolation via parent join (EXISTS on succession_plans); RESTRICTIVE `no_hard_delete_authenticated` | |
+| `succession_nominees` | ENABLE+FORCE | Tenant isolation via parent join (EXISTS on succession_plans); RESTRICTIVE `no_hard_delete_authenticated`; RESTRICTIVE `succession_nominees_closed` (`false` para anon y authenticated hasta la Fase 18a, D47) | |
 
 ### Rutas
 
@@ -359,6 +359,13 @@ Sin tests dedicados.
 | `insert_effective_record(...)` | authenticated | Hardened: tabla cerrada, format(%I), tenant forzado |
 | `rate_limit_consume(...)` | prisma_app | Rate limiting (D28): gasta un token y devuelve los segundos de espera |
 | `rls_auto_enable()` | service_role | Event trigger auto-enable RLS en tablas nuevas |
+| `rbp_visible_user_ids(text, rbp_action)` | authenticated | D47: usuarios que la sesión puede ver con una llave (unión de las poblaciones de sus grants) |
+| `rbp_has_permission(text, rbp_action)` | authenticated | D47: si la sesión tiene una llave, sin importar la población |
+| `rbp_context(uuid, uuid)` | prisma_app | D47: tenant, grants y permisos de un usuario para `can()` |
+| `rbp_target_in_population(uuid, uuid, uuid, text)` | prisma_app | D47: si un usuario está en una población (`direct_reports`, `same_department`) de otro |
+| `talent_scores(uuid[])` | authenticated | D47: calificaciones propias y de la población de `ec.manage_employees` |
+| `directory_entries(uuid[])` | authenticated | D47: nombre, puesto y departamento vigentes del tenant, con `ec.view_org_chart` (42501 sin ella) |
+| `rbp_module_active`, `rbp_population_user_ids`, `rbp_user_ids` | ninguno (internas) | D47: módulo activo por prefijo de llave y población, definida una sola vez |
 
 ### Module Flags
 
@@ -405,7 +412,7 @@ Sin tests dedicados.
 
 | Tabla | Estado | Razon |
 |-------|--------|-------|
-| `job_informations` | LEGACY — no se usa en codigo | Reemplazada por `ec_job_information` (effective-dated). La tabla existe con RLS e indices activos pero ningun archivo en `apps/web/src/` la referencia. |
+| `job_informations` | LEGACY — no se usa en codigo | Reemplazada por `ec_job_information` (effective-dated). La tabla existe con RLS e indices activos pero ningun archivo en `apps/web/src/` la referencia. Desde D47 la cierra una RESTRICTIVE `job_informations_closed` (`false` para anon y authenticated). |
 | `role_assignments` | DROPPED | Eliminada en `s1_deprecate_rbp_v1.sql`. Migrada a `role_grants` + `group_members` (RBP v2). |
 
 ### Rutas Sin Proteccion de Permisos RBP

@@ -669,6 +669,11 @@ exhausted the pool: `Unable to start a transaction in the given time`.
 `timeout` parameters via environment variables (`PRISMA_TX_MAX_WAIT`,
 `PRISMA_TX_TIMEOUT`), defaulting to 5s and 10s respectively.
 
+**Since D47:** the context is one call to `rbp_context()` and the population
+check one call to `rbp_target_in_population()`, both only for `prisma_app`;
+there is no `withTenant` transaction any more. The per-request memoization and
+`canMany()` are unchanged.
+
 ---
 
 ## D13 — Modelo de Tenant e Identidad
@@ -1855,7 +1860,8 @@ cached only within one request. Phase 9b, PR 5.
   statements: the RLS context with `set_config('role', …)` and one query that
   returns flags, grants and permissions. The interactive transaction it
   replaced had six statements. Under load the interactive version ran out of
-  pooled connections (`P2028`, "Unable to start a transaction").
+  pooled connections (`P2028`, "Unable to start a transaction"). Since D47 it
+  is a single statement, `SELECT rbp_context(…)`, with no transaction.
 
 **Tests:**
 - unit: cache TTL, keys and invalidation; the middleware remembers an allowed
@@ -3054,6 +3060,152 @@ population) is D47.
   scrolls, as its description already said; a control's own box changes
   nothing.
 
+## D47 — Reads by RBP Population
+
+**Decision:** personal, job, pay, talent and RBP data are read through the
+same rule as `can()`: one's own rows, plus the population the role grants
+give for the permission that guards the data (D14). Holding an
+`is_admin_role` role, or the `owner` app_role, no longer opens them. Second
+security PR between PR 5 and PR 6 of Phase 9c, after D46.
+
+**What was there:**
+- `ec_job_information`, `group_members`, `role_grants` and `lms_user_map`:
+  readable by the whole tenant. Anyone could read every job record (title,
+  manager, department), who sits in which group and which roles each group
+  holds, so who the administrators are.
+- `ec_compensation`, `ec_personal_information` and `employee_skills`: own,
+  any `is_tenant_admin()` (any `is_admin_role` grant, whatever its keys) or the
+  manager of the current job record.
+- `performance_goals`, `continuous_feedbacks` (author or subject),
+  `arco_requests` (subject) and `audit_logs`: own or any `is_tenant_admin()`;
+  an admin read PRIVATE feedback too.
+- `users`: every column, `performance_score` and `potential_score` included,
+  for the whole tenant.
+- `job_informations`, `succession_nominees` and `talent_pool_entries`:
+  readable by the tenant, with no screen.
+
+**The rule (`supabase/migrations/20261110010000_d47_rbp_reads.sql`):**
+- The population is defined once, in `rbp_population_user_ids(tenant, user,
+  population)`: `all` is the tenant, `self` the user, `direct_reports` whoever
+  has the user as manager in their current job record (as `can()` read it),
+  `same_department` whoever shares the user's non-null department.
+  `rbp_user_ids()` is the union of the populations of the user's grants of
+  roles holding the key and action, if the key's module is active
+  (`rbp_module_active()`, the same flags as `PERMISSION_MODULE_MAP`). These
+  three are internal: no role of the app may execute them.
+- The policies call `rbp_visible_user_ids(key, action)` and
+  `rbp_has_permission(key, action)`, which answer for whoever runs the query
+  (`current_app_user_id()`, `requesting_tenant_id()`). Both are SECURITY
+  DEFINER, STABLE, with an empty `search_path`, executable by authenticated.
+- `can()` stops reading `role_grants` and `group_members` as authenticated
+  (those are now limited to one's own rows). It loads its context with
+  `rbp_context(tenant, user)` and checks `direct_reports` and
+  `same_department` with `rbp_target_in_population()`, which only `prisma_app`
+  may execute (the D42 pattern), so `can()` answers for any user and does not
+  depend on the policies it is compared with. `withTenant()` had no other
+  caller and is gone.
+- `can()` now evaluates the union of the populations that grant a key. Before,
+  the first `direct_reports` or `same_department` grant decided alone: a
+  manager who was also an HR administrator (`all`) could be refused depending
+  on the order of the grants. Unit test in `can.test.ts`.
+
+| Data | Readable by |
+|---|---|
+| `ec_compensation` | own + `ec.view_compensation` (new key) |
+| `ec_personal_information`, `ec_job_information` | own + `ec.view_team_profiles` + `ec.manage_employees` |
+| `employee_skills` | own + `tih.employee_skills` |
+| `performance_goals` | own + `pmgm.manage_team_goals` (edit) + `pmgm.manage_goal_plans` (edit) |
+| `continuous_feedbacks` | author, subject, and the population of `pmgm.view_team_feedback` for the subject unless PRIVATE |
+| `arco_requests` | subject + whoever holds `arco.manage` |
+| `audit_logs` | whoever holds `admin.view_audit_logs` |
+| `group_members`, `lms_user_map` | own + whoever holds `admin.manage_roles` (edit) |
+| `role_grants` | the grants of one's own groups + `admin.manage_roles` (edit) |
+| `users.performance_score`, `potential_score` | own + `ec.manage_employees`, through `talent_scores()` |
+| `job_informations`, `succession_nominees`, `talent_pool_entries` | nobody (RESTRICTIVE `false`) until they have a screen (Phase 18a) |
+
+- `ec_job_information` keeps its tenant policy and gets a RESTRICTIVE one with
+  the rule; the other tables had a single SELECT policy, which is altered.
+- **Directory:** the employee list showed the title and department of every
+  listed person from their job record. It now calls `directory_entries(ids)`
+  (SECURITY DEFINER, STABLE, empty `search_path`, filtered by
+  `requesting_tenant_id()`): first name, last name, current title and current
+  department, nothing else, and only with `ec.view_org_chart`; without it the
+  call fails with 42501 rather than answering an empty directory. The org
+  chart reads positions, not job records, and did not change.
+- **Scores:** `REVOKE SELECT ON users` and `GRANT SELECT (every other column)`
+  to anon, authenticated and `prisma_app`. `prisma_app` had its own SELECT on
+  the whole table (`app_roles`), so Prisma would still have read every score
+  of the tenant. A column added to `users` later is not readable until it is
+  granted. `talent_scores(ids)` answers own scores and those of the population
+  of `ec.manage_employees` until Phase 18a gives them a key. The dashboard and
+  the profile read their own through it, and every `select` on `users` names
+  its columns.
+- **`ec.view_compensation`:** the compensation section of the employee detail
+  had no key of its own ("admin or team"). It now asks `can()` for
+  `ec.view_compensation` on the employee. Owner and HR Administrator get it
+  with `all` and Manager with `direct_reports`, in the seed, in the tenant
+  sign-up (`create-tenant.ts`) and, for tenants that exist, in the migration.
+- **Writes do not change.** They still go through `insert_effective_record`
+  (by `app_role`) and the existing write policies: Known Risk below, Phase 11.
+
+**Behavior that changes:**
+- An administrator whose roles lack a data key sees only their own rows of it
+  (an `is_admin_role` role with only `admin_center.access` reads no one
+  else's job, pay, skills, goals, feedback, ARCO requests or audit log).
+- HR Administrator and Owner hold no `pmgm.view_team_feedback` in the seed, so
+  they no longer read other people's feedback. PRIVATE feedback is only for
+  its author and its subject.
+- Managers now read the goals (`pmgm.manage_team_goals`) and the non-private
+  feedback (`pmgm.view_team_feedback`) of their direct reports, which their
+  role already granted and the policies did not allow.
+- `syncLmsUsers()` and `getEmployeeCompletions()` read `lms_user_map` with the
+  session's client. Nothing in the app calls them yet; when something does,
+  the caller needs `admin.manage_roles` (or the worker, D17).
+- With `all`, `can()` does not check that the target belongs to the tenant; RLS
+  does, and the comparison test covers it with an employee of another tenant.
+
+**Tests:**
+- `__tests__/integration/rbp-reads.test.ts` compares, for every table above
+  and every account, the exact set of rows visible through the Data API (the
+  account's token) and through Prisma (`prisma_app`, the role of
+  `DATABASE_URL`, with the same JWT claims and no `SET ROLE`) with the rows of
+  the account's tenant that are its own or that the real `can()` allows. The
+  accounts: an HR administrator (`all`), a manager (`direct_reports`), the
+  report, a peer (`self`), a department viewer (`same_department`), an owner
+  whose `is_admin_role` role has no data key, and an employee of another
+  tenant. Feedback rows cover the three visibilities.
+  - It runs twice, with the modules on and with `ec`, `pmgm` and `tih` off
+    (only own rows remain for their keys).
+  - `talent_scores()` and `directory_entries()` (42501 without
+    `ec.view_org_chart`) are compared the same way. The three closed tables
+    answer nothing to anyone while postgres sees their rows.
+  - Not vacuous: the HR administrator reads the whole tenant's compensation,
+    the manager their report's, the others their own; the department viewer
+    reads the peer's job and not the report's; `performance_score` as a column
+    gets 42501 by the Data API and by Prisma.
+  - `rbp_module_active()` is checked against `PERMISSION_MODULE_MAP` one flag
+    at a time.
+  - Negative control, run by hand: with `ec_comp_access` set to `true` and
+    `group_members_select` back to the tenant, exactly those two tables failed
+    in both runs, along with the compensation check.
+- The integration suites that call the real `can()` connect as `prisma_app`
+  (`PRISMA_APP_TEST_DB_URL`) instead of the test role `prisma_test`, which
+  cannot execute `rbp_context()`. `TestWorld` gives its admin the HR
+  Administrator keys that guard reads and puts the manager in a Managers group
+  with the seed's Manager keys over `direct_reports`, so the existing suites
+  keep their intent; one of them counted the fixture's grants and members.
+- `__tests__/static/no-select-star-users.test.ts`, with the TypeScript parser:
+  it fails on `.from("users").select()` with no argument, with a top-level `*`
+  or with an argument it cannot read, and on any `users(*)` embed, in every
+  file of `src`. Negative and positive controls (`departments(*)` inside a
+  users select, `*` of other tables, `superusers_log`).
+
+**Performance:** the employee list, the dashboard and the profile, which k6
+loads, now go through the new rule and functions. CI's short k6 run is the
+measure (the local full profile is not comparable): p95 steady 108.5 ms on
+`main` at 387e0d8 (D46) against the value in the D47 pull request; more than
+20 % above, or above the 500 ms threshold, would block.
+
 ---
 
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
@@ -3067,6 +3219,9 @@ population) is D47.
 has_app_role('hr_admin')` to authorize the caller. This reads the `app_role`
 string from `user_tenant_memberships` (baked into the JWT at login). It does
 **not** check RBP permissions (`role_grants` → `role_permissions`).
+
+**Reads are not affected:** since D47 the policies that limit reads follow
+RBP populations; this risk is about writes only.
 
 **Risk:** When Admin Center (Phase 11) enables custom roles with
 `ec.manage_employees`, a user granted that RBP permission but without the

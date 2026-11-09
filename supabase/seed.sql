@@ -314,7 +314,7 @@ FROM (
   CROSS JOIN (VALUES
     ('admin_center.access', 'view'), ('arco.manage', 'view'),
     ('admin.manage_roles', 'edit'), ('admin.manage_config', 'edit'), ('admin.view_audit_logs', 'view'),
-    ('ec.manage_employees', 'view'), ('ec.manage_employees', 'edit'),
+    ('ec.manage_employees', 'view'), ('ec.manage_employees', 'edit'), ('ec.view_compensation', 'view'),
     ('ec.manage_positions', 'edit'), ('ec.manage_org_structure', 'edit'),
     ('pmgm.manage_goal_plans', 'edit'), ('sdm.manage_succession', 'edit'),
     ('tih.ontology', 'view'), ('tih.ontology', 'edit'),
@@ -335,7 +335,7 @@ FROM (
   UNION ALL
   SELECT 'bb100000-0000-0000-0000-000000000003', p.permission_key, p.action
   FROM (VALUES
-    ('ec.view_team_profiles', 'view'), ('pmgm.manage_team_goals', 'edit'),
+    ('ec.view_team_profiles', 'view'), ('ec.view_compensation', 'view'), ('pmgm.manage_team_goals', 'edit'),
     ('pmgm.view_team_feedback', 'view'), ('sdm.nominate_successors', 'edit'),
     ('tih.ontology', 'view'), ('tih.job_requirements', 'view'),
     ('tih.employee_skills', 'view'), ('tih.employee_skills', 'edit'),

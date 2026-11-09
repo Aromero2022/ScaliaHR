@@ -13,12 +13,6 @@ vi.mock("@/lib/db/tenant-client", () => ({
       values,
     }),
   },
-  withTenant: async (_ctx: unknown, fn: (tx: unknown) => Promise<unknown>) => {
-    const fakeTx = {
-      $queryRaw: (...args: unknown[]) => mockQueryRaw(...args),
-    };
-    return fn(fakeTx);
-  },
 }));
 
 vi.mock("@/lib/supabase/claims", () => ({
@@ -45,11 +39,12 @@ const ROLE_1 = "role-1";
 let queryCallIndex = 0;
 
 // Callers list the tenant flags, grants and permissions, then any
-// org-structure answers. loadPermissionContext (D35) issues a batch of two
-// queries: [0] the RLS context, [1] one row with tenant, grants and
-// permissions; evaluateTargetPopulation may add more for org-structure checks.
+// org-structure answers. loadPermissionContext (D47) issues one query,
+// public.rbp_context(), whose row holds tenant, grants and permissions;
+// evaluateTargetPopulation adds one public.rbp_target_in_population() call per
+// direct_reports or same_department population that grants the permission.
 function setupQuerySequence(flags: unknown[], grants: unknown[], permissions: unknown[], ...rest: unknown[][]) {
-  const responses: unknown[][] = [[], [{ tenant: flags[0] ?? null, grants, permissions }], ...rest];
+  const responses: unknown[][] = [[{ ctx: { tenant: flags[0] ?? null, grants, permissions } }], ...rest];
   queryCallIndex = 0;
   mockQueryRaw.mockImplementation(() => {
     const result = responses[queryCallIndex] ?? [];
@@ -183,13 +178,54 @@ describe("can()", () => {
     });
   });
 
+  describe("several grants (D47)", () => {
+    it("an all grant allows any target even when a direct_reports grant comes first", async () => {
+      setupQuerySequence(
+        [{}],
+        [
+          { role_id: "role-manager", target_population: "direct_reports" },
+          { role_id: "role-hr", target_population: "all" },
+        ],
+        [
+          { role_id: "role-manager", ...PERM },
+          { role_id: "role-hr", ...PERM },
+        ],
+        [{ match: false }],
+      );
+      const result = await can(USER_A, "employee.view", "view", USER_B);
+      expect(result.allowed).toBe(true);
+      // The all grant answers without asking the database about the population.
+      expect(mockQueryRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it("asks rbp_target_in_population for each population that grants the permission", async () => {
+      setupQuerySequence(
+        [{}],
+        [
+          { role_id: "role-a", target_population: "direct_reports" },
+          { role_id: "role-b", target_population: "same_department" },
+        ],
+        [
+          { role_id: "role-a", ...PERM },
+          { role_id: "role-b", ...PERM },
+        ],
+        [{ match: false }],
+        [{ match: true }],
+      );
+      const result = await can(USER_A, "employee.view", "view", USER_B);
+      expect(result.allowed).toBe(true);
+      const populations = mockQueryRaw.mock.calls.slice(1).map((call) => (call[0] as { values: unknown[] }).values.at(-1));
+      expect(populations).toEqual(["direct_reports", "same_department"]);
+    });
+  });
+
   describe("target_population: direct_reports", () => {
     it("allows when target's manager_id matches actor", async () => {
       setupQuerySequence(
         [{}],
         [{ role_id: ROLE_1, target_population: "direct_reports" }],
         [{ role_id: ROLE_1, ...PERM }],
-        [{ manager_id: USER_A }],
+        [{ match: true }],
       );
       const result = await can(USER_A, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(true);
@@ -200,7 +236,7 @@ describe("can()", () => {
         [{}],
         [{ role_id: ROLE_1, target_population: "direct_reports" }],
         [{ role_id: ROLE_1, ...PERM }],
-        [{ manager_id: "other-manager" }],
+        [{ match: false }],
       );
       const result = await can(USER_A, "employee.view", "view", USER_B);
       expect(result.allowed).toBe(false);

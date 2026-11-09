@@ -147,8 +147,9 @@ describe("RBP v2 model", () => {
     const members = await world.svc.from("group_members").select("id").eq("tenant_id", tenant.id);
     expect(grants.error).toBeNull();
     expect(members.error).toBeNull();
-    expect(grants.data!.length).toBe(2);
-    expect(members.data!.length).toBe(3);
+    // TestWorld: Admins (all), Employees (self) and Managers (direct_reports).
+    expect(grants.data!.length).toBe(3);
+    expect(members.data!.length).toBe(4);
   });
 
   it("an is_admin_role grant to a group makes its members tenant admins", async () => {

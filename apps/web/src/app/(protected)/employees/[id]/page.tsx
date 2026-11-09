@@ -73,7 +73,8 @@ export default async function EmployeeDetailPage({
   // a failed read is the whole page's error, with its request id.
   const { data: employee, error: employeeError } = await supabase
     .from("users")
-    .select("*, departments(name)")
+    // D47: explicit columns; the talent scores are not readable by authenticated.
+    .select("id, first_name, last_name, email, status, departments(name)")
     .eq("id", id)
     .maybeSingle();
 
@@ -147,7 +148,9 @@ export default async function EmployeeDetailPage({
     queryErrorMessage("employee_detail.compensation", firstError(compCurrentError, compHistoryError)),
   ]);
 
-  const canViewComp = adminView.allowed || teamView.allowed;
+  // D47: compensation has its own permission (Owner and HR Administrator for
+  // everyone, Manager for direct reports), the same one its RLS policy reads.
+  const canViewComp = (await can(currentUser.id, "ec.view_compensation", "view", id)).allowed;
   const today = calendarDateIn((await getTenantTimeZone(claims.tenantId)).timeZone);
 
   function rel(obj: unknown): Record<string, string> | null {

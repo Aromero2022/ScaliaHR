@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const withTenantSpy = vi.fn();
 const transactionSpy = vi.fn();
 const mockQueryRaw = vi.fn();
 
@@ -18,13 +17,6 @@ vi.mock("@/lib/db/tenant-client", () => ({
       values,
     }),
     raw: (s: string) => s,
-  },
-  withTenant: async (_ctx: unknown, fn: (tx: unknown) => Promise<unknown>) => {
-    withTenantSpy();
-    const fakeTx = {
-      $queryRaw: (...args: unknown[]) => mockQueryRaw(...args),
-    };
-    return fn(fakeTx);
   },
 }));
 
@@ -71,17 +63,16 @@ describe("transaction count — layout sidebar pattern", () => {
     mockQueryRaw.mockResolvedValue([{}]);
   });
 
-  it("Promise.all of can() for 6 sidebar keys opens exactly 1 transaction", async () => {
+  it("Promise.all of can() for 6 sidebar keys loads the permission context once", async () => {
     const results = await Promise.all(
       SIDEBAR_KEYS.map((key) => can("user-1", key, "view")),
     );
     expect(results).toHaveLength(6);
     // Old code: each can() → evaluateCached(…, permissionKey, …) → different
-    // cache key per key → 6 transactions. Fix: loadPermissionContext is
-    // cached per (userId, tenantId) → 1 transaction, a batch of two
-    // statements since D35 (no interactive withTenant).
-    expect(transactionSpy).toHaveBeenCalledTimes(1);
-    expect(mockQueryRaw).toHaveBeenCalledTimes(2);
-    expect(withTenantSpy).not.toHaveBeenCalled();
+    // cache key per key → 6 transactions. loadPermissionContext is cached per
+    // (userId, tenantId); since D47 it is a single call to public.rbp_context()
+    // (no transaction).
+    expect(mockQueryRaw).toHaveBeenCalledTimes(1);
+    expect(transactionSpy).not.toHaveBeenCalled();
   });
 });

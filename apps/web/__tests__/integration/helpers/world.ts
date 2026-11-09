@@ -21,6 +21,8 @@ export interface TestTenant {
   adminRoleId: string;
   employeeGroupId: string;
   employeeRoleId: string;
+  managerGroupId: string;
+  managerRoleId: string;
 }
 
 type Role = "admin" | "manager" | "employee";
@@ -133,9 +135,12 @@ export class TestWorld {
   }
 
   /**
-   * admin: member of an "Admins" group granted an is_admin_role role (target all).
+   * admin: member of an "Admins" group granted an is_admin_role role (target all)
+   * with the keys of the seed's HR Administrator that guard reads (D47).
    * manager/employee: members of an "Employees" group granted a non-admin role
-   * (target self); employee reports to manager in ec_job_information.
+   * (target self); employee reports to manager in ec_job_information. The
+   * manager is also in a "Managers" group granted the seed's Manager keys over
+   * direct_reports.
    * activeTenantSetting=false leaves user_settings empty so the hook must fall
    * back to the first active membership.
    */
@@ -188,17 +193,19 @@ export class TestWorld {
 
     const adminGroupId = randomUUID();
     const employeeGroupId = randomUUID();
+    const managerGroupId = randomUUID();
     const adminRoleId = randomUUID();
     const employeeRoleId = randomUUID();
+    const managerRoleId = randomUUID();
     await this.db.query(
       `INSERT INTO public.permission_groups (id, tenant_id, name)
-       VALUES ($1, $3, 'Admins'), ($2, $3, 'Employees')`,
-      [adminGroupId, employeeGroupId, id],
+       VALUES ($1, $4, 'Admins'), ($2, $4, 'Employees'), ($3, $4, 'Managers')`,
+      [adminGroupId, employeeGroupId, managerGroupId, id],
     );
     await this.db.query(
       `INSERT INTO public.permission_roles (id, tenant_id, name, is_admin_role)
-       VALUES ($1, $3, 'Tenant Admin', true), ($2, $3, 'Employee Self Service', false)`,
-      [adminRoleId, employeeRoleId, id],
+       VALUES ($1, $4, 'Tenant Admin', true), ($2, $4, 'Employee Self Service', false), ($3, $4, 'Manager', false)`,
+      [adminRoleId, employeeRoleId, managerRoleId, id],
     );
     await this.db.query(
       `INSERT INTO public.role_permissions (tenant_id, role_id, permission_key, action)
@@ -206,18 +213,28 @@ export class TestWorld {
               ($1, $2, 'employee_profile', 'edit'),
               ($1, $2, 'admin_center.access', 'view'),
               ($1, $2, 'admin.view_audit_logs', 'view'),
-              ($1, $2, 'arco.manage', 'view')`,
-      [id, adminRoleId, employeeRoleId],
+              ($1, $2, 'arco.manage', 'view'),
+              ($1, $2, 'admin.manage_roles', 'edit'),
+              ($1, $2, 'ec.manage_employees', 'view'),
+              ($1, $2, 'ec.view_compensation', 'view'),
+              ($1, $2, 'pmgm.manage_goal_plans', 'edit'),
+              ($1, $2, 'tih.employee_skills', 'view'),
+              ($1, $4, 'ec.view_team_profiles', 'view'),
+              ($1, $4, 'ec.view_compensation', 'view'),
+              ($1, $4, 'pmgm.manage_team_goals', 'edit'),
+              ($1, $4, 'pmgm.view_team_feedback', 'view'),
+              ($1, $4, 'tih.employee_skills', 'view')`,
+      [id, adminRoleId, employeeRoleId, managerRoleId],
     );
     await this.db.query(
       `INSERT INTO public.role_grants (tenant_id, role_id, granted_group_id, target_population)
-       VALUES ($1, $2, $3, 'all'), ($1, $4, $5, 'self')`,
-      [id, adminRoleId, adminGroupId, employeeRoleId, employeeGroupId],
+       VALUES ($1, $2, $3, 'all'), ($1, $4, $5, 'self'), ($1, $6, $7, 'direct_reports')`,
+      [id, adminRoleId, adminGroupId, employeeRoleId, employeeGroupId, managerRoleId, managerGroupId],
     );
     await this.db.query(
       `INSERT INTO public.group_members (tenant_id, group_id, user_id)
-       VALUES ($1, $2, $3), ($1, $4, $5), ($1, $4, $6)`,
-      [id, adminGroupId, users.admin.userId, employeeGroupId, users.manager.userId, users.employee.userId],
+       VALUES ($1, $2, $3), ($1, $4, $5), ($1, $4, $6), ($1, $7, $5)`,
+      [id, adminGroupId, users.admin.userId, employeeGroupId, users.manager.userId, users.employee.userId, managerGroupId],
     );
 
     const signedIn = {} as Record<Role, TestUser>;
@@ -234,6 +251,8 @@ export class TestWorld {
       adminRoleId,
       employeeGroupId,
       employeeRoleId,
+      managerGroupId,
+      managerRoleId,
     };
   }
 

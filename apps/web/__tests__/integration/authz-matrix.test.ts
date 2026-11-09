@@ -6,7 +6,7 @@ import { TestWorld } from "./helpers/world";
 
 const env = integrationEnv();
 
-process.env.DATABASE_URL = env.prismaDbUrl;
+process.env.DATABASE_URL = env.prismaAppDbUrl;
 
 const mockGetClaims = vi.fn();
 vi.mock("@/lib/supabase/claims", () => ({

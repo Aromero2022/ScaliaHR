@@ -8,7 +8,7 @@ const env = integrationEnv();
 // Use connection_limit=1 to reproduce the pool exhaustion bug.
 // The default .env.example may use a higher limit, but the layout's
 // Promise.all of N can() calls can exceed any reasonable pool size.
-const prismaUrl = new URL(env.prismaDbUrl);
+const prismaUrl = new URL(env.prismaAppDbUrl);
 prismaUrl.searchParams.set("connection_limit", "1");
 process.env.DATABASE_URL = prismaUrl.toString();
 
