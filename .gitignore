@@ -29,3 +29,5 @@ load/.out/
 # Playwright reports and traces (e2e runs, D40).
 playwright-report/
 test-results/
+# e2e artifacts (D44): report, axe, screenshots. CI uploads them after the secret scan.
+apps/web/e2e-artifacts/

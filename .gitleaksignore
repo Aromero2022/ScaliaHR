@@ -1,0 +1,6 @@
+# gitleaks findings that are not secrets (D33). Each line is one exact finding:
+# commit:file:rule:line. Nothing here hides a pattern, a file or a rule.
+#
+# D44: a made-up password in a unit test fixture of the e2e scan, replaced in the
+# next commit by a low-entropy value. It never opened anything.
+6d1c529869521dc5be1e53dea79858bb62006404:apps/web/__tests__/scripts/e2e-accounts.test.ts:generic-api-key:25

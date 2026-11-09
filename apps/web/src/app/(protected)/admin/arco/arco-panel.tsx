@@ -120,7 +120,7 @@ export default function ArcoPanel({ requests }: { requests: ArcoRow[] }) {
   return (
     <>
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-4">
         <StatCard label={t.stats.total} value={requests.length} />
         <StatCard label={t.stats.pending} value={pending.length} tone="warning" />
         <StatCard label={t.stats.completed} value={resolved.filter((r) => r.status === "completed").length} tone="success" />
