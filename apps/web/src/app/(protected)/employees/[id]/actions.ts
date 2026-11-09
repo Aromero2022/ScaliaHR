@@ -10,7 +10,9 @@ import { limitRead, limitWrite } from "@/lib/rate-limit";
 import { firstError } from "@/lib/errors/query-error";
 import { messages } from "@/lib/i18n/es-MX";
 
-const uuidSchema = z.string().uuid();
+// D46: guid, not uuid. The seed's ids (e0000000-…, 5c000000-…, aa100000-…) are
+// not RFC 4122, and z.uuid() refused them, so nothing could be saved on demo data.
+const idSchema = z.guid();
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD requerido");
 
 type ActionResult<T = unknown> =
@@ -51,8 +53,7 @@ export type ActionOptions = {
   employeeName: string;
 };
 
-// guid, not uuid: the seed's ids (e0000000-…) are not RFC 4122.
-const actionOptionsSchema = z.object({ employeeId: z.guid() });
+const actionOptionsSchema = z.object({ employeeId: idSchema });
 
 /**
  * D45: the lists of the "Tomar Acción" dialog, read on the server under the
@@ -104,14 +105,14 @@ export async function loadActionOptions(input: z.input<typeof actionOptionsSchem
 // ─── Job Change ────────────────────────────────────────────────────
 
 const jobChangeSchema = z.object({
-  userId: uuidSchema,
+  userId: idSchema,
   startDate: dateSchema,
   jobTitle: z.string().min(1, "Título de puesto requerido"),
-  positionId: uuidSchema.optional(),
-  departmentId: uuidSchema.optional(),
-  jobClassificationId: uuidSchema.optional(),
-  managerId: uuidSchema.optional(),
-  locationId: uuidSchema.optional(),
+  positionId: idSchema.optional(),
+  departmentId: idSchema.optional(),
+  jobClassificationId: idSchema.optional(),
+  managerId: idSchema.optional(),
+  locationId: idSchema.optional(),
   eventReason: z.string().min(1, "Motivo requerido"),
 });
 
@@ -168,7 +169,7 @@ export async function createJobChange(
 // ─── Compensation Change ───────────────────────────────────────────
 
 const compensationSchema = z.object({
-  userId: uuidSchema,
+  userId: idSchema,
   startDate: dateSchema,
   baseSalary: z.number().positive("Salario debe ser positivo"),
   currency: z.enum(["MXN", "USD"]).default("MXN"),
@@ -233,7 +234,7 @@ export async function createCompensationChange(
 // ─── Personal Information Change ───────────────────────────────────
 
 const personalInfoSchema = z.object({
-  userId: uuidSchema,
+  userId: idSchema,
   startDate: dateSchema,
   firstName: z.string().min(1),
   lastName: z.string().min(1),

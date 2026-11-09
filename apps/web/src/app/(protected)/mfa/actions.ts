@@ -9,7 +9,8 @@ import { mfaErrorMessage } from "@/lib/auth/messages";
 import { currentUserOrError } from "@/lib/auth/current-user";
 
 const MfaCode = z.object({
-  factorId: z.uuid(),
+  // D46: guid like every id; Supabase Auth's factor ids are v4 and still pass.
+  factorId: z.guid(),
   code: z.string().regex(/^\d{6}$/),
 });
 

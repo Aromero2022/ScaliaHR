@@ -11,7 +11,9 @@ import { safeError } from "@/lib/errors/safe-error";
 import { limitWrite } from "@/lib/rate-limit";
 import { currentUserOrError } from "@/lib/auth/current-user";
 
-const uuidSchema = z.string().uuid();
+// D46: guid, not uuid. The seed's ids (e0000000-…, 5c000000-…, aa100000-…) are
+// not RFC 4122, and z.uuid() refused them, so nothing could be saved on demo data.
+const idSchema = z.guid();
 
 type ActionResult<T = unknown> =
   | { success: true; data: T }
@@ -32,7 +34,7 @@ async function getActorContext() {
 // ─── Create ARCO Request ──────────────────────────────────────
 
 const createArcoSchema = z.object({
-  subjectId: uuidSchema,
+  subjectId: idSchema,
   requestType: z.enum(["acceso", "rectificacion", "cancelacion", "oposicion"]),
   description: z.string().min(1, "Descripción requerida"),
 });
@@ -90,7 +92,7 @@ export async function createArcoRequest(
 // ─── Process ARCO Request ─────────────────────────────────────
 
 const processArcoSchema = z.object({
-  requestId: uuidSchema,
+  requestId: idSchema,
   action: z.enum(["approve", "reject"]),
   resolutionNotes: z.string().optional(),
 });
@@ -227,7 +229,7 @@ export async function exportUserData(
   const limited = await limitWrite();
   if (limited) return { success: false, error: limited };
 
-  const valid = uuidSchema.safeParse(subjectId);
+  const valid = idSchema.safeParse(subjectId);
   if (!valid.success) return { success: false, error: "ID inválido" };
 
   const ctx = await getActorContext();
