@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect } from "react";
+import { useState, useTransition } from "react";
+import { Dialog } from "@/components/ui/dialog";
 import {
   createJobChange,
   createCompensationChange,
@@ -37,12 +38,40 @@ type ActionModalProps = {
   loadError?: string | null;
 };
 
-type ActionType = "job" | "compensation" | "personal" | null;
+export type ActionKind = "job" | "compensation" | "personal";
 
+/** 9c PR 6a: the menu's options and the dialog's titles. */
+export const ACTION_TITLES: Record<ActionKind, string> = {
+  job: "Cambio de puesto",
+  compensation: "Cambio de compensación",
+  personal: "Actualizar información personal",
+};
+
+/**
+ * 9c PR 6a: one "Tomar Acción" button. The menu picks the action and this
+ * dialog (the Dialog of D43) opens on that form; it has no button of its own
+ * and no second choice of type. `action` null keeps it closed.
+ */
 export default function ActionModal({
+  action,
+  onClose,
+  employeeName,
+  ...form
+}: ActionModalProps & { action: ActionKind | null; onClose: () => void }) {
+  const title = action ? (employeeName ? `${ACTION_TITLES[action]} — ${employeeName}` : ACTION_TITLES[action]) : "";
+  return (
+    <Dialog open={action !== null} onClose={onClose} title={title}>
+      {action && <ActionForm action={action} onDone={onClose} {...form} />}
+    </Dialog>
+  );
+}
+
+/** Rendered only while the dialog is open, so each opening starts without feedback. */
+function ActionForm({
+  action,
+  onDone,
   employeeId,
   today,
-  employeeName,
   positions,
   departments,
   jobClassifications,
@@ -50,30 +79,9 @@ export default function ActionModal({
   locations,
   currentPersonal,
   loadError = null,
-}: ActionModalProps) {
-  const [open, setOpen] = useState(false);
-  const [actionType, setActionType] = useState<ActionType>(null);
+}: Omit<ActionModalProps, "employeeName"> & { action: ActionKind; onDone: () => void }) {
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    if (open) {
-      dialogRef.current?.showModal();
-    } else {
-      dialogRef.current?.close();
-      setActionType(null);
-      setFeedback(null);
-    }
-  }, [open]);
-
-  function close() {
-    setOpen(false);
-  }
-
-  function handleBackdropClick(e: React.MouseEvent<HTMLDialogElement>) {
-    if (e.target === dialogRef.current) close();
-  }
 
   async function handleJobSubmit(form: FormData) {
     if (loadError) return;
@@ -92,7 +100,7 @@ export default function ActionModal({
       });
       if (result.success) {
         setFeedback({ ok: true, msg: "Cambio de puesto registrado" });
-        setTimeout(close, 1200);
+        setTimeout(onDone, 1200);
       } else {
         setFeedback({ ok: false, msg: result.error });
       }
@@ -114,7 +122,7 @@ export default function ActionModal({
       });
       if (result.success) {
         setFeedback({ ok: true, msg: "Cambio de compensación registrado" });
-        setTimeout(close, 1200);
+        setTimeout(onDone, 1200);
       } else {
         setFeedback({ ok: false, msg: result.error });
       }
@@ -144,7 +152,7 @@ export default function ActionModal({
       });
       if (result.success) {
         setFeedback({ ok: true, msg: "Datos personales actualizados" });
-        setTimeout(close, 1200);
+        setTimeout(onDone, 1200);
       } else {
         setFeedback({ ok: false, msg: result.error });
       }
@@ -153,186 +161,96 @@ export default function ActionModal({
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
-      >
-        Tomar Acción
-      </button>
-
-      <dialog
-        ref={dialogRef}
-        onClick={handleBackdropClick}
-        onClose={close}
-        className="m-auto max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-surface p-0 text-fg shadow-2xl backdrop:bg-overlay"
-      >
-        <div className="p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-fg">
-              {employeeName ? `Tomar Acción — ${employeeName}` : "Tomar Acción"}
-            </h2>
-            <button onClick={close} className="text-fg-subtle hover:text-fg">
-              ✕
-            </button>
-          </div>
-
-          {loadError && (
-            <div role="alert" className="mb-4 rounded-lg border border-danger-line bg-danger-subtle px-4 py-2 text-sm text-danger-fg">
-              {loadError}
-            </div>
-          )}
-
-          {feedback && (
-            <div
-              className={`mb-4 rounded-lg px-4 py-2 text-sm ${
-                feedback.ok
-                  ? "border border-success-line bg-success-subtle text-success-fg"
-                  : "border border-danger-line bg-danger-subtle text-danger-fg"
-              }`}
-            >
-              {feedback.msg}
-            </div>
-          )}
-
-          {!actionType && (
-            <div className="space-y-2">
-              <p className="mb-3 text-sm text-fg-muted">Seleccione el tipo de acción:</p>
-              <ActionChoice
-                label="Cambio de Puesto / Job Change"
-                desc="Modificar posición, departamento, manager o ubicación"
-                onClick={() => setActionType("job")}
-              />
-              <ActionChoice
-                label="Cambio de Compensación"
-                desc="Ajustar salario, frecuencia de pago o bono"
-                onClick={() => setActionType("compensation")}
-              />
-              <ActionChoice
-                label="Datos Personales"
-                desc="Actualizar información personal, contacto de emergencia"
-                onClick={() => setActionType("personal")}
-              />
-            </div>
-          )}
-
-          {actionType === "job" && (
-            <form action={handleJobSubmit} className="space-y-4">
-              <button
-                type="button"
-                onClick={() => setActionType(null)}
-                className="text-xs text-accent-fg hover:underline"
-              >
-                ← Volver
-              </button>
-              <h3 className="font-medium text-fg">Cambio de Puesto</h3>
-              <InputField name="startDate" label="Fecha Efectiva" type="date" defaultValue={today} required />
-              <InputField name="jobTitle" label="Título del Puesto" required />
-              <SelectField name="positionId" label="Posición" options={positions} />
-              <SelectField name="departmentId" label="Departamento" options={departments} />
-              <SelectField name="jobClassificationId" label="Clasificación" options={jobClassifications} />
-              <SelectField name="managerId" label="Manager" options={managers} />
-              <SelectField name="locationId" label="Ubicación" options={locations} />
-              <InputField name="eventReason" label="Motivo" required />
-              <SubmitButton pending={isPending} blocked={!!loadError} label="Registrar Cambio" />
-            </form>
-          )}
-
-          {actionType === "compensation" && (
-            <form action={handleCompSubmit} className="space-y-4">
-              <button
-                type="button"
-                onClick={() => setActionType(null)}
-                className="text-xs text-accent-fg hover:underline"
-              >
-                ← Volver
-              </button>
-              <h3 className="font-medium text-fg">Cambio de Compensación</h3>
-              <InputField name="startDate" label="Fecha Efectiva" type="date" defaultValue={today} required />
-              <InputField name="baseSalary" label="Salario Base" type="number" required />
-              <div className="grid grid-cols-2 gap-3">
-                <SelectField
-                  name="currency"
-                  label="Moneda"
-                  options={[
-                    { id: "MXN", label: "MXN" },
-                    { id: "USD", label: "USD" },
-                  ]}
-                  defaultValue="MXN"
-                />
-                <SelectField
-                  name="payFrequency"
-                  label="Frecuencia"
-                  options={[
-                    { id: "monthly", label: "Mensual" },
-                    { id: "biweekly", label: "Quincenal" },
-                    { id: "weekly", label: "Semanal" },
-                    { id: "annual", label: "Anual" },
-                  ]}
-                  defaultValue="monthly"
-                />
-              </div>
-              <InputField name="bonusTargetPct" label="Bono Objetivo (%)" type="number" />
-              <InputField name="eventReason" label="Motivo" required />
-              <SubmitButton pending={isPending} blocked={!!loadError} label="Registrar Cambio" />
-            </form>
-          )}
-
-          {actionType === "personal" && (
-            <form action={handlePersonalSubmit} className="space-y-4">
-              <button
-                type="button"
-                onClick={() => setActionType(null)}
-                className="text-xs text-accent-fg hover:underline"
-              >
-                ← Volver
-              </button>
-              <h3 className="font-medium text-fg">Datos Personales</h3>
-              <InputField name="startDate" label="Fecha Efectiva" type="date" defaultValue={today} required />
-              <div className="grid grid-cols-2 gap-3">
-                <InputField name="firstName" label="Nombre" defaultValue={currentPersonal?.firstName} required />
-                <InputField name="lastName" label="Apellido" defaultValue={currentPersonal?.lastName} required />
-              </div>
-              <InputField name="middleName" label="Segundo Nombre" defaultValue={currentPersonal?.middleName} />
-              <InputField name="phone" label="Teléfono" defaultValue={currentPersonal?.phone} />
-              <InputField name="personalEmail" label="Email Personal" type="email" defaultValue={currentPersonal?.personalEmail} />
-              <InputField name="addressLine1" label="Dirección" defaultValue={currentPersonal?.addressLine1} />
-              <div className="grid grid-cols-2 gap-3">
-                <InputField name="city" label="Ciudad" defaultValue={currentPersonal?.city} />
-                <InputField name="state" label="Estado" defaultValue={currentPersonal?.state} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <InputField name="postalCode" label="C.P." defaultValue={currentPersonal?.postalCode} />
-                <InputField name="country" label="País" defaultValue={currentPersonal?.country ?? "MX"} />
-              </div>
-              <InputField name="emergencyContactName" label="Contacto de Emergencia" defaultValue={currentPersonal?.emergencyContactName} />
-              <InputField name="emergencyContactPhone" label="Tel. Emergencia" defaultValue={currentPersonal?.emergencyContactPhone} />
-              <InputField name="eventReason" label="Motivo" required />
-              <SubmitButton pending={isPending} blocked={!!loadError} label="Guardar Cambios" />
-            </form>
-          )}
+      {loadError && (
+        <div role="alert" className="mb-4 rounded-lg border border-danger-line bg-danger-subtle px-4 py-2 text-sm text-danger-fg">
+          {loadError}
         </div>
-      </dialog>
-    </>
-  );
-}
+      )}
 
-function ActionChoice({
-  label,
-  desc,
-  onClick,
-}: {
-  label: string;
-  desc: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex w-full flex-col items-start rounded-lg border border-line p-4 text-left transition hover:border-accent-line hover:bg-surface-hover"
-    >
-      <span className="font-medium text-fg">{label}</span>
-      <span className="mt-0.5 text-xs text-fg-muted">{desc}</span>
-    </button>
+      {feedback && (
+        <div
+          className={`mb-4 rounded-lg px-4 py-2 text-sm ${
+            feedback.ok
+              ? "border border-success-line bg-success-subtle text-success-fg"
+              : "border border-danger-line bg-danger-subtle text-danger-fg"
+          }`}
+        >
+          {feedback.msg}
+        </div>
+      )}
+
+      {action === "job" && (
+        <form action={handleJobSubmit} className="space-y-4">
+          <InputField name="startDate" label="Fecha Efectiva" type="date" defaultValue={today} required />
+          <InputField name="jobTitle" label="Título del Puesto" required />
+          <SelectField name="positionId" label="Posición" options={positions} />
+          <SelectField name="departmentId" label="Departamento" options={departments} />
+          <SelectField name="jobClassificationId" label="Clasificación" options={jobClassifications} />
+          <SelectField name="managerId" label="Manager" options={managers} />
+          <SelectField name="locationId" label="Ubicación" options={locations} />
+          <InputField name="eventReason" label="Motivo" required />
+          <SubmitButton pending={isPending} blocked={!!loadError} label="Registrar Cambio" />
+        </form>
+      )}
+
+      {action === "compensation" && (
+        <form action={handleCompSubmit} className="space-y-4">
+          <InputField name="startDate" label="Fecha Efectiva" type="date" defaultValue={today} required />
+          <InputField name="baseSalary" label="Salario Base" type="number" required />
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField
+              name="currency"
+              label="Moneda"
+              options={[
+                { id: "MXN", label: "MXN" },
+                { id: "USD", label: "USD" },
+              ]}
+              defaultValue="MXN"
+            />
+            <SelectField
+              name="payFrequency"
+              label="Frecuencia"
+              options={[
+                { id: "monthly", label: "Mensual" },
+                { id: "biweekly", label: "Quincenal" },
+                { id: "weekly", label: "Semanal" },
+                { id: "annual", label: "Anual" },
+              ]}
+              defaultValue="monthly"
+            />
+          </div>
+          <InputField name="bonusTargetPct" label="Bono Objetivo (%)" type="number" />
+          <InputField name="eventReason" label="Motivo" required />
+          <SubmitButton pending={isPending} blocked={!!loadError} label="Registrar Cambio" />
+        </form>
+      )}
+
+      {action === "personal" && (
+        <form action={handlePersonalSubmit} className="space-y-4">
+          <InputField name="startDate" label="Fecha Efectiva" type="date" defaultValue={today} required />
+          <div className="grid grid-cols-2 gap-3">
+            <InputField name="firstName" label="Nombre" defaultValue={currentPersonal?.firstName} required />
+            <InputField name="lastName" label="Apellido" defaultValue={currentPersonal?.lastName} required />
+          </div>
+          <InputField name="middleName" label="Segundo Nombre" defaultValue={currentPersonal?.middleName} />
+          <InputField name="phone" label="Teléfono" defaultValue={currentPersonal?.phone} />
+          <InputField name="personalEmail" label="Email Personal" type="email" defaultValue={currentPersonal?.personalEmail} />
+          <InputField name="addressLine1" label="Dirección" defaultValue={currentPersonal?.addressLine1} />
+          <div className="grid grid-cols-2 gap-3">
+            <InputField name="city" label="Ciudad" defaultValue={currentPersonal?.city} />
+            <InputField name="state" label="Estado" defaultValue={currentPersonal?.state} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <InputField name="postalCode" label="C.P." defaultValue={currentPersonal?.postalCode} />
+            <InputField name="country" label="País" defaultValue={currentPersonal?.country ?? "MX"} />
+          </div>
+          <InputField name="emergencyContactName" label="Contacto de Emergencia" defaultValue={currentPersonal?.emergencyContactName} />
+          <InputField name="emergencyContactPhone" label="Tel. Emergencia" defaultValue={currentPersonal?.emergencyContactPhone} />
+          <InputField name="eventReason" label="Motivo" required />
+          <SubmitButton pending={isPending} blocked={!!loadError} label="Guardar Cambios" />
+        </form>
+      )}
+    </>
   );
 }
 

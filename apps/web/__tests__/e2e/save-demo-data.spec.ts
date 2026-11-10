@@ -27,10 +27,8 @@ test.describe("guardar con datos demo (admin)", () => {
 
     await page.getByRole("button", { name: "Tomar Acción" }).click();
     await page.getByRole("button", { name: "Cambio de puesto" }).click();
-    // The menu loads the lists and renders the dialog's own button (one button in 9c PR 6).
-    await page.getByRole("button", { name: "Tomar Acción" }).nth(1).click();
-    const dialog = page.locator("dialog[open]");
-    await dialog.getByRole("button", { name: /Cambio de Puesto/ }).click();
+    // 9c PR 6a: the menu opens the dialog on the chosen form.
+    const dialog = page.getByRole("dialog", { name: /^Cambio de puesto — / });
     await dialog.getByLabel("Título del Puesto").fill(title);
     await dialog.getByLabel("Departamento").selectOption({ label: department });
     await dialog.getByLabel("Motivo").fill(demo.reason);
