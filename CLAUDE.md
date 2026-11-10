@@ -11,6 +11,7 @@
 
 - `supabase/migrations` (SQL) es la UNICA fuente de verdad del esquema. Prisma solo via `npm run db:sync` (db pull + generate). PROHIBIDO `prisma migrate` y `prisma db push`.
 - ENABLE + FORCE ROW LEVEL SECURITY en toda tabla nueva. Sin politica DELETE para `authenticated` (solo soft delete).
+- `users` tiene SELECT por columna con lista explicita (D47): toda columna nueva de `users` es ilegible para anon, authenticated y `prisma_app` hasta que una migracion le de GRANT.
 - GRANT EXECUTE al hook solo a `supabase_auth_admin`; REVOKE a PUBLIC, anon y authenticated.
 - `service_role` y conexiones privilegiadas nunca en codigo cliente.
 - Toda entrada externa se valida con Zod.

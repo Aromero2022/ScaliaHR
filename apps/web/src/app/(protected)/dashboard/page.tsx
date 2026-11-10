@@ -23,7 +23,8 @@ export default async function DashboardPage() {
   // valid case and says so; a failed read is the page's error.
   const { data: profile, error: profileError } = await supabase
     .from("users")
-    .select("*, ec_job_information!ec_job_information_user_id_fkey(job_title, end_date), departments(name)")
+    // D47: explicit columns; the talent scores come from talent_scores().
+    .select("id, first_name, last_name, email, employee_id, status, hire_date, ec_job_information!ec_job_information_user_id_fkey(job_title, end_date), departments(name)")
     .eq("auth_uid", claims.userId)
     .maybeSingle();
 
@@ -55,13 +56,19 @@ export default async function DashboardPage() {
   let kpiError: string | null = null;
   if (canViewTenantKpis) {
     const [empRes, deptRes] = await Promise.all([
-      supabase.from("users").select("*", { count: "exact", head: true }).eq("status", "ACTIVE"),
+      supabase.from("users").select("id", { count: "exact", head: true }).eq("status", "ACTIVE"),
       supabase.from("departments").select("*", { count: "exact", head: true }),
     ]);
     kpiError = await queryErrorMessage("dashboard.kpis", firstError(empRes.error, deptRes.error));
     totalEmployees = empRes.count;
     totalDepts = deptRes.count;
   }
+
+  // D47: performance_score and potential_score are only readable through
+  // talent_scores() (own, or the population of ec.manage_employees).
+  const { data: scoreRows, error: scoresQueryError } = await supabase.rpc("talent_scores", { p_user_ids: [profile.id] });
+  const scoresError = await queryErrorMessage("dashboard.scores", scoresQueryError);
+  const scores = (scoreRows ?? [])[0] as { performance_score: number | null; potential_score: number | null } | undefined;
 
   const { data: recentGoals, error: goalsQueryError } = await supabase
     .from("performance_goals")
@@ -85,6 +92,7 @@ export default async function DashboardPage() {
 
       {/* KPI Cards */}
       {kpiError && <LoadError message={kpiError} />}
+      {scoresError && <LoadError message={scoresError} />}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4">
         {canViewTenantKpis && !kpiError && (
           <>
@@ -92,8 +100,12 @@ export default async function DashboardPage() {
             <StatCard label={t.departments} value={totalDepts ?? 0} tone="success" />
           </>
         )}
-        <StatCard label={t.performanceScore} value={profile.performance_score ?? messages.common.empty} tone="warning" />
-        <StatCard label={t.potentialScore} value={profile.potential_score ?? messages.common.empty} tone="category-2" />
+        {!scoresError && (
+          <>
+            <StatCard label={t.performanceScore} value={scores?.performance_score ?? messages.common.empty} tone="warning" />
+            <StatCard label={t.potentialScore} value={scores?.potential_score ?? messages.common.empty} tone="category-2" />
+          </>
+        )}
       </div>
 
       {/* Profile Summary */}

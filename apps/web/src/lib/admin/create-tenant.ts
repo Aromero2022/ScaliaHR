@@ -101,6 +101,7 @@ export async function createTenant(input: CreateTenantInput) {
           ('admin.view_audit_logs',  'view'),
           ('ec.manage_employees',    'view'),
           ('ec.manage_employees',    'edit'),
+          ('ec.view_compensation',   'view'),
           ('ec.manage_positions',    'edit'),
           ('ec.manage_org_structure','edit'),
           ('pmgm.manage_goal_plans', 'edit'),
@@ -150,6 +151,7 @@ export async function createTenant(input: CreateTenantInput) {
         FROM public.permission_roles pr
         CROSS JOIN (VALUES
           ('ec.view_team_profiles',    'view'),
+          ('ec.view_compensation',     'view'),
           ('pmgm.manage_team_goals',   'edit'),
           ('pmgm.view_team_feedback',  'view'),
           ('sdm.nominate_successors',  'edit'),

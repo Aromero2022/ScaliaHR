@@ -24,7 +24,8 @@ export default async function ProfilePage() {
   // valid case and says so; a failed read is the page's error.
   const { data: profile, error: profileError } = await supabase
     .from("users")
-    .select("*, ec_job_information!ec_job_information_user_id_fkey(job_title, department_id, manager_id, start_date, end_date), departments(name)")
+    // D47: explicit columns; the talent scores come from talent_scores().
+    .select("id, first_name, last_name, email, employee_id, status, hire_date, ec_job_information!ec_job_information_user_id_fkey(job_title, department_id, manager_id, start_date, end_date), departments(name)")
     .eq("auth_uid", authUser.id)
     .maybeSingle();
 
@@ -68,10 +69,15 @@ export default async function ProfilePage() {
     .order("created_at", { ascending: false })
     .limit(10);
 
+  // D47: own scores through talent_scores(); the columns are not readable by authenticated.
+  const { data: scoreRows, error: scoresQueryError } = await supabase.rpc("talent_scores", { p_user_ids: [profile.id] });
+  const scores = (scoreRows ?? [])[0] as { performance_score: number | null; potential_score: number | null } | undefined;
+
   // D45: the manager is a field of the personal data; each section shows its own error.
-  const [personalError, feedbackError] = await Promise.all([
+  const [personalError, feedbackError, scoresError] = await Promise.all([
     queryErrorMessage("profile.manager", managerQueryError),
     queryErrorMessage("profile.feedback", feedbackQueryError),
+    queryErrorMessage("profile.scores", scoresQueryError),
   ]);
 
   const timeZone = await getSessionTimeZone();
@@ -142,10 +148,14 @@ export default async function ProfilePage() {
         <h2 className="mb-4 text-lg font-semibold text-fg">
           {t.talentReview}
         </h2>
-        <div className="flex gap-12">
-          <ScoreCircle label={t.performance} value={profile.performance_score} />
-          <ScoreCircle label={t.potential} value={profile.potential_score} />
-        </div>
+        {scoresError ? (
+          <LoadError message={scoresError} />
+        ) : (
+          <div className="flex gap-12">
+            <ScoreCircle label={t.performance} value={scores?.performance_score ?? null} />
+            <ScoreCircle label={t.potential} value={scores?.potential_score ?? null} />
+          </div>
+        )}
       </section>
 
       {/* Feedback */}

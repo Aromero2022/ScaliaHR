@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { Prisma, prisma, withTenant } from "@/lib/db/tenant-client";
+import { Prisma, prisma } from "@/lib/db/tenant-client";
 import type { PrismaClient } from "@/lib/db/tenant-client";
 import { getClaims } from "@/lib/supabase/claims";
 
@@ -54,38 +54,17 @@ type ContextRow = {
   permissions: PermissionRow[];
 };
 
-// D35: one batch transaction of two statements (the tenant's RLS context, then
-// a single query for flags, grants and permissions) instead of an interactive
-// transaction of six. It holds a pooled connection for one round trip.
+// D47: one call to public.rbp_context(), which only prisma_app may execute.
+// It used to read role_grants and group_members as authenticated; those are
+// now limited to the caller's own rows, and can() answers for any user id.
 async function loadPermissionContext(
   userId: string,
   tenantId: string,
 ): Promise<PermissionContext> {
-  const claims = JSON.stringify({ tenant_id: tenantId, app_role: "member" });
-  const [, rows] = await prisma.$transaction([
-    prisma.$queryRaw`SELECT set_config('role', 'authenticated', true), set_config('request.jwt.claims', ${claims}, true)`,
-    prisma.$queryRaw<ContextRow[]>(Prisma.sql`
-      WITH my_grants AS (
-        SELECT rg.role_id, rg.target_population::text AS target_population
-        FROM public.role_grants rg
-        JOIN public.group_members gm ON gm.group_id = rg.granted_group_id
-                                     AND gm.tenant_id = rg.tenant_id
-        WHERE gm.user_id = ${userId}::uuid
-          AND rg.tenant_id = ${tenantId}::uuid
-      )
-      SELECT
-        (SELECT to_jsonb(t) FROM public.tenants t WHERE t.id = ${tenantId}::uuid) AS tenant,
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('role_id', g.role_id, 'target_population', g.target_population))
-                  FROM my_grants g), '[]'::jsonb) AS grants,
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('role_id', rp.role_id, 'permission_key', rp.permission_key,
-                                                      'action', rp.action::text, 'field_key', rp.field_key))
-                  FROM public.role_permissions rp
-                  WHERE rp.tenant_id = ${tenantId}::uuid
-                    AND rp.role_id IN (SELECT role_id FROM my_grants)), '[]'::jsonb) AS permissions
-    `),
-  ]);
-
-  const row = rows[0];
+  const rows = await prisma.$queryRaw<{ ctx: ContextRow }[]>(Prisma.sql`
+    SELECT public.rbp_context(${tenantId}::uuid, ${userId}::uuid) AS ctx
+  `);
+  const row = rows[0]?.ctx;
   const tenant = row?.tenant ?? null;
   const grants = row?.grants ?? [];
   const permissions = row?.permissions ?? [];
@@ -165,54 +144,23 @@ async function evaluateTargetPopulation(
   }
 
   const permittedRoleIds = new Set(matchingPerms.map((p) => p.role_id));
+  const populations = new Set(ctx.grants.filter((g) => permittedRoleIds.has(g.role_id)).map((g) => g.target_population));
 
-  for (const grant of ctx.grants) {
-    if (!permittedRoleIds.has(grant.role_id)) continue;
-
-    switch (grant.target_population) {
-      case "all":
-        return { allowed: true };
-
-      case "self":
-        if (targetUserId === userId) return { allowed: true };
-        break;
-
-      case "same_department":
-      case "direct_reports":
-        // These require a DB query; use a single withTenant call
-        return withTenant({ tenantId }, async (tx) => {
-          for (const g of ctx.grants) {
-            if (!permittedRoleIds.has(g.role_id)) continue;
-
-            if (g.target_population === "same_department") {
-              const rows = await tx.$queryRaw<{ match: boolean }[]>(Prisma.sql`
-                SELECT (a.department_id IS NOT NULL AND a.department_id = t.department_id) AS match
-                FROM public.users a, public.users t
-                WHERE a.id = ${userId}::uuid AND t.id = ${targetUserId}::uuid
-              `);
-              if (rows.length > 0 && rows[0].match) return { allowed: true };
-            }
-
-            if (g.target_population === "direct_reports") {
-              const rows = await tx.$queryRaw<{ manager_id: string | null }[]>(
-                Prisma.sql`
-                  SELECT manager_id FROM public.ec_job_information
-                  WHERE user_id = ${targetUserId}::uuid
-                    AND end_date IS NULL
-                  ORDER BY start_date DESC, sequence DESC
-                  LIMIT 1
-                `
-              );
-              if (rows.length > 0 && rows[0].manager_id === userId) {
-                return { allowed: true };
-              }
-            }
-          }
-          return { allowed: false, reason: "target_population_mismatch" };
-        });
-    }
+  // D47: the union of every population that grants the permission, like the
+  // RLS policies (rbp_visible_user_ids). Before, the first direct_reports or
+  // same_department grant decided alone, so a manager who was also an HR
+  // administrator (all) could be refused depending on the grants' order.
+  if (populations.has("all")) return { allowed: true };
+  if (populations.has("self") && targetUserId === userId) return { allowed: true };
+  for (const population of ["direct_reports", "same_department"] as const) {
+    if (!populations.has(population)) continue;
+    // The membership comes from public.rbp_target_in_population(), the same
+    // population the policies read; only prisma_app may execute it.
+    const rows = await prisma.$queryRaw<{ match: boolean }[]>(Prisma.sql`
+      SELECT public.rbp_target_in_population(${tenantId}::uuid, ${userId}::uuid, ${targetUserId}::uuid, ${population}) AS match
+    `);
+    if (rows[0]?.match) return { allowed: true };
   }
-
   return { allowed: false, reason: "target_population_mismatch" };
 }
 

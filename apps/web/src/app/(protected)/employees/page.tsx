@@ -47,7 +47,7 @@ export default async function EmployeesPage({
   let query = supabase
     .from("users")
     .select(
-      "id, first_name, last_name, email, employee_id, status, departments(name), positions(title), ec_job_information!ec_job_information_user_id_fkey(job_title, end_date)",
+      "id, first_name, last_name, email, employee_id, status, positions(title)",
       { count: "exact" }
     )
     .eq("status", "ACTIVE")
@@ -64,6 +64,20 @@ export default async function EmployeesPage({
   if (queryError) {
     return <PageLoadError title={t.heading} message={await safeError("employees.list", queryError, t.loadError)} />;
   }
+
+  // D47: job records are no longer readable by the whole tenant; the current
+  // title and department of the listed people come from directory_entries(),
+  // which only answers those columns and only with ec.view_org_chart.
+  const { data: directory, error: directoryError } = await supabase.rpc("directory_entries", {
+    p_user_ids: (employees ?? []).map((emp) => emp.id as string),
+  });
+  if (directoryError) {
+    return <PageLoadError title={t.heading} message={await safeError("employees.directory", directoryError, t.loadError)} />;
+  }
+  type DirectoryEntry = { user_id: string; job_title: string | null; department_name: string | null };
+  const directoryById = new Map<string, DirectoryEntry>(
+    ((directory ?? []) as DirectoryEntry[]).map((entry) => [entry.user_id, entry]),
+  );
 
   const total = count ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -92,18 +106,10 @@ export default async function EmployeesPage({
   }
 
   const rows = (employees ?? []).map((emp) => {
-    const dept = Array.isArray(emp.departments)
-      ? emp.departments[0]
-      : emp.departments;
     const pos = Array.isArray(emp.positions)
       ? emp.positions[0]
       : emp.positions;
-
-    const currentJob = Array.isArray(emp.ec_job_information)
-      ? emp.ec_job_information.find(
-          (j: { end_date: string | null }) => j.end_date === null
-        )
-      : emp.ec_job_information;
+    const entry = directoryById.get(emp.id as string);
 
     const canView = viewableIds === null || viewableIds.has(emp.id as string);
 
@@ -114,9 +120,9 @@ export default async function EmployeesPage({
       email: emp.email as string,
       employeeId: emp.employee_id as string | null,
       status: emp.status as string,
-      department: (dept as { name: string } | null)?.name ?? null,
+      department: entry?.department_name ?? null,
       positionTitle: (pos as { title: string } | null)?.title ?? null,
-      jobTitle: (currentJob as { job_title: string } | null)?.job_title ?? null,
+      jobTitle: entry?.job_title ?? null,
       canView,
     };
   });
