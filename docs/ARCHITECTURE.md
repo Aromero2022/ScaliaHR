@@ -3089,6 +3089,10 @@ security PR between PR 5 and PR 6 of Phase 9c, after D46.
   population)`: `all` is the tenant, `self` the user, `direct_reports` whoever
   has the user as manager in their current job record (as `can()` read it),
   `same_department` whoever shares the user's non-null department.
+  These are two sources: `same_department` reads `users.department_id`,
+  while `direct_reports` (and the department the directory and the employee
+  detail show) come from the current job record. Phase 14 makes one source of
+  truth for the department.
   `rbp_user_ids()` is the union of the populations of the user's grants of
   roles holding the key and action, if the key's module is active
   (`rbp_module_active()`, the same flags as `PERMISSION_MODULE_MAP`). These
@@ -3135,8 +3139,9 @@ security PR between PR 5 and PR 6 of Phase 9c, after D46.
 - **Scores:** `REVOKE SELECT ON users` and `GRANT SELECT (every other column)`
   to anon, authenticated and `prisma_app`. `prisma_app` had its own SELECT on
   the whole table (`app_roles`), so Prisma would still have read every score
-  of the tenant. A column added to `users` later is not readable until it is
-  granted. `talent_scores(ids)` answers own scores and those of the population
+  of the tenant. The list of columns is explicit: a column added to `users`
+  later is unreadable by anon, authenticated and `prisma_app` until a
+  migration grants it (a rule of `CLAUDE.md`). `talent_scores(ids)` answers own scores and those of the population
   of `ec.manage_employees` until Phase 18a gives them a key. The dashboard and
   the profile read their own through it, and every `select` on `users` names
   its columns.
@@ -3154,7 +3159,9 @@ security PR between PR 5 and PR 6 of Phase 9c, after D46.
   else's job, pay, skills, goals, feedback, ARCO requests or audit log).
 - HR Administrator and Owner hold no `pmgm.view_team_feedback` in the seed, so
   they no longer read other people's feedback. PRIVATE feedback is only for
-  its author and its subject.
+  its author and its subject. Decision (least privilege): they stay without
+  it. Once Admin Center edits RBP (Phase 11), each tenant decides whether to
+  grant it; Phase 19 (CPM) defines who in HR reads non-private feedback.
 - Managers now read the goals (`pmgm.manage_team_goals`) and the non-private
   feedback (`pmgm.view_team_feedback`) of their direct reports, which their
   role already granted and the policies did not allow.

@@ -43,7 +43,7 @@
 | 17 | 360 Multi-Rater | Evaluaciones multi-evaluador con formularios configurables y anonimato parcial. |
 | 18a | Calibración y Sucesión | Calibración, performance vs. potencial, 9-box, talent pools, sucesión y organigrama de sucesión. Al abrir sus pantallas: políticas de lectura por población de RBP para `succession_nominees`, `talent_pool_entries` y `job_informations` (cerradas con RESTRICTIVE `false` desde D47) y una llave propia para las calificaciones de desempeño y potencial (hasta entonces, `ec.manage_employees`, D47). |
 | 18b | Career Development y mentoring | Metas de desarrollo, Career Worksheet, rol objetivo, mentoring. |
-| 19 | CPM y Feedback Continuo | Continuous Performance Management: check-ins periódicos y feedback continuo. |
+| 19 | CPM y Feedback Continuo | Continuous Performance Management: check-ins periódicos y feedback continuo. Definir quién de RH ve el feedback no privado: desde D47, HR Administrator y Owner no tienen `pmgm.view_team_feedback` (mínimo privilegio); cuando el Admin Center deje editar RBP (Fase 11), cada cliente decide si se lo da. |
 | 20 | Retención y Bloqueo (DRTM) + autoservicio ARCO | Data Retention & Transparency Module, incluido el autoservicio ARCO. |
 | 21 | Time Tracking | Registro de tiempo, aprobaciones, integración con nómina por adaptador (local/prueba). Consume la API de la Fase 13. |
 | 22 | RCM | Recruiting Management: requisiciones, candidatos, pipeline y ofertas. Al contratar un candidato, inicia el Onboarding de la Fase 14. |
@@ -331,6 +331,7 @@ Depende de: Workflows (10), Admin Center (11), worker y lib/email (9a), API (13)
 
 - Alta del nuevo ingreso en EC con fecha efectiva.
 - Decidir si la unidad de negocio y la entidad legal se guardan directamente en la información laboral, como en SuccessFactors. Hoy (D45) la ficha del empleado las lee del departamento de cada registro laboral, así que el historial muestra la unidad y la entidad que el departamento tiene hoy, no las de la fecha del registro.
+- Una sola fuente de la verdad para el departamento. Hoy (D47) la población `same_department` lee `users.department_id`, mientras que `direct_reports`, el directorio y la ficha del empleado leen el registro laboral vigente (`ec_job_information`, que tiene su propio `department_id`).
 - Convertir `users.hire_date` de `timestamptz` a `date` con expand/contract (D22). Hoy guarda la medianoche UTC y se muestra con `formatDateOnly()`, que depende de que la sesión de Postgres esté en UTC (D42).
 - Preboarding: portal antes del día 1 con acceso temporal.
 - Captura de datos personales y fiscales (RFC, CURP, NSS, CLABE) con permisos por campo (PII sensible).
