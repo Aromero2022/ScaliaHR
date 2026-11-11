@@ -110,6 +110,8 @@ for (const role of ["empleada", "admin"] as const) {
       expect((await opener.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
       await opener.click();
       const dialog = page.getByRole("dialog", { name: "Buscar personas y secciones" });
+      // The search box has the focus as soon as the dialog is open: nothing typed is lost.
+      await expect(dialog.getByRole("combobox", { name: "Buscar personas y secciones" })).toBeFocused({ timeout: 100 });
       await page.keyboard.type("Patricia");
       const people = dialog.getByRole("group", { name: "Personas" });
       const person = people.getByRole("option", { name: /Patricia Castro/ });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { clsx } from "clsx";
 import { Dialog } from "@/components/ui/dialog";
 import { messages } from "@/lib/i18n/es-MX";
@@ -67,7 +67,6 @@ function PaletteBody({ items, people, onGo }: { items: ShellNavItem[]; people: b
   const [active, setActive] = useState(0);
   const search = usePeopleSearch(people ? query : "", true);
   const listId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const q = normalize(query.trim());
   const destinations: Option[] = items
@@ -93,11 +92,6 @@ function PaletteBody({ items, people, onGo }: { items: ShellNavItem[]; people: b
     query.trim() ? [t.found(options.length), search.status === "error" ? search.notice : ""].filter(Boolean).join(". ") : "",
   );
 
-  // The Dialog's showModal() runs after this effect and focuses its close button; the input takes the focus next frame.
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, []);
   useEffect(() => setActive(0), [query, search]);
   useEffect(() => {
     if (current) document.getElementById(optionId(current))?.scrollIntoView({ block: "nearest" });
@@ -138,7 +132,11 @@ function PaletteBody({ items, people, onGo }: { items: ShellNavItem[]; people: b
   return (
     <div>
       <input
-        ref={inputRef}
+        // The Dialog's showModal() focuses the first [autofocus] element, in the same step that opens it, so no
+        // key typed right after opening is lost. React does not write autoFocus as an attribute, hence the ref.
+        ref={(el) => {
+          el?.setAttribute("autofocus", "");
+        }}
         type="search"
         role="combobox"
         aria-label={t.inputLabel}
