@@ -609,61 +609,6 @@
     {
       "kind": "copy-file",
       "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/orch-add-feature.md",
-      "sourceRelativePath": "commands/orch-add-feature.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/orch-add-feature.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "e46c1d23fc4f269713c6743b0ba403f13916c0c617ca2e4e0526efc897c133ed"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/orch-change-feature.md",
-      "sourceRelativePath": "commands/orch-change-feature.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/orch-change-feature.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "9315a445ddeeb50410e5a3893f930a2db3a19ca14ec5121b3071fe4b834375e8"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/orch-fix-defect.md",
-      "sourceRelativePath": "commands/orch-fix-defect.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/orch-fix-defect.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "9f1269a9103f49425fa24303b82846a170093e2ddf32d95b4dc12b14690652a0"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/orch-refine-code.md",
-      "sourceRelativePath": "commands/orch-refine-code.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/orch-refine-code.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "2f282b49d84b15cfcd5a0c75c31d03f7f30a8ba4936bac1029ad246402d94af8"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/orch-review.md",
-      "sourceRelativePath": "commands/orch-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/orch-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "e95a1cee19945fa6280791cda1e1eee55d0f6c62ef510ac5fc9625c918ae6271"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/plan-canvas.md",
       "sourceRelativePath": "commands/plan-canvas.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/commands/plan-canvas.md",
@@ -1628,17 +1573,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "a4b8009cfe9646b77f065c57aa3ac858dc054938c466d2960f43062e798c14f5"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "workflow-quality",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/skills/skill-scout/SKILL.md",
-      "sourceRelativePath": "skills/skill-scout/SKILL.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/skills/skill-scout/SKILL.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "73ac14373108c29e35f6f950b43762e3e50848d693b712f7c3e989ec21e7abe8"
     },
     {
       "kind": "copy-file",

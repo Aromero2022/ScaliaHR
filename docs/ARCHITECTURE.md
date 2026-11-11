@@ -3288,8 +3288,8 @@ own pull request.
 
 **What stays:** the rules `common/security.md`, `typescript/coding-style.md`,
 `typescript/security.md`, `typescript/testing.md` and ECC's rules README; 29
-agents, 49 commands and 44 skills. `.claude/ecc/install-state.json` lists the
-191 files ECC manages, and `ecc doctor --target claude-project` reports OK.
+agents, 44 commands and 43 skills. `.claude/ecc/install-state.json` lists the
+185 files ECC manages, and `ecc doctor --target claude-project` reports OK.
 
 **Removed because they contradict `CLAUDE.md`:**
 1. `common/patterns.md` and `typescript/patterns.md`: the standard repository
@@ -3329,6 +3329,11 @@ agents, 49 commands and 44 skills. `.claude/ecc/install-state.json` lists the
   dev` (prohibited by D1); the skill `ecc-recipes` and `.claude/AGENTS.md`,
   which list agents and commands that are gone; the commands `orch-build-mvp`
   (it needs the GAN harness) and `plan-prd` (it hands off to `/plan`).
+- The other five `orch-*` commands (`orch-add-feature`, `orch-change-feature`,
+  `orch-fix-defect`, `orch-refine-code`, `orch-review`): they start `orch-*`
+  skills that the minimal profile does not install, so they did nothing. The
+  skill `skill-scout`: it searches GitHub with `gh search repos` and
+  `gh search code`, remote traffic (Roadmap, Principle 8).
 - Agents and commands of other stacks (C++, C#, Dart, Django, FastAPI,
   Flutter, F#, Go, HarmonyOS, Java, Kotlin and Gradle, PHP, Python, PyTorch,
   Rust, Swift, Vue) and domains (healthcare, homelab, networks, marketing, SEO,
@@ -3350,11 +3355,8 @@ these removals.
 **Known limits:**
 - `install-state.json` records absolute paths of the container where the
   install ran (`/home/user/ScaliaHR/.claude/…`). From a checkout at another
-  path, `ecc doctor` reports ERROR (191 unsafe destinations) although the files
+  path, `ecc doctor` reports ERROR (185 unsafe destinations) although the files
   match.
-- The five remaining `orch-*` commands start `orch-*` skills that the minimal
-  profile does not install, so they do nothing until those skills are added or
-  the commands removed.
 - `typescript/coding-style.md` and `typescript/testing.md` start with a link to
   `common/coding-style.md` and `common/testing.md`, now removed. Claude Code
   does not follow Markdown links in rules, so nothing breaks; the links lead
