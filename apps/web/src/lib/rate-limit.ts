@@ -5,6 +5,7 @@ import { getClaims, type SessionClaims } from "@/lib/supabase/claims";
 import { log } from "@/lib/log/logger";
 import { reportError } from "@/lib/log/report";
 import { requestContext } from "@/lib/log/request-context";
+import { tooManyRequestsText, waitText } from "@/lib/rate-limit-message";
 
 /**
  * D28 — every attempt spends a token of public.rate_limit_consume(), called
@@ -76,16 +77,12 @@ export async function clientIp(): Promise<string> {
   return hops.at(-1) ?? h.get("x-real-ip") ?? "unknown";
 }
 
-function waitText(seconds: number): string {
-  return seconds < 120 ? `${seconds} segundos` : `${Math.ceil(seconds / 60)} minutos`;
-}
-
 /** What a form shows when an attempt is refused. */
 export function rateLimitMessage(result: Refused): string {
   if (result.reason === "unavailable") {
     return `No se pudo procesar la solicitud. Intenta de nuevo en ${waitText(result.retryAfter)}.`;
   }
-  return `Demasiados intentos. Intenta de nuevo en ${waitText(result.retryAfter)}.`;
+  return tooManyRequestsText(result.retryAfter);
 }
 
 /** The HTTP answer for a refused request: 429 with Retry-After. */

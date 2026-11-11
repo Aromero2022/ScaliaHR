@@ -94,3 +94,91 @@ for (const role of ["empleada", "admin"] as const satisfies readonly Role[]) {
     });
   });
 }
+
+/**
+ * 9c PR 6b: icon-only navigation (the collapsed sidebar at 1280 px and the
+ * rail at 768 px) with the root font size at 200 %. Every entry can be reached
+ * with Tab and is inside the window once focused (the list scrolls in its own
+ * box), and its tooltip, in the top layer, follows WCAG 1.4.13: it shows on
+ * keyboard focus and on hover, stays while the pointer moves onto it, Esc hides
+ * it without moving the focus, and it describes the control (aria-describedby).
+ */
+test.describe("navegación de solo íconos con el texto al 200 %", () => {
+  test.use({ storageState: async ({}, provide) => provide(storageStatePath("admin")) });
+
+  for (const layout of [
+    { name: "sidebar contraído", width: 1280, height: 800, nav: "nav[data-collapsed]" },
+    { name: "rail", width: 768, height: 1024, nav: "nav:not([data-collapsed]):not(.fixed)" },
+  ] as const) {
+    test(`${layout.name} a ${layout.width} px`, async ({ page }) => {
+      const problems = watchPage(page);
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await openProtected(page, "/dashboard");
+      await page.evaluate(() => {
+        document.documentElement.style.fontSize = "200%";
+      });
+      const nav = page.locator(layout.nav);
+      await expect(nav).toBeVisible();
+      const controls = nav.locator("a, button:not([aria-controls])");
+
+      // Tab reaches every entry, each one inside the window once focused, with its tooltip shown.
+      // The tooltip follows keyboard focus (:focus-visible), so the first entry is reached with the keyboard.
+      if (layout.width === 1280) {
+        const toggle = page.getByRole("button", { name: "Contraer menú" });
+        await toggle.focus();
+        await page.keyboard.press("Enter");
+        await expect(page.locator("nav[data-collapsed]")).toHaveAttribute("data-collapsed", "1");
+        await page.keyboard.press("Tab");
+      } else {
+        await controls.first().focus();
+      }
+      const count = await controls.count();
+      expect(count, "the menu has entries and Cerrar sesión").toBeGreaterThan(3);
+      for (let i = 0; i < count; i++) {
+        const control = controls.nth(i);
+        if (i > 0) await page.keyboard.press("Tab");
+        await expect(control).toBeFocused();
+        const box = await control.boundingBox();
+        expect(box, `entry ${i + 1} has a box`).not.toBeNull();
+        expect(box!.y, `entry ${i + 1} below the top`).toBeGreaterThanOrEqual(0);
+        expect(box!.y + box!.height, `entry ${i + 1} above the bottom`).toBeLessThanOrEqual(layout.height + 1);
+        const tipId = await control.getAttribute("aria-describedby");
+        expect(tipId, `entry ${i + 1} is described by its tooltip`).toBeTruthy();
+        const tip = page.locator(`[id="${tipId}"]`);
+        await expect(tip).toHaveAttribute("role", "tooltip");
+        await expect.poll(() => tip.evaluate((el) => el.matches(":popover-open")), { message: `tooltip ${i + 1} open on focus` }).toBe(true);
+        const tipBox = await tip.boundingBox();
+        expect(tipBox!.x + tipBox!.width, `tooltip ${i + 1} inside the window`).toBeLessThanOrEqual(layout.width + 1);
+        expect(tipBox!.y + tipBox!.height).toBeLessThanOrEqual(layout.height + 1);
+        expect(tipBox!.y).toBeGreaterThanOrEqual(0);
+      }
+
+      // Esc hides it and the focus stays.
+      const last = controls.nth(count - 1);
+      const lastTip = page.locator(`[id="${await last.getAttribute("aria-describedby")}"]`);
+      await page.keyboard.press("Escape");
+      await expect.poll(() => lastTip.evaluate((el) => el.matches(":popover-open"))).toBe(false);
+      await expect(last).toBeFocused();
+
+      // Hover shows it; the pointer can move onto it; leaving both hides it.
+      const first = controls.first();
+      await first.scrollIntoViewIfNeeded();
+      const firstTip = page.locator(`[id="${await first.getAttribute("aria-describedby")}"]`);
+      await first.hover();
+      await expect.poll(() => firstTip.evaluate((el) => el.matches(":popover-open"))).toBe(true);
+      const tb = (await firstTip.boundingBox())!;
+      await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2, { steps: 5 });
+      await page.waitForTimeout(400);
+      expect(await firstTip.evaluate((el) => el.matches(":popover-open")), "stays while the pointer is on it").toBe(true);
+      // Esc hides it without moving the pointer.
+      await page.keyboard.press("Escape");
+      await expect.poll(() => firstTip.evaluate((el) => el.matches(":popover-open"))).toBe(false);
+      await page.mouse.move(layout.width - 10, layout.height - 10);
+      await first.hover();
+      await expect.poll(() => firstTip.evaluate((el) => el.matches(":popover-open"))).toBe(true);
+      await page.mouse.move(layout.width - 10, layout.height - 10);
+      await expect.poll(() => firstTip.evaluate((el) => el.matches(":popover-open"))).toBe(false);
+      expect(problems()).toEqual([]);
+    });
+  }
+});

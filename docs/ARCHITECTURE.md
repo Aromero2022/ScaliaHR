@@ -1926,6 +1926,18 @@ machine):**
 - **CI:** the Docker job runs a short version (75 users, 2–6 s pauses, 40 s at
   full load) so the tooling keeps working and a large regression shows up. The
   full run is local; see `docs/RUNBOOK.md`.
+- **Comparing a pull request with `main` (since 9c PR 6b):** a single p95 of
+  `main` is a noisy baseline. The same code of D47 gave 75.6 and 116.5 ms in
+  two CI runs, and the merge of 6a gave 157.1 ms on `main` after 113.9 ms on
+  its pull request.
+  - The baseline is the median of the steady-state p95 of the last three CI
+    runs on `main`.
+  - A pull request blocks if its steady-state p95 is more than 20 % above that
+    median in two runs in a row: a first run above it is confirmed by
+    re-running the Docker job once. It also blocks if the p95 passes 500 ms
+    (the threshold of the run itself).
+  - For 6b: 108.5 ms (387e0d8), 96.8 ms (736ee57) and 157.1 ms (e31ae2d), so
+    the median is 108.5 ms and the limit 130.2 ms.
 
 ---
 
@@ -3273,6 +3285,97 @@ still said "Cambio de Puesto / Job Change"). Now:
   closes it and the focus is back on the button; axe with it open in light
   and dark. The save on demo data (`save-demo-data.spec.ts`, D46) follows the
   new path.
+
+## D49 — Keyboard Patterns: Menu Button, Combobox, ⌘K and Icon-Only Navigation at 200 %
+
+**Decision (9c PR 6b):** the hand-made menus and lists of the shell follow
+the ARIA patterns they look like, with the keyboard alone, and the icon-only
+navigation works with the root font size at 200 %, which D44 had left open.
+The `motion/react` license of PR 6c goes in D50.
+
+**"Tomar Acción", a menu button:** the dropdown was a list of buttons under a
+button with no state.
+- Now the button has `aria-haspopup="menu"`, `aria-expanded` and
+  `aria-controls`, and the menu is `role="menu"` with `menuitem`s (named by
+  the button).
+- Enter, Space or Down open it on the first option and Up on the last; the
+  arrows wrap; Home and End go to the ends.
+- Esc closes it and gives the focus back to the button. Tab, a click outside
+  or the focus leaving it close it (before, only a mousedown outside did).
+- The button is the `Button` of D43 (44 px) and its options are 44 px. While
+  `loadActionOptions()` answers, the button shows its loading state
+  (`aria-busy`, disabled), so a second click starts nothing.
+
+**PersonSearch, an ARIA 1.2 combobox:** the input owns a listbox
+(`aria-controls`, `aria-expanded`, `aria-activedescendant`).
+- Down and Up move through the people and Enter picks one; the focus then
+  goes to "Cambiar <persona>", and "Cambiar" brings the focus back to the
+  search. Esc closes the list first, so a second Esc closes the dialog
+  around it.
+- The number of people found is read by a polite live region once the typing
+  has settled for 600 ms, not on every key.
+- A 429 of `/api/colleagues` shows "Demasiados intentos. Intenta de nuevo en
+  N segundos." from its Retry-After (the D28 text, now in
+  `lib/rate-limit-message.ts` so a client component can use it), and any
+  other failure "No se pudo buscar"; neither is shown as "no results".
+- The input, the options and "Cambiar" are 44 px; so is the employee list's
+  search box. Its texts moved to `lib/i18n/es-MX.ts`.
+
+**⌘K:** Ctrl+K or ⌘K anywhere, or the header's "Buscar" button (44 px),
+opens a `Dialog` (D43) with a combobox over two groups.
+- **Ir a:** the menu's destinations, the same list already filtered by
+  module and RBP.
+- **Personas:** with 2 letters or more, people of the tenant from
+  `/api/colleagues` (rate limited, the same messages as PersonSearch). Only
+  for whoever can open the directory (`ec.view_org_chart`).
+- A person opens the directory on that person (`/employees?q=<correo>`),
+  whose row opens the profile only when the person is in the reader's
+  population (D47). Going straight to the profile would show "Acceso
+  denegado" to whoever cannot open it; doing it right needs a permission
+  check per result in `/api/colleagues`, left for when ⌘K gets actions.
+- Actions ("Tomar Acción para…") come with the workflow engine (Phase 10) or
+  the Admin Center (Phase 11).
+
+**Icon-only navigation at 200 %:** the collapsed sidebar and the rail now
+scroll their list in its own box, so every module and "Cerrar sesión" stay
+reachable when the root font size doubles.
+- The tooltips moved to the top layer with the Popover API, where no
+  scrolling box cuts them (the reason D44 left this open). They are placed
+  next to their control, inside the window, and follow it while it scrolls.
+- They follow WCAG 1.4.13: they show on hover and on keyboard focus
+  (`:focus-visible`), stay while the pointer moves onto them (a 150 ms grace
+  period), and Esc hides them without moving the pointer or the focus;
+  pointing at the control again shows them again.
+- `role="tooltip"`, linked to the control with `aria-describedby`; the
+  control's name is still its visually hidden text.
+
+**Tests (e2e against the production image):**
+- `dialogs.spec.ts`, the menu button with the keyboard:
+  - the button's attributes and 44 px;
+  - Enter, the arrows with wrapping, Home and End;
+  - axe with the menu open;
+  - Esc gives the focus back; Up opens it on the last option; Tab, Space and
+    a click outside behave as described.
+- `dialogs.spec.ts`, the loading state: the Server Action is held for a
+  second; the button is `aria-busy` and disabled, and a forced second click
+  starts no second load.
+- `search.spec.ts`, PersonSearch in the feedback dialog:
+  - 44 px, the listbox and `aria-activedescendant`;
+  - the polite count, axe;
+  - Esc closes the list and not the dialog;
+  - Enter picks a person and the focus goes to "Cambiar".
+- `search.spec.ts`, a 429 shows the safe message in the page and in the live
+  region, and "No se encontraron personas" does not appear.
+- `search.spec.ts`, ⌘K for the employee and the admin: Ctrl+K, a destination
+  chosen with the keyboard, a person chosen with the keyboard opening the
+  directory, axe with each group, and Esc giving the focus back to "Buscar".
+- `navigation.spec.ts`, the collapsed sidebar at 1280 px and the rail at
+  768 px with the root at 200 %:
+  - Tab reaches every entry and each one is inside the window;
+  - its tooltip opens on focus and stays inside the window;
+  - Esc hides it with the focus kept;
+  - hover shows it, the pointer can rest on it, Esc hides it under the
+    pointer, and leaving hides it.
 
 ---
 

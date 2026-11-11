@@ -7,6 +7,26 @@
 // only when shown, with enumLabel().
 
 export const messages = {
+  // 9c PR 6b: PersonSearch (a combobox) and the ⌘K search.
+  peopleSearch: {
+    placeholder: "Escribe al menos 2 letras del nombre o correo",
+    change: (person: string) => `Cambiar ${person}`,
+    changeLabel: "Cambiar",
+    found: (count: number) => (count === 1 ? "1 persona encontrada" : `${count} personas encontradas`),
+    none: "No se encontraron personas.",
+    error: "No se pudo buscar. Intenta de nuevo.",
+  },
+  commandPalette: {
+    open: "Buscar",
+    shortcut: "Ctrl K",
+    title: "Buscar personas y secciones",
+    inputLabel: "Buscar personas y secciones",
+    placeholder: "Busca una sección o, con 2 letras, una persona",
+    people: "Personas",
+    destinations: "Ir a",
+    noDestinations: "Ninguna sección coincide.",
+    found: (count: number) => (count === 1 ? "1 resultado" : `${count} resultados`),
+  },
   common: {
     empty: "—",
     close: "Cerrar",

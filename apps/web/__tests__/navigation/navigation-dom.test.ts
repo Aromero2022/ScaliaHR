@@ -8,7 +8,9 @@ import { NAV_ITEMS } from "@/lib/navigation/nav-config";
  * D41: the navigation in a DOM. The "Más" dialog keeps the keyboard inside
  * and gives the focus back; rail links are named by hidden text, not by their
  * tooltip; the sidebar writes its cookie; and the three variants show the same
- * links.
+ * links. 9c PR 6b: the tooltips are popovers in the top layer that describe
+ * their control; jsdom has no Popover API, so showPopover/hidePopover are
+ * stubbed here and the e2e checks them in Chrome.
  */
 
 let pathname = "/dashboard";
@@ -29,13 +31,25 @@ const items = NAV_ITEMS.map(({ href, label, shortLabel }) => ({ href, label, sho
 let container: HTMLElement;
 let root: Root;
 
+const nativeMatches = Element.prototype.matches;
 beforeEach(() => {
+  // jsdom has no :focus-visible heuristics; here any focus counts as keyboard focus.
+  Element.prototype.matches = function (this: Element, selector: string) {
+    return selector === ":focus-visible" ? this === document.activeElement : nativeMatches.call(this, selector);
+  };
+  HTMLElement.prototype.showPopover = function (this: HTMLElement) {
+    this.dataset.open = "1";
+  };
+  HTMLElement.prototype.hidePopover = function (this: HTMLElement) {
+    delete this.dataset.open;
+  };
   pathname = "/dashboard";
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
 });
 afterEach(() => {
+  Element.prototype.matches = nativeMatches;
   act(() => root.unmount());
   container.remove();
 });
@@ -119,40 +133,52 @@ describe("mobile dock and the Más dialog (D41)", () => {
   });
 });
 
+/** The tooltip that describes a control (aria-describedby). */
+const tooltipOf = (el: Element) => document.getElementById(el.getAttribute("aria-describedby") ?? "")!;
+
 describe("tablet rail (D41)", () => {
-  it("names each link with hidden text; the tooltip is aria-hidden and also shows on keyboard focus", async () => {
+  it("names each link with hidden text; a popover tooltip in the top layer describes it (9c PR 6b)", async () => {
     await render(createElement(RailNav, { items }));
     for (const item of items) {
       const link = container.querySelector(`a[href='${item.href}']`)!;
       expect(link.hasAttribute("aria-label")).toBe(false);
       expect(accessibleText(link)).toBe(item.label);
-      const tooltip = link.querySelector("[aria-hidden='true'].absolute")!;
+      const tooltip = tooltipOf(link);
+      expect(tooltip.getAttribute("role")).toBe("tooltip");
+      expect(tooltip.getAttribute("popover")).toBe("manual");
       expect(tooltip.textContent).toBe(item.label);
-      expect(tooltip.className).toContain("group-hover:visible");
-      expect(tooltip.className).toContain("group-focus-visible:visible");
+      expect(link.contains(tooltip)).toBe(false);
     }
   });
 
-  it("hides the tooltip with Esc and shows it again on the next focus (WCAG 1.4.13)", async () => {
+  it("shows the tooltip on focus, hides it with Esc and shows it again on the next focus (WCAG 1.4.13)", async () => {
     await render(createElement(RailNav, { items }));
     const link = container.querySelector<HTMLAnchorElement>("a[href='/employees']")!;
-    const tooltip = () => link.querySelector("[aria-hidden='true'].absolute")!;
-    link.focus();
-    await key(link, { key: "Escape" });
-    expect(tooltip().className).toMatch(/(^|\s)hidden(\s|$)/);
+    const tooltip = tooltipOf(link);
+    expect(tooltip.dataset.open).toBeUndefined();
+    await act(async () => link.focus());
+    expect(tooltip.dataset.open).toBe("1");
+    await key(document.body, { key: "Escape" });
+    expect(tooltip.dataset.open).toBeUndefined();
+    expect(document.activeElement).toBe(link);
     await act(async () => link.blur());
-    expect(tooltip().className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    await act(async () => link.focus());
+    expect(tooltip.dataset.open).toBe("1");
   });
 });
 
 describe("header sign-out on mobile (D41)", () => {
-  it("opens its tooltip below and toward the left, so it never widens a 320 px page (WCAG 1.4.10)", async () => {
+  it("places its tooltip in the top layer inside the window, so it never widens a 320 px page (WCAG 1.4.10)", async () => {
     await render(createElement(SignOutButton, { iconOnly: true, tooltipSide: "below" }));
     const button = container.querySelector("button")!;
     expect(accessibleText(button)).toBe("Cerrar sesión");
-    const tooltip = button.querySelector("[aria-hidden='true'].absolute")!;
-    expect(tooltip.className).toContain("right-0");
-    expect(tooltip.className).not.toContain("left-full");
+    const tooltip = tooltipOf(button);
+    expect(tooltip.className).toContain("fixed");
+    await act(async () => button.focus());
+    expect(tooltip.dataset.open).toBe("1");
+    // jsdom lays out nothing (every box is 0): the position is clamped to 4 px inside the window.
+    expect(tooltip.style.left).toBe("4px");
+    expect(Number.parseFloat(tooltip.style.top)).toBeGreaterThanOrEqual(4);
   });
 });
 

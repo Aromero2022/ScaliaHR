@@ -145,8 +145,8 @@ test.describe("Tomar Acción del admin", () => {
       const open = async () => {
         await trigger.focus();
         await page.keyboard.press("Enter");
-        await page.keyboard.press("Tab");
-        await expect(page.getByRole("button", { name: "Cambio de puesto" })).toBeFocused();
+        // 9c PR 6b: the menu opens on its first option (menu button pattern).
+        await expect(page.getByRole("menuitem", { name: "Cambio de puesto" })).toBeFocused();
         await page.keyboard.press("Enter");
         const dialog = page.getByRole("dialog", { name: /^Cambio de puesto — / });
         await expect(dialog).toBeVisible();
@@ -170,4 +170,99 @@ test.describe("Tomar Acción del admin", () => {
       expect(problems()).toEqual([]);
     });
   }
+});
+
+test.describe("menú Tomar Acción (botón de menú de ARIA)", () => {
+  test.use({ storageState: async ({}, provide) => provide(storageStatePath("admin")) });
+
+  test("se abre, se recorre y se cierra con el teclado, y mide 44 px", async ({ page }) => {
+    const { demo } = e2eAccounts();
+    const problems = watchPage(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openProtected(page, `/employees/${demo.jobChangeEmployeeId}`);
+    const trigger = page.getByRole("button", { name: "Tomar Acción" });
+    const menu = page.getByRole("menu", { name: "Tomar Acción" });
+    const item = (name: string) => menu.getByRole("menuitem", { name });
+
+    await expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect((await trigger.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await expect(menu).toBeHidden();
+
+    // Enter opens it on the first option.
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeVisible();
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await expect(trigger).toHaveAttribute("aria-controls", (await menu.getAttribute("id")) ?? "missing id");
+    await expect(item("Cambio de puesto")).toBeFocused();
+    for (const box of await menu.getByRole("menuitem").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) {
+      expect(box).toBeGreaterThanOrEqual(44);
+    }
+    // The arrows move and wrap; Home and End go to the ends.
+    await page.keyboard.press("ArrowDown");
+    await expect(item("Cambio de compensación")).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(item("Actualizar información personal")).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(item("Cambio de puesto")).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(item("Actualizar información personal")).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(item("Cambio de puesto")).toBeFocused();
+    await expectNoWcagViolations(page, "menu tomar accion abierto");
+
+    // Esc closes it and gives the focus back to the button.
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    // Up opens it on the last option; Tab closes it.
+    await page.keyboard.press("ArrowUp");
+    await expect(item("Actualizar información personal")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(menu).toBeHidden();
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    // Space opens it; a click elsewhere closes it.
+    await trigger.focus();
+    await page.keyboard.press("Space");
+    await expect(item("Cambio de puesto")).toBeFocused();
+    await page.getByRole("heading", { level: 2, name: "Información Laboral" }).click();
+    await expect(menu).toBeHidden();
+    expect(problems()).toEqual([]);
+  });
+
+  test("mientras cargan las listas, el botón está ocupado y no acepta un segundo clic", async ({ page }) => {
+    const { demo } = e2eAccounts();
+    const problems = watchPage(page);
+    const detail = `/employees/${demo.jobChangeEmployeeId}`;
+    await openProtected(page, detail);
+    // The Server Action that loads the dialog's lists, held for a second so its loading state can be seen.
+    let calls = 0;
+    await page.route(
+      (url) => url.pathname === detail,
+      async (route) => {
+        if (route.request().method() === "POST" && route.request().headers()["next-action"]) {
+          calls++;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        await route.continue();
+      },
+    );
+    const trigger = page.getByRole("button", { name: "Tomar Acción" });
+    await trigger.click();
+    await page.getByRole("menuitem", { name: "Cambio de puesto" }).click();
+    await expect(trigger).toHaveAttribute("aria-busy", "true");
+    await expect(trigger).toBeDisabled();
+    await trigger.click({ force: true });
+    const dialog = page.getByRole("dialog", { name: /^Cambio de puesto — / });
+    await expect(dialog).toBeVisible();
+    await expect(trigger).not.toHaveAttribute("aria-busy", "true");
+    expect(calls, "one load for one choice").toBe(1);
+    await page.keyboard.press("Escape");
+    await expect(trigger).toBeFocused();
+    expect(problems()).toEqual([]);
+  });
 });
