@@ -104,8 +104,8 @@ export const messages = {
     submitting: "Verificando…",
   },
   dashboard: {
-    noProfile: "No se encontró perfil de usuario. Contacte al administrador.",
-    welcome: (name: string) => `Bienvenido, ${name}`,
+    noProfile: "No se encontró perfil de usuario. Contacta al administrador.",
+    welcome: (name: string) => `Te damos la bienvenida, ${name}`,
     activeEmployees: "Empleados Activos",
     departments: "Departamentos",
     performanceScore: "Calificación de desempeño",
@@ -357,7 +357,7 @@ export const messages = {
     noReportsHint: "Los reportes se determinan por la relación de jefe directo en la información de puesto.",
     memberSummary: (skills: number, average: string, byManager: number) =>
       `${skills} habilidades · Promedio: ${average} · ${byManager}/${skills} evaluadas por el jefe directo`,
-    memberNoSkills: "Este colaborador aún no ha registrado habilidades.",
+    memberNoSkills: "Esta persona aún no ha registrado habilidades.",
     self: "Auto:",
     manager: "Jefe directo:",
     managerAssessment: "Evaluación del jefe directo:",
@@ -399,7 +399,7 @@ export const ENUM_LABELS = {
   pay_frequency: { monthly: "Mensual", biweekly: "Quincenal", weekly: "Semanal", annual: "Anual" },
   arco_request_type: { acceso: "Acceso", rectificacion: "Rectificación", cancelacion: "Cancelación", oposicion: "Oposición" },
   arco_request_status: { pending: "Pendiente", in_progress: "En proceso", completed: "Completada", rejected: "Rechazada" },
-  target_population_type: { all: "Todos", same_department: "Mismo departamento", direct_reports: "Reportes directos", self: "Uno mismo" },
+  target_population_type: { all: "Todos", same_department: "Mismo departamento", direct_reports: "Reportes directos", self: "Solo lo propio" },
   rbp_action: { view: "Ver", edit: "Editar" },
 } as const;
 

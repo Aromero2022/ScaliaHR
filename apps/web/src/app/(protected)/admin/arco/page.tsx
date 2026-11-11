@@ -34,7 +34,7 @@ export default async function ArcoPage({
       <div className="mx-auto max-w-md py-12 text-center">
         <h1 className="text-xl font-bold text-fg">Acceso denegado</h1>
         <p className="mt-2 text-sm text-fg-muted">
-          No tiene permisos para gestionar solicitudes ARCO. Contacte al
+          No tienes permisos para gestionar solicitudes ARCO. Contacta al
           administrador del tenant.
         </p>
       </div>

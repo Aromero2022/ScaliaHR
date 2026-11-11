@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import ActionModal from "@/components/action-modal";
+import ActionModal, { ACTION_TITLES, type ActionKind } from "@/components/action-modal";
 import { loadActionOptions, type ActionOptions } from "./actions";
-
-type ActionType = "job" | "compensation" | "personal" | null;
 
 const NO_OPTIONS: ActionOptions = {
   positions: [],
@@ -16,19 +14,21 @@ const NO_OPTIONS: ActionOptions = {
 };
 
 const actions = [
-  { key: "job" as const, label: "Cambio de puesto", icon: BriefcaseIcon },
-  { key: "compensation" as const, label: "Cambio de compensación", icon: CurrencyIcon },
-  { key: "personal" as const, label: "Actualizar información personal", icon: PersonIcon },
+  { key: "job" as const, label: ACTION_TITLES.job, icon: BriefcaseIcon },
+  { key: "compensation" as const, label: ACTION_TITLES.compensation, icon: CurrencyIcon },
+  { key: "personal" as const, label: ACTION_TITLES.personal, icon: PersonIcon },
 ];
 
 /** `today` is the tenant's date (YYYY-MM-DD), computed on the server (D42). */
 export default function ActionMenu({ employeeId, today }: { employeeId: string; today: string }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [modalAction, setModalAction] = useState<ActionType>(null);
+  const [modalAction, setModalAction] = useState<ActionKind | null>(null);
   const [options, setOptions] = useState<ActionOptions | null>(null);
   // D45: why the lists could not be loaded; the dialog shows it and does not send.
   const [loadError, setLoadError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // 9c PR 6a: the dialog opens from a menu item that is gone once it closes; the focus goes back here.
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -40,7 +40,7 @@ export default function ActionMenu({ employeeId, today }: { employeeId: string; 
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  async function loadOptionsAndOpen(action: ActionType) {
+  async function loadOptionsAndOpen(action: ActionKind) {
     setDropdownOpen(false);
     if (!options) {
       // D45: read on the server (zod, rate limit, can(), safeError); retried on the next open if it failed.
@@ -59,6 +59,7 @@ export default function ActionMenu({ employeeId, today }: { employeeId: string; 
     <>
       <div className="relative" ref={dropdownRef}>
         <button
+          ref={triggerRef}
           onClick={() => setDropdownOpen(!dropdownOpen)}
           className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
         >
@@ -90,20 +91,23 @@ export default function ActionMenu({ employeeId, today }: { employeeId: string; 
         )}
       </div>
 
-      {modalAction && (options || loadError) && (
-        <ActionModal
-          employeeId={employeeId}
-          today={today}
-          employeeName={(options ?? NO_OPTIONS).employeeName}
-          positions={(options ?? NO_OPTIONS).positions}
-          departments={(options ?? NO_OPTIONS).departments}
-          jobClassifications={(options ?? NO_OPTIONS).jobClassifications}
-          managers={(options ?? NO_OPTIONS).managers}
-          locations={(options ?? NO_OPTIONS).locations}
-          currentPersonal={null}
-          loadError={options ? null : loadError}
-        />
-      )}
+      <ActionModal
+        action={modalAction && (options || loadError) ? modalAction : null}
+        onClose={() => {
+          setModalAction(null);
+          triggerRef.current?.focus();
+        }}
+        employeeId={employeeId}
+        today={today}
+        employeeName={(options ?? NO_OPTIONS).employeeName}
+        positions={(options ?? NO_OPTIONS).positions}
+        departments={(options ?? NO_OPTIONS).departments}
+        jobClassifications={(options ?? NO_OPTIONS).jobClassifications}
+        managers={(options ?? NO_OPTIONS).managers}
+        locations={(options ?? NO_OPTIONS).locations}
+        currentPersonal={null}
+        loadError={options ? null : loadError}
+      />
     </>
   );
 }

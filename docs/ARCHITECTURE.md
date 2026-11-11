@@ -3213,6 +3213,67 @@ measure (the local full profile is not comparable): p95 steady 108.5 ms on
 `main` at 387e0d8 (D46) against the value in the D47 pull request; more than
 20 % above, or above the 500 ms threshold, would block.
 
+## D48 — Writing Rules: Neutral Address, Tú, Standard HR Labels
+
+**Decision (9c PR 6a):** a text that greets or addresses a specific person,
+or agrees with one, takes no gender: "Te damos la bienvenida, Ana", never
+"Bienvenido, Ana" or "Estimada Ana". Role and field labels keep the standard
+HR terms of Mexico that a SuccessFactors user recognizes: "Jefe directo",
+"Empleados" (also the module's name), "administrador", "Evaluación del jefe
+directo". Rewording them ("jefatura directa", "persona responsable") would
+make the interface less clear. The interface speaks to the person as tú.
+
+**What changed:**
+- The home greeting: "Bienvenido, {name}" → "Te damos la bienvenida, {name}".
+  No other greeting or form of address with a name existed; the emails
+  already said "Hola {name}:" and "Te damos la bienvenida a {tenant}".
+- Skills, the card of a direct report with no skills: "Este colaborador aún
+  no ha registrado habilidades." → "Esta persona aún no ha registrado
+  habilidades." It speaks of that person.
+- The population `self`: "Uno mismo" → "Solo lo propio". The label was
+  unclear, not a matter of gender.
+- Tú: "No tiene permisos… Contacte al administrador" (the ARCO page), "Contacte
+  al administrador" (no profile on the home page) and "Seleccione el tipo de
+  acción" (the "Tomar Acción" dialog, which no longer asks for the type) were
+  the only usted forms.
+- Kept as they are, being labels of a role, a field or a value: "Jefe
+  directo", "Solo jefe directo", "Evaluación del jefe directo", "Rechazada por
+  administrador", "Rol de Administrador", "Número de empleado", and the
+  readiness values "Listo ahora", "Listo en 1 año", "Listo en 2 años", "No
+  listo".
+
+**Tests (`__tests__/static/writing-rules.test.ts`):** over every string and
+JSX text of `src`, read with the parser of D42 (now
+`__tests__/static/visible-texts.ts`, shared by both tests).
+- Address: "bienvenido/a/os/as" (not "la bienvenida", the noun) and, where a
+  sentence starts, "estimado/a" and "querido/a" (so "Fecha estimada" is not a
+  greeting). Role labels are not checked.
+- Usted: the common imperatives ("seleccione", "ingrese", "contacte",
+  "intente", "verifique", "escriba", "escanee", "haga clic", "comuníquese"…),
+  "usted", "¿desea", "no tiene permisos" and "su contraseña/cuenta/sesión".
+- Negative controls for each form and positive controls with the tú forms,
+  the neutral greeting, the HR labels and impersonal texts ("La fecha de fin
+  no puede ser anterior…"). Against the texts before this PR, both checks
+  over `src` failed.
+
+**Also in 9c PR 6a, one "Tomar Acción" button:** the employee detail showed
+two. The menu loaded the lists and rendered `ActionModal`, which brought its
+own "Tomar Acción" button and asked for the type of change again (one option
+still said "Cambio de Puesto / Job Change"). Now:
+- The menu's option opens the dialog straight on that form. The dialog is
+  the `Dialog` of D43 (it was a hand-made `<dialog>` with no name and a "✕"
+  without one): its title names the change and the employee ("Cambio de
+  puesto — Patricia Castro"), and its close button has a name and 44 px.
+- On close (Esc, the close button or after saving), the focus goes back to
+  the "Tomar Acción" button. The option that opened it is gone by then, so
+  the menu does it, not the browser.
+- e2e (`dialogs.spec.ts`), with the keyboard at 1280 px light and 360 px
+  dark: one "Tomar Acción" button; Enter, Tab and Enter open "Cambio de
+  puesto — …" with the form and without the type question; it is modal; Esc
+  closes it and the focus is back on the button; axe with it open in light
+  and dark. The save on demo data (`save-demo-data.spec.ts`, D46) follows the
+  new path.
+
 ---
 
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
