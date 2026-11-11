@@ -6,6 +6,7 @@ import { canMany } from "@/lib/authz/can";
 import { NAV_ITEMS, filterNavByFlags } from "@/lib/navigation/nav-config";
 import { SIDEBAR_COOKIE, isSidebarCollapsed } from "@/lib/navigation/shell";
 import { DockNav, RailNav, SidebarNav, SignOutButton, type ShellNavItem } from "@/components/navigation/app-navigation";
+import { CommandPalette } from "@/components/navigation/command-palette";
 import { CurrentUserUnavailable, getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { ToastProvider } from "@/components/ui/toast";
 import { LoadError } from "@/components/ui/load-error";
@@ -71,9 +72,13 @@ export default async function ProtectedLayout({
           S
         </div>
         <span className="text-lg font-bold text-fg">Scalia HR</span>
-        {/* Under 768 px the dock has no room for it; the rail and the sidebar carry their own. */}
-        <div className="ml-auto md:hidden">
-          <SignOutButton iconOnly tooltipSide="below" />
+        <div className="ml-auto flex items-center gap-2">
+          {/* 9c PR 6b: ⌘K over the menu's destinations; people only for who can open the directory. */}
+          <CommandPalette items={items} people={items.some((item) => item.href === "/employees")} />
+          {/* Under 768 px the dock has no room for it; the rail and the sidebar carry their own. */}
+          <div className="md:hidden">
+            <SignOutButton iconOnly tooltipSide="below" />
+          </div>
         </div>
       </header>
       <div className="flex">

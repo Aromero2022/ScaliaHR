@@ -46,7 +46,7 @@ export default function SearchInput({
       value={value}
       onChange={handleChange}
       placeholder={placeholder}
-      className="w-full rounded-lg border border-control bg-surface-raised px-4 py-2.5 text-sm text-fg placeholder:text-fg-subtle outline-none transition focus:border-focus focus:ring-1 focus:ring-focus sm:max-w-sm"
+      className="min-h-11 w-full rounded-lg border border-control bg-surface-raised px-4 text-sm text-fg placeholder:text-fg-subtle outline-none transition focus:border-focus focus:ring-1 focus:ring-focus sm:max-w-sm"
     />
   );
 }
