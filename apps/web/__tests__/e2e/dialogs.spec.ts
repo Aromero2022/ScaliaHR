@@ -1,10 +1,11 @@
 // D44: the three Dialogs of D43 with the keyboard only (nuevo objetivo and
 // feedback for the employee, crear rol for the admin), at 1280 px light and
-// 360 px dark, and axe with each dialog open in light and dark.
+// 360 px dark, and axe with each dialog open in light and dark. 9c PR 6a adds
+// "Tomar Acción", which now opens from its menu straight on the chosen form.
 import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectNoWcagViolations } from "./support/axe";
-import { artifactsDir, storageStatePath } from "./support/env";
+import { artifactsDir, e2eAccounts, storageStatePath } from "./support/env";
 import { THEMES, setTheme, openProtected, watchPage } from "./support/pages";
 
 const LAYOUTS = [
@@ -121,6 +122,51 @@ test.describe("diálogo del admin", () => {
       const status = page.getByRole("status").filter({ hasText: "Rol de prueba e2e" });
       await expect(status).toBeVisible();
       await expect(status).toHaveAttribute("aria-live", "polite");
+      expect(problems()).toEqual([]);
+    });
+  }
+});
+
+test.describe("Tomar Acción del admin", () => {
+  test.use({ storageState: async ({}, provide) => provide(storageStatePath("admin")) });
+
+  for (const layout of LAYOUTS) {
+    test(`un solo botón, abre en la opción elegida y devuelve el foco, a ${layout.width} px (${layout.theme})`, async ({ page }) => {
+      const { demo } = e2eAccounts();
+      const problems = watchPage(page);
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await setTheme(page, layout.theme);
+      await openProtected(page, `/employees/${demo.jobChangeEmployeeId}`);
+
+      // One button: before 9c PR 6a the menu rendered a second "Tomar Acción" and the dialog asked for the type again.
+      const trigger = page.getByRole("button", { name: "Tomar Acción" });
+      await expect(trigger).toHaveCount(1);
+
+      const open = async () => {
+        await trigger.focus();
+        await page.keyboard.press("Enter");
+        await page.keyboard.press("Tab");
+        await expect(page.getByRole("button", { name: "Cambio de puesto" })).toBeFocused();
+        await page.keyboard.press("Enter");
+        const dialog = page.getByRole("dialog", { name: /^Cambio de puesto — / });
+        await expect(dialog).toBeVisible();
+        return dialog;
+      };
+
+      const dialog = await open();
+      expect(await dialog.evaluate((d) => d.matches(":modal")), "the dialog is modal").toBe(true);
+      await expect(dialog.getByLabel("Título del Puesto")).toBeVisible();
+      await expect(dialog.getByText("Seleccione el tipo de acción")).toHaveCount(0);
+      await expect.poll(() => focusInside(dialog), { message: "focus moves into the dialog" }).toBe(true);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await expect(trigger).toHaveCount(1);
+
+      await open();
+      await axeWithDialogOpen(page, `dialogo tomar accion ${layout.width}px`, `tomar-accion-${layout.width}`);
+      await page.keyboard.press("Escape");
+      await expect(trigger).toBeFocused();
       expect(problems()).toEqual([]);
     });
   }
