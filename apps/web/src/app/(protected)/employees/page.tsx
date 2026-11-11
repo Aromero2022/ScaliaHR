@@ -26,7 +26,7 @@ export default async function EmployeesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { q: search, page } = EmployeeListParams.parse(await searchParams);
+  const { q: search, page, person } = EmployeeListParams.parse(await searchParams);
   const claims = await requireAuth();
   if (!claims.tenantId) redirect("/dashboard");
 
@@ -55,7 +55,11 @@ export default async function EmployeesPage({
     .order("last_name", { ascending: true })
     .range(from, to);
 
-  if (search) {
+  // 9c PR 6c: ⌘K opens the list on one person by id, inside the caller's tenant (RLS too);
+  // the search does not apply then. An invalid id (null) is an empty id list: no one.
+  if (person !== undefined) {
+    query = query.in("id", person ? [person] : []).eq("tenant_id", bizUser.tenant_id);
+  } else if (search) {
     query = query.or(ilikeAnyOf(["first_name", "last_name", "email", "employee_id"], search));
   }
 
@@ -148,12 +152,21 @@ export default async function EmployeesPage({
         </Suspense>
       </div>
 
+      {person !== undefined && (
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg-muted">
+          <span>{t.filteredByPerson}</span>
+          <Link href="/employees" className="inline-flex min-h-11 items-center font-medium text-accent-fg underline-offset-4 hover:underline">
+            {t.clearPersonFilter}
+          </Link>
+        </p>
+      )}
+
       <div className="overflow-hidden rounded-xl border border-line bg-surface">
         <Table
           caption={t.heading}
           rows={rows}
           rowKey={(emp) => emp.id}
-          empty={search ? t.noResultsFor(search) : t.none}
+          empty={person !== undefined ? t.personNotFound : search ? t.noResultsFor(search) : t.none}
           columns={[
             {
               key: "employee",

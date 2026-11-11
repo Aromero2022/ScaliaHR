@@ -13,7 +13,8 @@ import type { ShellNavItem } from "./app-navigation";
 // list, already filtered by module and RBP) and, with 2 letters or more, people
 // of the tenant (/api/colleagues, rate limited). A person opens the employee
 // directory on that person, whose row opens the profile only if the person is
-// in the reader's population (D47). Actions ("Tomar Acción para…") come with
+// in the reader's population (D47); the URL carries the person's id, never an
+// email (9c PR 6c). Actions ("Tomar Acción para…") come with
 // the workflow engine (Phase 10) or the Admin Center (Phase 11).
 
 const t = messages.commandPalette;
@@ -78,7 +79,8 @@ function PaletteBody({ items, people, onGo }: { items: ShellNavItem[]; people: b
           id: `person-${p.id}`,
           label: `${p.first_name} ${p.last_name}`,
           detail: p.email,
-          href: `/employees?q=${encodeURIComponent(p.email ?? p.last_name)}`,
+          // 9c PR 6c: by id, so no email lands in the URL, the history or an access log.
+          href: `/employees?person=${p.id}`,
         }))
       : [];
   const options = [...destinations, ...persons];

@@ -1483,6 +1483,28 @@ into it in Phase 23. Phase 9b, PR 2.
   text, so commas or parentheses in it could add conditions (RLS still limited
   the rows to the user's tenant). Fixed in D28.
 
+**Since 9c PR 6c — what a search leaves behind:**
+- **Our JSON logs keep no query string.** `request.error` logs the path
+  without it (`request.path.split("?")[0]`), the middleware logs nothing, and
+  every other event carries its name, the request and tenant ids and redacted
+  errors. The instrumentation test now puts an email and a `person` id in the
+  query and checks that neither reaches the line.
+- **Emails are masked as `[EMAIL]`** in every string that reaches the logs. A
+  database error can quote one from a duplicate key or a search filter
+  (`failed to parse logic tree ((email.ilike."%…%"))`). No log records an
+  email on purpose: a failed login logs its status, and the rate-limit keys
+  are hashes (D28).
+- **⌘K opens the directory by id** (`/employees?person=<uuid>`, D49), so no
+  email sits in the URL, the browser history or an access log.
+- **`/api/colleagues` is a POST** with the search in its body (D38), so what a
+  person types in PersonSearch or ⌘K is in no URL.
+- **Known exposure, kept by decision:** the employee list's own search box
+  keeps `?q=` in the URL, so a search can be shared and the back button
+  returns to it. What a person types there is in the browser history, in the
+  access logs of the proxy or CDN in front of the app (Phase 23), and in the
+  API logs of the hosted Supabase project, because the server's query to the
+  Data API carries the PostgREST filter in its URL.
+
 ---
 
 ## D28 — Rate Limiting
@@ -1992,6 +2014,11 @@ one person is a search. Phase 9b, PR 5.
   the load mix. None is dropped without production statistics. The tables with
   effective dates (`ec_*`) keep their GiST exclusion indexes on (user, date
   range), which also serve lookups by user.
+- **Since 9c PR 6c, `/api/colleagues` is a POST.** The search goes in a JSON
+  body validated with Zod (`q`, 2 to 60 characters; `self`, a boolean), so it
+  never sits in a URL (D27). There is no GET; the rate limit, the session
+  check, the 20 results and the safe 429 message of PersonSearch and ⌘K (D49)
+  are unchanged.
 
 ---
 
@@ -3291,7 +3318,7 @@ still said "Cambio de Puesto / Job Change"). Now:
 **Decision (9c PR 6b):** the hand-made menus and lists of the shell follow
 the ARIA patterns they look like, with the keyboard alone, and the icon-only
 navigation works with the root font size at 200 %, which D44 had left open.
-The `motion/react` license of PR 6c goes in D51.
+The `motion/react` license goes in D51, with PR 6d (6c became the privacy of searches: D27, D38 and this decision).
 
 **"Tomar Acción", a menu button:** the dropdown was a list of buttons under a
 button with no state.
@@ -3328,11 +3355,23 @@ opens a `Dialog` (D43) with a combobox over two groups.
 - **Personas:** with 2 letters or more, people of the tenant from
   `/api/colleagues` (rate limited, the same messages as PersonSearch). Only
   for whoever can open the directory (`ec.view_org_chart`).
-- A person opens the directory on that person (`/employees?q=<correo>`),
-  whose row opens the profile only when the person is in the reader's
-  population (D47). Going straight to the profile would show "Acceso
-  denegado" to whoever cannot open it; doing it right needs a permission
-  check per result in `/api/colleagues`, left for when ⌘K gets actions.
+- A person opens the directory on that person, whose row opens the profile
+  only when the person is in the reader's population (D47). Going straight to
+  the profile would show "Acceso denegado" to whoever cannot open it; doing it
+  right needs a permission check per result in `/api/colleagues`, left for
+  when ⌘K gets actions (Phase 10 or 11).
+- **Since 9c PR 6c, by id:** the URL is `/employees?person=<uuid>` (it was
+  `?q=<correo>`).
+  - The page reads the id with `z.guid()` and filters by it inside the
+    caller's tenant (RLS too); the search box does not apply then.
+  - An invalid value, an email or a repeated parameter is an empty id list:
+    the page shows "No se encontró a esa persona", never the whole list. So
+    does a person of another tenant.
+  - "Filtrado por persona · Quitar filtro" goes back to the full list.
+  - Tests: unit (the parameter), integration against the local database
+    (a person of the tenant, of another tenant, an invalid value and an email,
+    with and without a search), and e2e (⌘K opens `?person=` with no email in
+    the URL; an invalid id or an email show no one).
 - Actions ("Tomar Acción para…") come with the workflow engine (Phase 10) or
   the Admin Center (Phase 11).
 

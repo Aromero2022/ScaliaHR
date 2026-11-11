@@ -9,6 +9,8 @@ const SENSITIVE_KEY =
   /pass(word)?|secret|token|authorization|cookie|api[-_]?key|jwt|curp|rfc|nss|clabe|salary|salario|sueldo|bank|account_number/i;
 
 const PATTERNS: [RegExp, string][] = [
+  // 9c PR 6c: email addresses, which a database error can quote from a search or a duplicate key
+  [/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[EMAIL]"],
   // JWTs and bearer tokens
   [/\beyJ[\w-]+\.[\w-]+\.[\w-]+/g, "[JWT]"],
   [/\b(Bearer|Basic)\s+[\w.+/=-]+/gi, "$1 [REDACTED]"],

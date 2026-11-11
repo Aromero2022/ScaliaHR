@@ -1,5 +1,6 @@
 // 9c PR 6b: PersonSearch as an ARIA 1.2 combobox (in the feedback dialog) and
-// the ⌘K search, with the keyboard alone, in the production image.
+// the ⌘K search, with the keyboard alone, in the production image. 9c PR 6c:
+// the search travels in a POST body and ⌘K opens the list on a person's id.
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoWcagViolations } from "./support/axe";
 import { storageStatePath } from "./support/env";
@@ -28,7 +29,13 @@ test.describe("PersonSearch como combobox (empleada)", () => {
     await expect(input).toHaveAttribute("aria-controls", (await dialog.locator("[role=listbox]").getAttribute("id")) ?? "missing id");
 
     await input.focus();
+    // 9c PR 6c: the search goes in a POST body, never in the URL.
+    const request = page.waitForRequest((r) => r.url().includes("/api/colleagues"));
     await page.keyboard.type("Patricia");
+    const sent = await request;
+    expect(sent.method()).toBe("POST");
+    expect(new URL(sent.url()).search).toBe("");
+    expect(sent.postDataJSON()).toEqual({ q: "Patricia" });
     await expect(listbox).toBeVisible();
     await expect(input).toHaveAttribute("aria-expanded", "true");
     const option = listbox.getByRole("option", { name: "Patricia Castro" });
@@ -68,7 +75,7 @@ test.describe("PersonSearch como combobox (empleada)", () => {
 
   test("un 429 de /api/colleagues muestra el mensaje seguro, no «sin resultados»", async ({ page }) => {
     const dialog = await openFeedbackDialog(page);
-    await page.route("**/api/colleagues?**", (route) =>
+    await page.route("**/api/colleagues", (route) =>
       route.fulfill({ status: 429, headers: { "Retry-After": "30", "Content-Type": "application/json" }, body: '{"error":"too_many_requests"}' }),
     );
     await dialog.getByRole("combobox", { name: "Buscar destinatario" }).fill("Patricia");
@@ -120,8 +127,12 @@ for (const role of ["empleada", "admin"] as const) {
       await expect(dialog.getByRole("combobox", { name: "Buscar personas y secciones" })).toHaveAttribute("aria-activedescendant", (await person.getAttribute("id")) ?? "missing id");
       await expectNoWcagViolations(page, `cmdk ${role} personas`);
       await page.keyboard.press("Enter");
-      await expect(page).toHaveURL(/\/employees\?q=patricia\.castro%40acme\.dev$/);
-      await expect(page.getByText("Patricia", { exact: false }).first()).toBeVisible();
+      // 9c PR 6c: by id, never an email in the URL; the list shows that person only.
+      await expect(page).toHaveURL(/\/employees\?person=[0-9a-f-]{36}$/);
+      expect(page.url()).not.toContain("acme");
+      await expect(page.getByText("Filtrado por persona")).toBeVisible();
+      await expect(page.getByText("patricia.castro@acme.dev").first()).toBeVisible();
+      await expect(page.getByRole("link", { name: "Quitar filtro" })).toHaveAttribute("href", "/employees");
 
       // Esc closes it and gives the focus back to the button that opened it.
       await opener.click();
@@ -133,3 +144,18 @@ for (const role of ["empleada", "admin"] as const) {
     });
   });
 }
+
+test.describe("lista de empleados abierta en una persona (admin)", () => {
+  test.use({ storageState: async ({}, provide) => provide(storageStatePath("admin")) });
+
+  test("un id inválido o un correo en ?person= no muestran a nadie, nunca la lista completa", async ({ page }) => {
+    for (const person of ["no-es-un-id", "patricia.castro@acme.dev"]) {
+      // openProtected() compares the pathname with the whole path, query included.
+      const response = await page.goto(`/employees?person=${encodeURIComponent(person)}`);
+      expect(response?.status()).toBe(200);
+      expect(new URL(page.url()).pathname).toBe("/employees");
+      await expect(page.getByText("No se encontró a esa persona.").first()).toBeVisible();
+      await expect(page.getByText("patricia.castro@acme.dev")).toHaveCount(0);
+    }
+  });
+});

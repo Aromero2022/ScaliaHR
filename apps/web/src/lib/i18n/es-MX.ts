@@ -160,6 +160,10 @@ export const messages = {
       actions: "Acciones",
     },
     noResultsFor: (search: string) => `No se encontraron empleados para "${search}".`,
+    // 9c PR 6c: the list opened on one person from ⌘K.
+    filteredByPerson: "Filtrado por persona",
+    clearPersonFilter: "Quitar filtro",
+    personNotFound: "No se encontró a esa persona.",
     none: "No hay empleados registrados.",
     viewProfile: "Ver perfil",
     ofEmployee: (name: string) => ` de ${name}`,

@@ -1,4 +1,3 @@
-import { type NextRequest } from "next/server";
 import { z } from "zod";
 import { CurrentUserUnavailable, getCurrentUser } from "@/lib/auth/current-user";
 import { reportError } from "@/lib/log/report";
@@ -10,6 +9,8 @@ import { createClient } from "@/lib/supabase/server";
 // D38: the feedback form searches colleagues here instead of receiving the
 // whole tenant (1,000 names in a <select>). At most COLLEAGUES_LIMIT active
 // people of the caller's own tenant, read under RLS with the caller's session.
+// 9c PR 6c: a POST with the search in a JSON body, so what a person types in
+// PersonSearch or ⌘K never sits in a URL, a browser history or an access log.
 
 export const dynamic = "force-dynamic";
 const COLLEAGUES_LIMIT = 20;
@@ -17,10 +18,10 @@ const COLLEAGUES_LIMIT = 20;
 const Query = z.object({
   q: z.string().trim().min(2).max(60),
   // ARCO's form may pick the admin themself; the feedback form may not.
-  self: z.enum(["1"]).optional(),
+  self: z.boolean().optional(),
 });
 
-export async function GET(request: NextRequest): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
   const limited = await limitApi();
   if (limited) return limited;
 
@@ -34,9 +35,9 @@ export async function GET(request: NextRequest): Promise<Response> {
   }
   if (!me) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const params = request.nextUrl.searchParams;
-  const parsed = Query.safeParse({ q: params.get("q") ?? "", self: params.get("self") ?? undefined });
-  if (!parsed.success) return Response.json({ colleagues: [] });
+  const body: unknown = await request.json().catch(() => null);
+  const parsed = Query.safeParse(body);
+  if (!parsed.success) return Response.json({ colleagues: [] }, { headers: { "Cache-Control": "private, no-store" } });
 
   const supabase = await createClient();
   let query = supabase
