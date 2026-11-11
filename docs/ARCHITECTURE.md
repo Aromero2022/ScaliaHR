@@ -3274,6 +3274,99 @@ still said "Cambio de Puesto / Job Change"). Now:
   and dark. The save on demo data (`save-demo-data.spec.ts`, D46) follows the
   new path.
 
+## D50 — Agent Tooling (ECC): Minimal Profile, No Hooks, CLAUDE.md First
+
+**Decision:** ECC v2.2.3 (the `ecc-universal` package of
+github.com/affaan-m/ECC) is installed per project in `.claude/` with
+`npx ecc-universal@2.2.3 install --profile minimal --target claude-project`.
+The minimal profile has no hook runtime and no hook is enabled: no settings
+file registers one and `.claude/settings.json` does not exist. Of ECC's rules,
+only security and TypeScript stay. `CLAUDE.md` prevails over every ECC rule,
+agent, command and skill; `.claude/rules/README.md` says so, and Claude Code
+loads it with the rules. Turning on any hook, from ECC or elsewhere, takes its
+own pull request.
+
+**What stays:** the rules `common/security.md`, `typescript/coding-style.md`,
+`typescript/security.md`, `typescript/testing.md` and ECC's rules README; 29
+agents, 49 commands and 44 skills. `.claude/ecc/install-state.json` lists the
+191 files ECC manages, and `ecc doctor --target claude-project` reports OK.
+
+**Removed because they contradict `CLAUDE.md`:**
+1. `common/patterns.md` and `typescript/patterns.md`: the standard repository
+   has a physical `delete(id)`. `CLAUDE.md` allows soft delete only, with no
+   DELETE policy for `authenticated` (D46).
+2. `common/testing.md`: TDD, 80 % coverage and unit, integration and E2E tests
+   are mandatory for every change, and nothing says what `CLAUDE.md` requires:
+   RLS, privileges and FKs tested against the real local database
+   (`supabase start`), not only with mocks.
+3. `common/code-review.md`: a merge "with caution" is allowed with HIGH
+   findings. `CLAUDE.md` requires zero errors, fixed in the same loop.
+4. `common/coding-style.md`, with `code-review.md`: immutability marked
+   CRITICAL, functions under 50 lines and files under 800, modules to
+   extract. They ask for refactors nobody requested; `CLAUDE.md` says to match
+   the existing style and not to refactor what is not broken.
+5. `common/coding-style.md`: errors handled "at every level". `CLAUDE.md`: no
+   error handling for impossible cases.
+6. `common/patterns.md`: a repository "to swap data sources", one envelope for
+   every API response, cloned skeleton projects as a base. That is flexibility
+   nobody asked for.
+7. `common/development-workflow.md`: before coding, searches on GitHub, Exa
+   and the package registries, and a PRD, architecture, system_design,
+   tech_doc and task_list. `CLAUDE.md` works only against the local environment
+   and asks for a brief plan with a check for each step.
+
+**Also removed:**
+- Rules that do not apply or are wrong here: `common/performance.md` (model
+  choice and thinking), `common/agents.md` (an `ecc:` prefix these agents do
+  not have, 68 agents, agents that are gone), `common/hooks.md` and
+  `typescript/hooks.md` (hooks in the global `~/.claude/settings.json`, and
+  Prettier, which the repo does not use), `common/git-workflow.md` (it says
+  `includeCoAuthoredBy` is false and has no draft pull request or approval),
+  and every language other than TypeScript.
+- `.claude/settings.json`: the installer wrote `"includeCoAuthoredBy": false`.
+  Commit attribution stays as the repo had it.
+- The skill `codebase-onboarding`, whose template says `npx prisma migrate
+  dev` (prohibited by D1); the skill `ecc-recipes` and `.claude/AGENTS.md`,
+  which list agents and commands that are gone; the commands `orch-build-mvp`
+  (it needs the GAN harness) and `plan-prd` (it hands off to `/plan`).
+- Agents and commands of other stacks (C++, C#, Dart, Django, FastAPI,
+  Flutter, F#, Go, HarmonyOS, Java, Kotlin and Gradle, PHP, Python, PyTorch,
+  Rust, Swift, Vue) and domains (healthcare, homelab, networks, marketing, SEO,
+  ML, RAG, open-source publishing, the GAN harness); the commands `jira`,
+  `pm2`, `marketing-campaign`, `epic-*`, `santa-loop`, `auto-update` (with its
+  script), `cost-report`, `model-route` and `setup-pm`; the skill
+  `windows-desktop-e2e`.
+- The commands `code-review` and `plan`, which collide with Claude Code's own.
+- `.claude/mcp-configs/`, a catalog of 34 remote MCP servers. None was enabled:
+  project MCP servers would go in `.mcp.json`, which does not exist.
+- `.claude/.agents/`, skills in Codex's format that Claude Code does not load;
+  one had a sample API key that gitleaks reports.
+
+Each removal also left `install-state.json`, so `ecc doctor` finds no missing
+or drifted file and `ecc repair` does not bring them back. Running the install
+command again would; an ECC update goes through a pull request that repeats
+these removals.
+
+**Known limits:**
+- `install-state.json` records absolute paths of the container where the
+  install ran (`/home/user/ScaliaHR/.claude/…`). From a checkout at another
+  path, `ecc doctor` reports ERROR (191 unsafe destinations) although the files
+  match.
+- The five remaining `orch-*` commands start `orch-*` skills that the minimal
+  profile does not install, so they do nothing until those skills are added or
+  the commands removed.
+- `typescript/coding-style.md` and `typescript/testing.md` start with a link to
+  `common/coding-style.md` and `common/testing.md`, now removed. Claude Code
+  does not follow Markdown links in rules, so nothing breaks; the links lead
+  nowhere. `typescript/coding-style.md` still has an immutability example;
+  `CLAUDE.md` prevails over it.
+- The installer also wrote ECC's state store, `~/.claude/ecc/state.db`, in the
+  home directory of the machine where it ran. It is not part of the repo.
+
+**Checks:** eslint and tsc in `apps/web`, `packages/email` and `apps/worker`,
+the build, `check:forbidden` and gitleaks over the whole history, all at zero.
+Outside `.claude/`, only this document and `docs/ROADMAP.md` change.
+
 ---
 
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
