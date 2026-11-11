@@ -3287,9 +3287,9 @@ loads it with the rules. Turning on any hook, from ECC or elsewhere, takes its
 own pull request.
 
 **What stays:** the rules `common/security.md`, `typescript/coding-style.md`,
-`typescript/security.md`, `typescript/testing.md` and ECC's rules README; 29
-agents, 44 commands and 43 skills. `.claude/ecc/install-state.json` lists the
-185 files ECC manages, and `ecc doctor --target claude-project` reports OK.
+`typescript/security.md`, `typescript/testing.md` and ECC's rules README; 28
+agents, 44 commands and 41 skills. `.claude/ecc/install-state.json` lists the
+182 files ECC manages, and `ecc doctor --target claude-project` reports OK.
 
 **Removed because they contradict `CLAUDE.md`:**
 1. `common/patterns.md` and `typescript/patterns.md`: the standard repository
@@ -3334,6 +3334,9 @@ agents, 44 commands and 43 skills. `.claude/ecc/install-state.json` lists the
   skills that the minimal profile does not install, so they did nothing. The
   skill `skill-scout`: it searches GitHub with `gh search repos` and
   `gh search code`, remote traffic (Roadmap, Principle 8).
+- The skills `codehealth-mcp` (CodeScene's MCP server, with its own token) and
+  `repo-scan` (it clones a skill from GitHub), and the agent `docs-lookup`
+  (Context7's MCP server): remote traffic (Roadmap, Principle 8).
 - Agents and commands of other stacks (C++, C#, Dart, Django, FastAPI,
   Flutter, F#, Go, HarmonyOS, Java, Kotlin and Gradle, PHP, Python, PyTorch,
   Rust, Swift, Vue) and domains (healthcare, homelab, networks, marketing, SEO,
@@ -3348,14 +3351,17 @@ agents, 44 commands and 43 skills. `.claude/ecc/install-state.json` lists the
   one had a sample API key that gitleaks reports.
 
 Each removal also left `install-state.json`, so `ecc doctor` finds no missing
-or drifted file and `ecc repair` does not bring them back. Running the install
-command again would; an ECC update goes through a pull request that repeats
-these removals.
+or drifted file and `ecc repair` does not bring them back. The descriptions of
+`skill-create` and `review-pr` lost their references to removed items
+(`skill-scout`, `/orch-review`, `/code-review`), and their digests in
+`install-state.json` were updated to the edited files. Running the install
+command again would bring everything back; an ECC update goes through a pull
+request that repeats these removals and edits.
 
 **Known limits:**
 - `install-state.json` records absolute paths of the container where the
   install ran (`/home/user/ScaliaHR/.claude/…`). From a checkout at another
-  path, `ecc doctor` reports ERROR (185 unsafe destinations) although the files
+  path, `ecc doctor` reports ERROR (182 unsafe destinations) although the files
   match.
 - `typescript/coding-style.md` and `typescript/testing.md` start with a link to
   `common/coding-style.md` and `common/testing.md`, now removed. Claude Code

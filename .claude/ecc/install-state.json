@@ -235,17 +235,6 @@
     {
       "kind": "copy-file",
       "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/docs-lookup.md",
-      "sourceRelativePath": "agents/docs-lookup.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/docs-lookup.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "11560171e4535419e7917158d0de3bc7bbbf0408f83f61f0f3558b356802419e"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/e2e-runner.md",
       "sourceRelativePath": "agents/e2e-runner.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/agents/e2e-runner.md",
@@ -802,7 +791,7 @@
       "strategy": "preserve-relative-path",
       "ownership": "managed",
       "scaffoldOnly": false,
-      "contentSha256": "48968023b079cd4952cd4f750a0d3ea537643871d17c441ec88a16a14fe81954"
+      "contentSha256": "3b801daf183e2cc5f9136bbb893de8ac3cba7c46181152a6e9174a33d0e982c1"
     },
     {
       "kind": "copy-file",
@@ -846,7 +835,7 @@
       "strategy": "preserve-relative-path",
       "ownership": "managed",
       "scaffoldOnly": false,
-      "contentSha256": "d90b882c5af825951a1b99e82b40c2ea9c611dab5d2aab26bc2da7a26aab1fc8"
+      "contentSha256": "0b878e9dc19ede37fe14d87fffce007cd6b0b796927253db7c6e7bb710318009"
     },
     {
       "kind": "copy-file",
@@ -1874,17 +1863,6 @@
     {
       "kind": "copy-file",
       "moduleId": "workflow-quality",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/skills/codehealth-mcp/SKILL.md",
-      "sourceRelativePath": "skills/codehealth-mcp/SKILL.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/skills/codehealth-mcp/SKILL.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "c5943c4c353b02dcd87b751de15bb087caae2f11c36e84a74e181fe2eadee394"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "workflow-quality",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/skills/config-gc/SKILL.md",
       "sourceRelativePath": "skills/config-gc/SKILL.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/skills/config-gc/SKILL.md",
@@ -2002,17 +1980,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "58b82c847304b0c4fbf456c1f4ae9205f3733e011f8cbdeed30687f111a098c6"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "workflow-quality",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/skills/repo-scan/SKILL.md",
-      "sourceRelativePath": "skills/repo-scan/SKILL.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/skills/repo-scan/SKILL.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "b3318f6263629467d895d71a281cb64575d9d5de12c96d97cd1d19c66734e98e"
     },
     {
       "kind": "copy-file",
