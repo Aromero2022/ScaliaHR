@@ -10,7 +10,7 @@
     "lint": "expo lint"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.0",
+    "@supabase/supabase-js": "^2.119.0",
     "@scaliahr/shared": "*",
     "expo": "~52.0.0",
     "expo-router": "~4.0.0",
