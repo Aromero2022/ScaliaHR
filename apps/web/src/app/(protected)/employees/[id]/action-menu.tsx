@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useId, useTransition } from "react";
 import ActionModal, { ACTION_TITLES, type ActionKind } from "@/components/action-modal";
+import { Button } from "@/components/ui/button";
 import { loadActionOptions, type ActionOptions } from "./actions";
 
 const NO_OPTIONS: ActionOptions = {
@@ -19,31 +20,80 @@ const actions = [
   { key: "personal" as const, label: ACTION_TITLES.personal, icon: PersonIcon },
 ];
 
-/** `today` is the tenant's date (YYYY-MM-DD), computed on the server (D42). */
+/**
+ * 9c PR 6b: the menu button pattern of ARIA. The button says it opens a menu
+ * (aria-haspopup, aria-expanded, aria-controls); Enter, Space or Down open it
+ * on the first option and Up on the last; the arrows, Home and End move
+ * between options; Esc closes it and gives the focus back to the button; Tab,
+ * a click outside or the focus leaving it close it. While the dialog's lists
+ * load, the button shows its loading state (aria-busy) and takes no second
+ * click.
+ * `today` is the tenant's date (YYYY-MM-DD), computed on the server (D42).
+ */
 export default function ActionMenu({ employeeId, today }: { employeeId: string; today: string }) {
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [modalAction, setModalAction] = useState<ActionKind | null>(null);
   const [options, setOptions] = useState<ActionOptions | null>(null);
   // D45: why the lists could not be loaded; the dialog shows it and does not send.
   const [loadError, setLoadError] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [loading, startLoading] = useTransition();
+  const containerRef = useRef<HTMLDivElement>(null);
   // 9c PR 6a: the dialog opens from a menu item that is gone once it closes; the focus goes back here.
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const buttonId = useId();
+  const menuId = useId();
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
+  function openMenu(focusIndex: number) {
+    setMenuOpen(true);
+    // The items exist after this render; focus the one asked for.
+    requestAnimationFrame(() => itemRefs.current.at(focusIndex)?.focus());
+  }
+
+  function closeMenu(returnFocus: boolean) {
+    setMenuOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  }
+
+  function onTriggerKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
+    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openMenu(0);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      openMenu(-1);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+  }
 
-  async function loadOptionsAndOpen(action: ActionKind) {
-    setDropdownOpen(false);
-    if (!options) {
-      // D45: read on the server (zod, rate limit, can(), safeError); retried on the next open if it failed.
+  function onMenuKeyDown(e: React.KeyboardEvent<HTMLUListElement>) {
+    const items = itemRefs.current.filter((item): item is HTMLButtonElement => item !== null);
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const move = (index: number) => items.at(index % items.length)?.focus();
+    if (e.key === "ArrowDown") move(current + 1);
+    else if (e.key === "ArrowUp") move(current - 1);
+    else if (e.key === "Home") move(0);
+    else if (e.key === "End") move(-1);
+    else if (e.key === "Escape") closeMenu(true);
+    else if (e.key === "Tab") {
+      closeMenu(false);
+      return;
+    } else return;
+    e.preventDefault();
+  }
+
+  // The focus left the button and the menu (Tab from the button, a click elsewhere, another window).
+  function onBlur(e: React.FocusEvent<HTMLDivElement>) {
+    if (!containerRef.current?.contains(e.relatedTarget as Node | null)) setMenuOpen(false);
+  }
+
+  function choose(action: ActionKind) {
+    closeMenu(true);
+    if (options) {
+      setModalAction(action);
+      return;
+    }
+    // D45: read on the server (zod, rate limit, can(), safeError); retried on the next open if it failed.
+    startLoading(async () => {
       const result = await loadActionOptions({ employeeId });
       if (result.success) {
         setOptions(result.data);
@@ -51,21 +101,28 @@ export default function ActionMenu({ employeeId, today }: { employeeId: string; 
       } else {
         setLoadError(result.error);
       }
-    }
-    setModalAction(action);
+      setModalAction(action);
+    });
   }
 
   return (
     <>
-      <div className="relative" ref={dropdownRef}>
-        <button
+      <div className="relative" ref={containerRef} onBlur={onBlur}>
+        <Button
           ref={triggerRef}
-          onClick={() => setDropdownOpen(!dropdownOpen)}
-          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover"
+          id={buttonId}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-controls={menuId}
+          loading={loading}
+          onClick={() => (menuOpen ? closeMenu(false) : openMenu(0))}
+          onKeyDown={onTriggerKeyDown}
         >
           Tomar Acción
           <svg
-            className={`h-4 w-4 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
+            aria-hidden="true"
+            focusable="false"
+            className={`h-4 w-4 transition-transform ${menuOpen ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             strokeWidth={2}
@@ -73,22 +130,34 @@ export default function ActionMenu({ employeeId, today }: { employeeId: string; 
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
           </svg>
-        </button>
+        </Button>
 
-        {dropdownOpen && (
-          <div className="absolute right-0 z-10 mt-2 w-64 rounded-xl border border-line bg-surface-raised py-1 shadow-lg">
-            {actions.map((a) => (
+        <ul
+          id={menuId}
+          role="menu"
+          aria-labelledby={buttonId}
+          hidden={!menuOpen}
+          onKeyDown={onMenuKeyDown}
+          className="absolute right-0 z-10 mt-2 w-64 rounded-xl border border-line bg-surface-raised py-1 shadow-lg"
+        >
+          {actions.map((a, index) => (
+            <li key={a.key} role="none">
               <button
-                key={a.key}
-                onClick={() => loadOptionsAndOpen(a.key)}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-fg transition hover:bg-surface-hover"
+                ref={(el) => {
+                  itemRefs.current[index] = el;
+                }}
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                onClick={() => choose(a.key)}
+                className="flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-fg transition hover:bg-surface-hover focus:bg-surface-hover"
               >
                 <a.icon />
                 {a.label}
               </button>
-            ))}
-          </div>
-        )}
+            </li>
+          ))}
+        </ul>
       </div>
 
       <ActionModal

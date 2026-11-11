@@ -26,7 +26,7 @@ test.describe("guardar con datos demo (admin)", () => {
     expect(title, "the employee has a current title").not.toBe("—");
 
     await page.getByRole("button", { name: "Tomar Acción" }).click();
-    await page.getByRole("button", { name: "Cambio de puesto" }).click();
+    await page.getByRole("menuitem", { name: "Cambio de puesto" }).click();
     // 9c PR 6a: the menu opens the dialog on the chosen form.
     const dialog = page.getByRole("dialog", { name: /^Cambio de puesto — / });
     await dialog.getByLabel("Título del Puesto").fill(title);

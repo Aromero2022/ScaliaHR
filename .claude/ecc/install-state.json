@@ -1737,7 +1737,7 @@
       "strategy": "preserve-relative-path",
       "ownership": "managed",
       "scaffoldOnly": false,
-      "contentSha256": "6eb78a2460adcde116e6b44fcdff7ae37aeec6208241a24417cb2db4b3b254cd"
+      "contentSha256": "79de0b2ab07a04675abdb09e3f94b0e5d27e1ffea53460de20628c513348ce60"
     },
     {
       "kind": "copy-file",

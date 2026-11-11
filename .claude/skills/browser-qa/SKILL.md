@@ -99,7 +99,4 @@ credentials/tokens/PII before saving any screenshot.
 
 Works with any browser MCP:
 - `mChild__claude-in-chrome__*` tools (preferred — uses your actual Chrome)
-- Playwright via `mcp__browserbase__*`
 - Direct Puppeteer scripts
-
-Pair with `/canary-watch` for post-deploy monitoring.
