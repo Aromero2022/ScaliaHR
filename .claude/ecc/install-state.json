@@ -334,50 +334,6 @@
     {
       "kind": "copy-file",
       "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/cpp-build-resolver.md",
-      "sourceRelativePath": "agents/cpp-build-resolver.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/cpp-build-resolver.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "0a06faff0f6be85989a22c79647743d872c3348ca772ee860f048035473c1675"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/cpp-reviewer.md",
-      "sourceRelativePath": "agents/cpp-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/cpp-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "c34ee3291505ea66d4330268babbd9cbc899e32b7869ca71cca1690b4ce3cf22"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/csharp-reviewer.md",
-      "sourceRelativePath": "agents/csharp-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/csharp-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "34652d6a39387d0d008a90804b1b271ae62bba77abaf9537b79bd7705b1724e0"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/dart-build-resolver.md",
-      "sourceRelativePath": "agents/dart-build-resolver.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/dart-build-resolver.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "2715aa7b58fae3667493a089afbfa891dfe20d24e555e90ddfdd732d10104d1f"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/database-reviewer.md",
       "sourceRelativePath": "agents/database-reviewer.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/agents/database-reviewer.md",
@@ -385,28 +341,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "945c107dea01ca74e3e9bc3a5841e79e744673e8f14697e88cf1cfd9c01a1cc5"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/django-build-resolver.md",
-      "sourceRelativePath": "agents/django-build-resolver.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/django-build-resolver.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "643f1445336ef801f49cc56a00ad09af3435124ef841f4b023be19ee50662b29"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/django-reviewer.md",
-      "sourceRelativePath": "agents/django-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/django-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "d116bccee67db3d1f52f54f819a04467fe7dd2b0004ec85d21f218a6aacf6346"
     },
     {
       "kind": "copy-file",
@@ -444,105 +378,6 @@
     {
       "kind": "copy-file",
       "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/fastapi-reviewer.md",
-      "sourceRelativePath": "agents/fastapi-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/fastapi-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "d8704e52fda045fa72cfc51de7937aa4e313b2161279ff8e11d878f6ab8a0d81"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/flutter-reviewer.md",
-      "sourceRelativePath": "agents/flutter-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/flutter-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "26a78d27db9a035204c9c517314c880a5ea4419500da319acdb643b84d59b0b8"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/fsharp-reviewer.md",
-      "sourceRelativePath": "agents/fsharp-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/fsharp-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "24200e4814ddbdb32ed2eeb5b6aecabbb3d655d5ba0de7b2a054638fe12e7c5a"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/gan-evaluator.md",
-      "sourceRelativePath": "agents/gan-evaluator.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/gan-evaluator.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "e5c8e6ab245ce97502472ae5223e529cc3d1c4c84527f4c19bcca3d362513322"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/gan-generator.md",
-      "sourceRelativePath": "agents/gan-generator.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/gan-generator.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "52411e8bb705284ef0be36a86b9df69d7365cda84a2780d5e3c2d64e6019a352"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/gan-planner.md",
-      "sourceRelativePath": "agents/gan-planner.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/gan-planner.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "852f8ac7cc1761186ec6f48e1b1be65cc32307a182062e0cebb84aae2d3ca901"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/go-build-resolver.md",
-      "sourceRelativePath": "agents/go-build-resolver.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/go-build-resolver.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "fa191d2a3c66915402b343a8f2da21090bb330968e62a8615739acccfce90424"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/go-reviewer.md",
-      "sourceRelativePath": "agents/go-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/go-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "be174fc66f6be1ade25f496548ba7040c00894aec81da163863b046d44233e39"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/harmonyos-app-resolver.md",
-      "sourceRelativePath": "agents/harmonyos-app-resolver.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/harmonyos-app-resolver.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "2385d05160744130f6f5fadbae0314a7500db92da13719779dac41eb53ae1202"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/harness-optimizer.md",
       "sourceRelativePath": "agents/harness-optimizer.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/agents/harness-optimizer.md",
@@ -550,72 +385,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "16b5cd0cd03ba4de2a9cc6b737c8cc0d4e52d3fdc423a1c2bcdd6496d65d4cfd"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/healthcare-reviewer.md",
-      "sourceRelativePath": "agents/healthcare-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/healthcare-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "ffe0855862276f94bd47fbbdeba0d233b7ca2c8647bce784c94f61c382e3cc69"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/homelab-architect.md",
-      "sourceRelativePath": "agents/homelab-architect.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/homelab-architect.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "d851727c8d07d2c44ea953d1ccab812865de3ba4b693d0392e86ba52187664bc"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/java-build-resolver.md",
-      "sourceRelativePath": "agents/java-build-resolver.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/java-build-resolver.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "6dc1da9c6ac9f39671dcf1013a8e8ab30cccf3604808d7da1b0a21935c1ac537"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/java-reviewer.md",
-      "sourceRelativePath": "agents/java-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/java-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "e768811020978d62930e8a1de33d674f07fbd479073de570df57c143b8eb33b6"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/kotlin-build-resolver.md",
-      "sourceRelativePath": "agents/kotlin-build-resolver.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/kotlin-build-resolver.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "db6796bdc2294d795bac286f7c04f4e6048af8acb3faf80edfc110285172e16b"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/kotlin-reviewer.md",
-      "sourceRelativePath": "agents/kotlin-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/kotlin-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "be82de3435c4b7b48e4ff9589e8c211d80fafa5c8c9ac98d6572c88004519858"
     },
     {
       "kind": "copy-file",
@@ -631,94 +400,6 @@
     {
       "kind": "copy-file",
       "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/marketing-agent.md",
-      "sourceRelativePath": "agents/marketing-agent.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/marketing-agent.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "9d9cdcde2f90ba36ac488065beaa4fc3b74ff5a91507e504b9ea2cc608213cf8"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/mle-reviewer.md",
-      "sourceRelativePath": "agents/mle-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/mle-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "c505be5fccea9d067775b86fed76bc4b84e63e17090855ac135694adbc83a7f8"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/network-architect.md",
-      "sourceRelativePath": "agents/network-architect.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/network-architect.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "1b434aa8496a1cb8c39add08d0c68a4b27af8378de725f370d7682c02a56997e"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/network-config-reviewer.md",
-      "sourceRelativePath": "agents/network-config-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/network-config-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "12b2b04d8235941f6a9a0d42a679c581ce89963172d5fb0f63abb4202521593f"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/network-troubleshooter.md",
-      "sourceRelativePath": "agents/network-troubleshooter.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/network-troubleshooter.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "64528c41b59eea2cb4ac642bd3197bbadc8c456f3601520e410cf606e848fb07"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/opensource-forker.md",
-      "sourceRelativePath": "agents/opensource-forker.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/opensource-forker.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "3b302c2d4b080509a1f290e74412eb8076bec9aa42438e74c52fe519f8ff0242"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/opensource-packager.md",
-      "sourceRelativePath": "agents/opensource-packager.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/opensource-packager.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "996f528ac789b3c19ded6bf7c25217a3e9e7c1e6d320a4f9d69f17252815cb16"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/opensource-sanitizer.md",
-      "sourceRelativePath": "agents/opensource-sanitizer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/opensource-sanitizer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "cee1d6cf26759c085fe090ca5ac92d37c5dbeceef0f1b00434369a6e812da371"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/performance-optimizer.md",
       "sourceRelativePath": "agents/performance-optimizer.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/agents/performance-optimizer.md",
@@ -726,17 +407,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "76d00a70fcc07a0b207f6b517d54078fa7a59f29e157fea72bf5f1d9cab8f9b2"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/php-reviewer.md",
-      "sourceRelativePath": "agents/php-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/php-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "5ea9c18d0adedcf6ef7d46cc35ec91cdde2fa8fc3cfe1d1ece477347cb1a4a30"
     },
     {
       "kind": "copy-file",
@@ -759,39 +429,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "5432aaf7e5fcb0813ac21828382971cc00f17d56ee95eac6d0ce180fc5d58016"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/python-reviewer.md",
-      "sourceRelativePath": "agents/python-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/python-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "d2180b115f5840383268c13d5d075b0541fe7ef2a1ac8ecd5d835266ca1b27ce"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/pytorch-build-resolver.md",
-      "sourceRelativePath": "agents/pytorch-build-resolver.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/pytorch-build-resolver.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "5ec08de6c6b616b068e7075be4496edd3e4ef3b041f0095a2e073131a58a9f7c"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/rag-pipeline-reviewer.md",
-      "sourceRelativePath": "agents/rag-pipeline-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/rag-pipeline-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "793432a0c4e44aa4c640cb85ec24b47062ed044782852b0ba67323d860154fec"
     },
     {
       "kind": "copy-file",
@@ -829,28 +466,6 @@
     {
       "kind": "copy-file",
       "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/rust-build-resolver.md",
-      "sourceRelativePath": "agents/rust-build-resolver.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/rust-build-resolver.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "78c75c6be38ff376963b3c5b26d60dce0491064481d1a61e842a6d2879534e82"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/rust-reviewer.md",
-      "sourceRelativePath": "agents/rust-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/rust-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "10af67c5764677596d43f32a952d8ec28662bb353fd986d726daefd3382ebeca"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/security-reviewer.md",
       "sourceRelativePath": "agents/security-reviewer.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/agents/security-reviewer.md",
@@ -858,17 +473,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "813e4062bed5f42ab25dd02a0070f682058ffe9508198fcfdbb2c31296f93b7b"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/seo-specialist.md",
-      "sourceRelativePath": "agents/seo-specialist.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/seo-specialist.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "40a66d601113669585cf6abbf4c9ae2bf134ef23ffdb78c45223733dbde90a2c"
     },
     {
       "kind": "copy-file",
@@ -891,28 +495,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "a9270c2012e2dc979f153a481cdfdc7c5413e8774f579ada0319c00ea8903ba2"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/swift-build-resolver.md",
-      "sourceRelativePath": "agents/swift-build-resolver.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/swift-build-resolver.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "219e9e37151e385c0eae69b28306897e2a21ba1dbad5ed3077801c822c98b156"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/swift-reviewer.md",
-      "sourceRelativePath": "agents/swift-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/swift-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "b8de7f16fafef82645aca3923b0c4fdbe619433c5df9386b3737fb6591545e8b"
     },
     {
       "kind": "copy-file",
@@ -950,17 +532,6 @@
     {
       "kind": "copy-file",
       "moduleId": "agents-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/agents/vue-reviewer.md",
-      "sourceRelativePath": "agents/vue-reviewer.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/agents/vue-reviewer.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "c675814544f06703cf34347c24c630267073d6ee605e70820fc1c1a74e71358a"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "agents-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/AGENTS.md",
       "sourceRelativePath": "AGENTS.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/AGENTS.md",
@@ -979,17 +550,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "828d2739fce0b0d1cce5b5c69b277c445f21c853547e23b317d7fb0cb63ed800"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/auto-update.md",
-      "sourceRelativePath": "commands/auto-update.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/auto-update.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "e9f54487961497cf6c3f65a9802843cf067088029712f4ff6b623807eb97edc8"
     },
     {
       "kind": "copy-file",
@@ -1016,61 +576,6 @@
     {
       "kind": "copy-file",
       "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/code-review.md",
-      "sourceRelativePath": "commands/code-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/code-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "e55af6bc13aedb709a539a4e0587b9511ddab2773c0756f3d4cdb5f3f1714bae"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/cost-report.md",
-      "sourceRelativePath": "commands/cost-report.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/cost-report.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "942a25f185062882e67e77a399d04c88ef12d7eb35033f309e053973bb653710"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/cpp-build.md",
-      "sourceRelativePath": "commands/cpp-build.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/cpp-build.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "0850ec6adad0e96d832ebf584c34788a8d98998a8e05743166c1c1e0057c23ef"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/cpp-review.md",
-      "sourceRelativePath": "commands/cpp-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/cpp-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "58a0e058207bb8e96d6fe02f1a71db77157f30121dd5c7aec32c0f4a91523576"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/cpp-test.md",
-      "sourceRelativePath": "commands/cpp-test.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/cpp-test.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "6bd5d550a008568a9227c942c9b71038c430ab63b32fcf96d0a9b5f416eacb9f"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/ecc-guide.md",
       "sourceRelativePath": "commands/ecc-guide.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/commands/ecc-guide.md",
@@ -1078,83 +583,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "e96cf0365e21f2b54270de6564593c274867ded288b86cd8e8a708b44d12d83d"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/epic-claim.md",
-      "sourceRelativePath": "commands/epic-claim.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/epic-claim.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "fab151e31f5ed680cff1e171c65870ab18dbdd481fe5b94378dc57f98b0eb6ab"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/epic-decompose.md",
-      "sourceRelativePath": "commands/epic-decompose.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/epic-decompose.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "cc5ddee38eb6f87bc995e686b474b8b57e04aaf35394cfaaa3fd1ae5a579d5b1"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/epic-publish.md",
-      "sourceRelativePath": "commands/epic-publish.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/epic-publish.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "d13da877f7e0a4a632a7bbc2acf5e9fb1e28ad1d6b554f2c7cd7dd3198ce4cd4"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/epic-review.md",
-      "sourceRelativePath": "commands/epic-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/epic-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "4c9ce11bb8d7375f6d2128e0883071ccbf4162df8ed445e565706983f6c17b42"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/epic-sync.md",
-      "sourceRelativePath": "commands/epic-sync.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/epic-sync.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "b191bedc4bfafb8a03818042dbc87ed175930e27a042c112c219912626dceb79"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/epic-unblock.md",
-      "sourceRelativePath": "commands/epic-unblock.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/epic-unblock.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "48c1868f03b6ceda7a923d98c76206a35eefa91774a61a0d9d4c18ea5713a4e7"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/epic-validate.md",
-      "sourceRelativePath": "commands/epic-validate.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/epic-validate.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "894516dd4de62c6c28254c841f11a6ae461869cb8e78c4eff984fb108c2d92ad"
     },
     {
       "kind": "copy-file",
@@ -1170,17 +598,6 @@
     {
       "kind": "copy-file",
       "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/fastapi-review.md",
-      "sourceRelativePath": "commands/fastapi-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/fastapi-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "758f6c55befc3255e5b1c1dc6df41453b21543a93b6aa9df0fb1be9e334831a8"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/feature-dev.md",
       "sourceRelativePath": "commands/feature-dev.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/commands/feature-dev.md",
@@ -1188,105 +605,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "b446c316f680a1ab709f2eabff15d5e88b57396f4581ea8b0f9260d04bd4be34"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/flutter-build.md",
-      "sourceRelativePath": "commands/flutter-build.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/flutter-build.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "589c18404b15703bd306023d0210b8f974a395dc4b00c5bc70d41cb64a0da627"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/flutter-review.md",
-      "sourceRelativePath": "commands/flutter-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/flutter-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "631142330e5884cd0dae2d404d183b0dda4c5f6b1752a21e7d1e70b0be6d2e28"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/flutter-test.md",
-      "sourceRelativePath": "commands/flutter-test.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/flutter-test.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "22d547f9a255ddbbcebdcc90ca48a6865896f8cf00d39ed5d3e49504d716c363"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/gan-build.md",
-      "sourceRelativePath": "commands/gan-build.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/gan-build.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "b3c4b47a40cfcdf386b9bff327a7237ea405e97fdafdc8cd421075dfd35175ea"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/gan-design.md",
-      "sourceRelativePath": "commands/gan-design.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/gan-design.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "0f0d80a171d4637b1cd38998f5f260cdc445473b7b81a170f50b8491103f9723"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/go-build.md",
-      "sourceRelativePath": "commands/go-build.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/go-build.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "916659397d2e01f9bf211fca43a8a2f79eb73d6382fccd516b240b5d0e5f37a0"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/go-review.md",
-      "sourceRelativePath": "commands/go-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/go-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "73a29ec62007e25490d0962ed52fe196eac3df31c6ccd774b10c9a8e07b63b39"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/go-test.md",
-      "sourceRelativePath": "commands/go-test.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/go-test.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "4e091753684305224b5b8f5f497cb66f14383530659a95b9d327f3c8b3b2c0e3"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/gradle-build.md",
-      "sourceRelativePath": "commands/gradle-build.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/gradle-build.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "c2aa086148316326ae10ee97229d040a0b7a9b743c016bfad4032ce96bb097a9"
     },
     {
       "kind": "copy-file",
@@ -1379,50 +697,6 @@
     {
       "kind": "copy-file",
       "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/jira.md",
-      "sourceRelativePath": "commands/jira.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/jira.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "0503ced85e1144d03c1bb32f0f34003c9cc6c8f17d05a516ce6d5902a5f62c8b"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/kotlin-build.md",
-      "sourceRelativePath": "commands/kotlin-build.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/kotlin-build.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "2a5ea5ae245b5ab54d22cd2c539890fee4695ad0bb93b38898f15d4452044564"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/kotlin-review.md",
-      "sourceRelativePath": "commands/kotlin-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/kotlin-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "3b18cb5e03a577a411d77c44bd47cfd1007666701d7aa3c0d850bbb73ab3e3c7"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/kotlin-test.md",
-      "sourceRelativePath": "commands/kotlin-test.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/kotlin-test.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "4c6dd961714ecacddf8fc7c72e9930b323100a7a5eef8cc0f40e176f2ee2044c"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/learn-eval.md",
       "sourceRelativePath": "commands/learn-eval.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/commands/learn-eval.md",
@@ -1463,28 +737,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "74ca3ff7a7249f5d0bc7f87cdec882ef1f682ebc6567653eac5bb7ebaeae8b2e"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/marketing-campaign.md",
-      "sourceRelativePath": "commands/marketing-campaign.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/marketing-campaign.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "58b3eb75ebcc4ca1399dcf7b8e8e135cf0af4fcd476d1de6ce4c34f88c71eec9"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/model-route.md",
-      "sourceRelativePath": "commands/model-route.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/model-route.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "2e9789cb610bfa1a382dbaa46480a03aa976445d23b9ff719e4358bafa7292eb"
     },
     {
       "kind": "copy-file",
@@ -1573,28 +825,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "eef91fc48d8725238e4a23625156efa046e8ba51fb03e97b4162a2aa7cfb66be"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/plan.md",
-      "sourceRelativePath": "commands/plan.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/plan.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "8d0caa8380eba2f2550937553c9c8c8f253c627cff662f0c333e6ad982706e3e"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/pm2.md",
-      "sourceRelativePath": "commands/pm2.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/pm2.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "daef0378434ae10f9c329d67854eb9750732dfe52d83e0c28fba30fcbda2323e"
     },
     {
       "kind": "copy-file",
@@ -1709,17 +939,6 @@
     {
       "kind": "copy-file",
       "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/python-review.md",
-      "sourceRelativePath": "commands/python-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/python-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "7982b50c59cad83941400a436c1d1001d73fe9bdba6cb84a3ac7c6d43f394c99"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/quality-gate.md",
       "sourceRelativePath": "commands/quality-gate.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/commands/quality-gate.md",
@@ -1797,50 +1016,6 @@
     {
       "kind": "copy-file",
       "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/rust-build.md",
-      "sourceRelativePath": "commands/rust-build.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/rust-build.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "94f2eba2a0ea2d4178583ba86808cf7117d7e0bcf76dd3729f840cebcda01560"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/rust-review.md",
-      "sourceRelativePath": "commands/rust-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/rust-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "19e9eb0c5805e982f9d864202dde19c49b394e8d8e28030b3aeac33c157d812c"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/rust-test.md",
-      "sourceRelativePath": "commands/rust-test.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/rust-test.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "1c73649d877a9b023e1c0b013f54fa9f7e733a14fbcbf2e49e7742d4e80bc86f"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/santa-loop.md",
-      "sourceRelativePath": "commands/santa-loop.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/santa-loop.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "a18d65eddb6cf1d5c2f80ba3275638fef6a1a473baddedfdecb8e3af0f65ac23"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
       "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/save-session.md",
       "sourceRelativePath": "commands/save-session.md",
       "destinationPath": "/home/user/ScaliaHR/.claude/commands/save-session.md",
@@ -1870,17 +1045,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "87d9eccf2c89fc7dc26f79c83ea1713f3ef51bfe7357c6ff5fa2e09c2d76d5e0"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/setup-pm.md",
-      "sourceRelativePath": "commands/setup-pm.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/setup-pm.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "163b3cd106028d21dbd2a91b47f1cf99957e40a78ed9e5e5dc8507e225f73a2d"
     },
     {
       "kind": "copy-file",
@@ -1936,17 +1100,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "f0f4645d697c7c5874b79c64218cd2057a291cc6301f6a044cb2bac5ccc14f4a"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "commands-core",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/commands/vue-review.md",
-      "sourceRelativePath": "commands/vue-review.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/commands/vue-review.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "bd9fe40b1fc015a8d39a7db5e955ccd54f57eafb6e9db367a195dcd037b3c67a"
     },
     {
       "kind": "copy-file",
@@ -2046,28 +1199,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "bc6685e4cd72ef0072b6e4f8d34d9680ed0430c97444fdc1cb54c4fa31298c0d"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "platform-configs",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/mcp-configs/mcp-servers.json",
-      "sourceRelativePath": "mcp-configs/mcp-servers.json",
-      "destinationPath": "/home/user/ScaliaHR/.claude/mcp-configs/mcp-servers.json",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "1424c0de0ee3efd13ebbb8e9724c26e6b7dc604b7edeff6616b2c71cb4c6bd46"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "platform-configs",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/scripts/auto-update.js",
-      "sourceRelativePath": "scripts/auto-update.js",
-      "destinationPath": "/home/user/ScaliaHR/.claude/scripts/auto-update.js",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "86f6b3a9254a59d68e51c7066a8939c08e26f70a551dba6394a06fe4ddbc64e7"
     },
     {
       "kind": "copy-file",
@@ -2739,17 +1870,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "503aebee7d414f559c4874600081a40b1e7aea269b58073c5c9660c6641b00a0"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "workflow-quality",
-      "sourcePath": "/root/.npm/_npx/75937596e609f96e/node_modules/ecc-universal/skills/windows-desktop-e2e/SKILL.md",
-      "sourceRelativePath": "skills/windows-desktop-e2e/SKILL.md",
-      "destinationPath": "/home/user/ScaliaHR/.claude/skills/windows-desktop-e2e/SKILL.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "cbc93a1e2514ecdcee30da744aa13eb6c0ebe4948ca3dfff52b287df4f9f0814"
     },
     {
       "kind": "copy-file",
