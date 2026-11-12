@@ -13,7 +13,8 @@ import { tooManyRequestsText } from "@/lib/rate-limit-message";
 // Enter picks one, Esc closes the list (a second Esc reaches the dialog). The
 // number of people found is read by a polite live region once the typing
 // settles, not on every key. A 429 or a failure shows a safe message, never
-// "no results".
+// "no results"; so does a refused request (400, 403, 415, 9c PR 6c), whatever
+// text the route answered.
 
 const t = messages.peopleSearch;
 

@@ -36,6 +36,12 @@ test.describe("PersonSearch como combobox (empleada)", () => {
     expect(sent.method()).toBe("POST");
     expect(new URL(sent.url()).search).toBe("");
     expect(sent.postDataJSON()).toEqual({ q: "Patricia" });
+    // The browser's own Origin and Content-Type pass the route's checks.
+    // allHeaders(): Chromium's network layer adds Origin after the request is created.
+    const sentHeaders = await sent.allHeaders();
+    expect(sentHeaders["origin"]).toBe(new URL(page.url()).origin);
+    expect(sentHeaders["content-type"]).toBe("application/json");
+    expect((await sent.response())?.status()).toBe(200);
     await expect(listbox).toBeVisible();
     await expect(input).toHaveAttribute("aria-expanded", "true");
     const option = listbox.getByRole("option", { name: "Patricia Castro" });
@@ -71,6 +77,29 @@ test.describe("PersonSearch como combobox (empleada)", () => {
     await page.keyboard.press("Enter");
     await expect(dialog.getByRole("combobox", { name: "Buscar destinatario" })).toBeFocused();
     expect(problems()).toEqual([]);
+  });
+
+  test("/api/colleagues rechaza un GET, otro Content-Type, otro Origin y un cuerpo inválido", async ({ page }) => {
+    await openProtected(page, "/performance");
+    const url = new URL("/api/colleagues", page.url()).toString();
+    const origin = new URL(page.url()).origin;
+    const api = page.request;
+    expect((await api.get(`${url}?q=Patricia`)).status()).toBe(405);
+    expect((await api.post(url, { headers: { Origin: origin, "Content-Type": "text/plain" }, data: '{"q":"Patricia"}' })).status()).toBe(415);
+    for (const foreign of ["https://evil.example", "http://otra-empresa.localhost:3000"]) {
+      const refused = await api.post(url, { headers: { Origin: foreign }, data: { q: "Patricia" } });
+      expect(refused.status()).toBe(403);
+      const { error } = (await refused.json()) as { error: string };
+      // The safe message carries the request id of that same response (D27).
+      expect(error).toBe(`No se pudo completar la operación. Intenta de nuevo. Código: ${refused.headers()["x-request-id"]}`);
+      expect(error).not.toContain("Patricia");
+    }
+    const invalid = await api.post(url, { headers: { Origin: origin }, data: { q: "P" } });
+    expect(invalid.status()).toBe(400);
+    expect(await invalid.json()).toEqual({ colleagues: [] });
+    expect(invalid.headers()["cache-control"]).toBe("private, no-store");
+    const ok = await api.post(url, { headers: { Origin: origin }, data: { q: "Patricia" } });
+    expect(ok.status()).toBe(200);
   });
 
   test("un 429 de /api/colleagues muestra el mensaje seguro, no «sin resultados»", async ({ page }) => {

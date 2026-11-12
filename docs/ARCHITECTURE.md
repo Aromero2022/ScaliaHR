@@ -2016,9 +2016,31 @@ one person is a search. Phase 9b, PR 5.
   range), which also serve lookups by user.
 - **Since 9c PR 6c, `/api/colleagues` is a POST.** The search goes in a JSON
   body validated with Zod (`q`, 2 to 60 characters; `self`, a boolean), so it
-  never sits in a URL (D27). There is no GET; the rate limit, the session
-  check, the 20 results and the safe 429 message of PersonSearch and ⌘K (D49)
-  are unchanged.
+  never sits in a URL (D27). The rate limit, the session check and the 20
+  results are unchanged. After the limiter and the session, in this order:
+  - **Content-Type:** anything but `application/json` (a parameter such as
+    `charset` is fine) gets 415. A form on another site can only send
+    `text/plain`, a form encoding or `multipart`; a `fetch` with JSON from
+    another site needs a CORS preflight, and this route never approves one.
+  - **Origin:** it must be present, and its host and port must be the
+    request's `Host`, the header D21 reads for the tenant. A missing Origin,
+    another site, another tenant's subdomain, another port or `null` gets 403
+    with `safeError()`: the generic message with the request id. The reason
+    (missing or foreign) goes to the logs, without the Origin's value.
+    Browsers send Origin on every POST, so PersonSearch and ⌘K are not
+    affected. A proxy in front of the app (Phase 23) must keep `Host`, or this
+    check must read the forwarded host the proxy sets.
+  - **Body:** invalid or not JSON gets 400 with `{ colleagues: [] }` and
+    `Cache-Control: private, no-store`.
+  - **GET** gets 405 with `Allow: POST`, after spending a token like every
+    handler (D28).
+  - PersonSearch and ⌘K (D49) show their safe search message for a 400, 403
+    or 415, as for any other failure. They never show the route's text, and
+    never "no results". The safe 429 message is unchanged.
+  - Tested in unit tests (each refusal, its order after the limiter and the
+    session, and PersonSearch's message) and in the production image (the
+    browser's real Origin passes; GET, `text/plain`, a foreign Origin, another
+    subdomain and an invalid body are refused).
 
 ---
 
