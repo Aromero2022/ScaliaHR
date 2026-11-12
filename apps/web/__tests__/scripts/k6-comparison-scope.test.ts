@@ -251,7 +251,8 @@ describe("the CI step on a merge commit like GitHub's (D36)", { timeout: 20_000 
     const shims = tempDir("d36-git-shim-");
     writeFileSync(path.join(shims, "git"), `#!/usr/bin/env bash\n[ "$1" = diff ] && exit 128\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
     const result = runStep(clone, prHead, shims);
-    expect(result.status).not.toBe(0);
+    // git diff's own exit code: the head check passed and the diff stopped the step.
+    expect(result.status).toBe(128);
     expect(result.stdout).not.toContain("D36 comparison");
     expect(result.summary).toBe("");
   });
