@@ -34,4 +34,14 @@ describe("EmployeeListParams", () => {
     expect(EmployeeListParams.parse({ q: "x".repeat(101), page: "abc" })).toEqual({ q: "", page: 1 });
     expect(EmployeeListParams.parse({})).toEqual({ q: "", page: 1 });
   });
+
+  it("reads ⌘K's person as a guid, and anything else as a filter that matches no one (9c PR 6c)", () => {
+    const id = "e0000000-0000-0000-0000-000000000013";
+    expect(EmployeeListParams.parse({}).person).toBeUndefined();
+    expect(EmployeeListParams.parse({ person: id }).person).toBe(id);
+    expect(EmployeeListParams.parse({ person: ` ${id} ` }).person).toBe(id);
+    for (const bad of ["patricia.castro@acme.dev", "not-a-guid", "", "e0000000-0000-0000-0000-00000000001", [id, id]]) {
+      expect(EmployeeListParams.parse({ person: bad }).person, JSON.stringify(bad)).toBeNull();
+    }
+  });
 });

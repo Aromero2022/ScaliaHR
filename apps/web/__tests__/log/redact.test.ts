@@ -12,7 +12,7 @@ describe("redaction (D27)", () => {
       }),
     ).toEqual({
       password: REDACTED,
-      user: { email: "ana@acme.test", rfc: REDACTED, curp: REDACTED, nss: REDACTED, clabe: REDACTED, salary: REDACTED },
+      user: { email: "[EMAIL]", rfc: REDACTED, curp: REDACTED, nss: REDACTED, clabe: REDACTED, salary: REDACTED },
       headers: { authorization: REDACTED, cookie: REDACTED, "x-api-key": REDACTED },
       accessToken: REDACTED,
     });
@@ -20,6 +20,9 @@ describe("redaction (D27)", () => {
 
   it.each([
     ["Key (rfc)=(GODE561231GR8) already exists", "Key (rfc)=([RFC]) already exists"],
+    // 9c PR 6c: emails, quoted by a duplicate key or a search filter
+    ["Key (email)=(ana.ruiz+rh@acme.com.mx) already exists", "Key (email)=([EMAIL]) already exists"],
+    ['failed to parse logic tree ((email.ilike."%patricia.castro@acme.dev%"))', 'failed to parse logic tree ((email.ilike."%[EMAIL]%"))'],
     ["curp GODE561231HDFRRN09 duplicated", "curp [CURP] duplicated"],
     ["clabe 012180001234567891 rejected", "clabe [CLABE] rejected"],
     ["nss 12345678901 invalid", "nss [NSS] invalid"],

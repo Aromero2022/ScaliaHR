@@ -13,7 +13,8 @@ import { tooManyRequestsText } from "@/lib/rate-limit-message";
 // Enter picks one, Esc closes the list (a second Esc reaches the dialog). The
 // number of people found is read by a polite live region once the typing
 // settles, not on every key. A 429 or a failure shows a safe message, never
-// "no results".
+// "no results"; so does a refused request (400, 403, 415, 9c PR 6c), whatever
+// text the route answered.
 
 const t = messages.peopleSearch;
 
@@ -43,8 +44,13 @@ export function usePeopleSearch(query: string, includeSelf: boolean): PeopleSear
     const timer = setTimeout(async () => {
       setSearch({ status: "loading" });
       try {
-        const params = new URLSearchParams({ q, ...(includeSelf ? { self: "1" } : {}) });
-        const res = await fetch(`/api/colleagues?${params}`, { signal: controller.signal });
+        // 9c PR 6c: the search goes in the body, never in the URL.
+        const res = await fetch("/api/colleagues", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ q, ...(includeSelf ? { self: true } : {}) }),
+          signal: controller.signal,
+        });
         if (res.status === 429) {
           setSearch({ status: "error", notice: tooManyRequestsText(Number(res.headers.get("Retry-After")) || 60) });
         } else if (!res.ok) {
