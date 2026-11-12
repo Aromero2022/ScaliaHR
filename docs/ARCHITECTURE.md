@@ -2009,8 +2009,8 @@ machine):**
     - The three variants, applied to the ten `main` runs from 94e2020 to
       fbc9be5 and to #73 and #74 as if each were a pull request. The counts
       use nine samples whose baseline is entirely after the level shift
-      below: the five `main` runs from e31ae2d to fbc9be5 and the two runs
-      each of #73 and #74.
+      below: the five `main` runs e31ae2d, ed27e7f, d7aebe3, 9277389 and
+      fbc9be5, and the two runs each of #73 and #74.
       - Three runs, +20 %: false block estimated at 44 % (#73 and #74
         blocked); a regression of +50 % blocks 60 % of the time, +100 % 79 %.
       - Five runs, +20 %: 20 % (#74 blocked); +50 % 60 %, +100 % 79 %.
@@ -2047,8 +2047,9 @@ machine):**
       possible causes are mixed: heavier pages from D43, and a stack that
       has just served the e2e.
     - Drift control (informational, never blocks): the reference is
-      92.04 ms, the median of the ten runs from 94e2020 to fbc9be5, so it
-      already includes the uninvestigated level shift. The main loop
+      92.04 ms, the median of the ten runs from 94e2020 to fbc9be5 (the
+      sample measured before 30eae8c), so it already includes the
+      uninvestigated level shift. The main loop
       reports the five-run median of `main` against it in every pull
       request's verification table. More than 50 % above it (138.06 ms) is
       marked "deriva", and the phase's next pull request does not open until
