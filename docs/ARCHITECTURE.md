@@ -3480,6 +3480,103 @@ request that repeats these removals and edits.
 the build, `check:forbidden` and gitleaks over the whole history, all at zero.
 Outside `.claude/`, only this document and `docs/ROADMAP.md` change.
 
+## D52 — ECC Agents in the Loops: One Stage Each, Reviewers Only Report
+
+**Decision:** `CLAUDE.md` has a section, "Agentes ECC en los loops
+(.claude/agents)", that gives each of the 28 agents D50 kept a stage in the
+loop, or says it runs only when the user asks, or not at all. It also lists the
+ECC commands and skills that are not used. That section is the rule; this entry
+records why and its limits. D51 is reserved for `motion/react` (9c PR 6d).
+
+**Precedence:** `CLAUDE.md` prevails over every ECC agent, skill, command and
+rule (D50). A suggestion that contradicts it is dropped and written in the
+pull request's verification table. Review agents only report: the main loop
+makes every fix, surgically and inside the pull request's scope. A finding
+outside that scope is written down as an observation with its phase, not
+fixed.
+
+**Stages:**
+1. Understand and plan, read-only, before any code: `code-explorer`,
+   `planner` (a brief plan with checks, no PRD), and `architect` and
+   `code-architect` only for a new D decision or a new pattern.
+2. Implement: `build-error-resolver` and `react-build-resolver`, minimal diffs
+   only.
+3. Review, in parallel over `git diff` against main, before the pull request
+   is opened or updated:
+   - Always: `code-reviewer`, `typescript-reviewer`, `security-reviewer`,
+     `silent-failure-hunter` and `pr-test-analyzer`.
+   - Depending on the diff: `database-reviewer`, `react-reviewer`,
+     `a11y-architect`, `type-design-analyzer`, `comment-analyzer` and
+     `performance-optimizer`.
+   - A critical or high finding is fixed, and the agent that found it runs
+     again until it reports none.
+   - The verification table has one row per agent.
+4. E2E: `e2e-runner`, only when UI flows change, with local Playwright. Tests
+   really run, and none is quarantined or disabled to get CI green.
+
+**Only when the user asks:** `tdd-guide`, `code-simplifier` and
+`refactor-cleaner` (only in a cleanup pull request of their own) and
+`doc-updater`.
+
+**Not used:** the agents `chief-of-staff`, `conversation-analyzer`,
+`harness-optimizer`, `loop-operator`, `spec-miner` and `agent-evaluator`, 21
+commands and 5 skills, listed in `CLAUDE.md`. They stay installed, so
+`ecc doctor` still matches `install-state.json`.
+
+**Why:**
+- Some agents' defaults contradict `CLAUDE.md`, and the section names the
+  rule that wins for each:
+  - `e2e-runner` prefers Vercel Agent Browser (installed with
+    `npm install -g agent-browser`) and quarantines flaky tests.
+  - `tdd-guide` requires 80 % coverage.
+  - `doc-updater` generates `docs/CODEMAPS/`.
+- If reviewers only report, one author owns the diff: every fix goes through
+  the same checks and stays in scope.
+- By their own descriptions, what is not used works outside a pull request's
+  scope:
+  - `chief-of-staff` triages email and chat.
+  - `conversation-analyzer` feeds `/hookify`, and there are no hooks (D50).
+  - `harness-optimizer` tunes the agent harness, and `loop-operator`,
+    `/loop-start` and `/loop-status` drive autonomous loops.
+  - `spec-miner` writes `openspec/specs/`.
+  - `agent-evaluator` grades agent output.
+  - `/pr` and `/prp-pr` push and run `gh pr create` on their own, outside the
+    draft-and-approval flow.
+  - `/checkpoint` makes a git stash or commit and writes
+    `.claude/checkpoints.log`.
+  - `/quality-gate` is a Biome or Prettier check meant to run as a hook, and
+    the repo uses neither.
+  - `/security-scan` runs `npx ecc-agentshield`, a package outside the
+    lockfile.
+  - `/hookify*` writes hook rules.
+  - `/learn*`, `/evolve`, `/instinct-*`, `/promote`, `/prune` and the
+    `continuous-learning` skills write learned instincts and skills; v2
+    observes sessions through hooks.
+  - `/update-docs` and `/update-codemaps` rewrite documentation.
+  - `unified-memory` keeps a vault in `~/.ecc/memory/`, outside the repo.
+  - `council` and `santa-method` add more multi-agent passes on top of
+    stage 3.
+
+**Known limits:**
+- This is an instruction, not a control: nothing checks that a loop ran the
+  agents its diff called for. The person who approves reads the verification
+  table.
+- `a11y-architect` and `performance-optimizer` only report, yet both keep
+  `Write` and `Edit` in their `tools:`. That holds only as long as the loop's
+  prompt tells them so. Removing those tools changes files that
+  `install-state.json` tracks, so it takes its own pull request, as D50's
+  edits did.
+- 15 of the 28 agent descriptions say "Use PROACTIVELY" or "MUST BE USED".
+  That includes `tdd-guide`, `refactor-cleaner` and `doc-updater`, which run
+  only when the user asks. Claude Code may delegate to an agent on its own
+  because of its description; `CLAUDE.md` prevails.
+- The other 23 commands and 36 skills are not named and stay as D50 left them.
+  One of them, `/prp-prd`, writes a PRD, which `planner` must not.
+
+**Checks:** eslint and tsc in `apps/web`, `packages/email` and `apps/worker`,
+the build, `check:forbidden` and gitleaks over the whole history, all at zero.
+Only `CLAUDE.md`, this document and `docs/ROADMAP.md` change.
+
 ---
 
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
