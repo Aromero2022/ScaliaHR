@@ -1960,6 +1960,31 @@ machine):**
     (the threshold of the run itself).
   - For 6b: 108.5 ms (387e0d8), 96.8 ms (736ee57) and 157.1 ms (e31ae2d), so
     the median is 108.5 ms and the limit 130.2 ms.
+  - **Pull requests that cannot change the images (after 9c PR 6c):** when the
+    diff against `main` only touches `**/*.md`, `docs/**` or `.claude/**`, k6
+    still runs, but the comparison with the median does not block and needs
+    no confirming re-run. The run's own p95 < 500 ms threshold still gates.
+    - Why those paths: `docs` is in `.dockerignore`; the final stage of both
+      Dockerfiles copies only build output from earlier stages (the web's
+      `.next/standalone` and `.next/static`, the worker's `dist` and
+      production `node_modules`); and no application source reads a Markdown
+      file. A unit test checks these three. `.claude/` and the root Markdown
+      files do enter the pruner stage (`COPY . .`), but `turbo prune` does not
+      carry them on: checked by hand for both images, with no test.
+    - Markdown aside, every other path counts, even one that reaches no image:
+      `.github/`, `load/`, `scripts/` and `supabase/` can change the k6 run
+      itself.
+    - Detection: the step "Does the diff change the images? (D36)" of the
+      `docker` job, on pull requests only, so only pull request runs carry a
+      verdict. It diffs GitHub's merge commit with its first parent (`git
+      diff -z --name-only --no-renames HEAD^1 HEAD`), so the list is what the
+      merge adds to `main`. A rename also lists the deleted path, and an
+      empty diff (the merge equals `main`) counts as not applicable.
+    - The step prints "applies" or "not applicable (no changes in the
+      images)" in the log and in the job summary; the pull request's
+      verification table writes the second as "no aplica (sin cambios en la
+      imagen)". If HEAD is not the pull request's merge commit, or `git diff`
+      fails, the step fails the job instead of picking an answer.
 
 ---
 

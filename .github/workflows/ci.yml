@@ -263,11 +263,35 @@ jobs:
     # there is no registry login and no push step (publishing is Phase 23).
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2 # the pull request's merge commit and both parents (D36)
 
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
+
+      # D36: on a pull request, HEAD is GitHub's merge commit: HEAD^1 is main and
+      # HEAD^2 the pull request. If the diff only touches **/*.md, docs/** or
+      # .claude/**, the images are main's and k6 is not compared with main's
+      # median. A failure here fails the job: it never falls back to either answer.
+      - name: Does the diff change the images? (D36)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Empty when HEAD has no second parent (not a merge, or a depth-1 clone).
+          parent="$(git rev-parse --verify --quiet HEAD^2 || true)"
+          if [ -z "$PR_HEAD" ] || [ "$parent" != "$PR_HEAD" ]; then
+            echo "::error::HEAD is not the merge commit of this pull request (HEAD^2: ${parent:-none}, pull request head: ${PR_HEAD:-none})"
+            exit 1
+          fi
+          # To a file first: a failing git diff stops the step before anything is
+          # classified, so it never reads as an empty diff.
+          files="$(mktemp)"
+          git diff -z --name-only --no-renames HEAD^1 HEAD > "$files"
+          node scripts/k6-comparison-scope.mjs < "$files"
 
       - name: Install dependencies
         run: npm ci
