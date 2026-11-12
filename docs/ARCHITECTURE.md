@@ -1953,11 +1953,12 @@ machine):**
   two CI runs, and the merge of 6a gave 157.1 ms on `main` after 113.9 ms on
   its pull request.
   - The baseline is the median of the steady-state p95 of the last three CI
-    runs on `main`.
+    runs on `main`. (Replaced by the noise band below.)
   - A pull request blocks if its steady-state p95 is more than 20 % above that
     median in two runs in a row: a first run above it is confirmed by
     re-running the Docker job once. It also blocks if the p95 passes 500 ms
-    (the threshold of the run itself).
+    (the threshold of the run itself). (The noise band below replaces the
+    20 %.)
   - For 6b: 108.5 ms (387e0d8), 96.8 ms (736ee57) and 157.1 ms (e31ae2d), so
     the median is 108.5 ms and the limit 130.2 ms.
   - **Pull requests that cannot change the images (after 9c PR 6c):** when the
@@ -1985,6 +1986,53 @@ machine):**
       verification table writes the second as "no aplica (sin cambios en la
       imagen)". If HEAD is not the pull request's merge commit, or `git diff`
       fails, the step fails the job instead of picking an answer.
+  - **Noise band (after 9c PR 6c, the user's choice among three variants):**
+    it replaces the three-run baseline and the 20 % limit above. With them,
+    #73 and #74, whose images were `main`'s, blocked in two runs in a row
+    each.
+    - Baseline: the median of the steady-state p95 of the last five CI runs
+      on `main`.
+    - Limit: the larger of median × 1.2 and median + 2 × MAD of those five
+      runs. MAD is the median of the absolute deviations from the median,
+      unscaled.
+    - Unchanged: a first run above the limit is confirmed by re-running the
+      Docker job once, it blocks only if both runs are above, and the run's
+      own 500 ms threshold still blocks.
+    - The three variants, applied to the ten `main` runs from 94e2020 and to
+      #73 and #74 as if each were a pull request. The counts use the nine
+      runs whose baseline is entirely after the level shift below.
+      - Three runs, +20 %: false block estimated at 44 % (#73 and #74
+        blocked); a regression of +50 % blocks 60 % of the time, +100 % 79 %.
+      - Five runs, +20 %: 20 % (#74 blocked); +50 % 60 %, +100 % 79 %.
+      - Five runs, the larger of the two (chosen): 5 % (neither blocked);
+        +50 % 31 %, +100 % 60 %, +150 % always.
+      - A `main` run has no second run, so the chance of a block is the
+        chance of one run above the limit, squared, each run against its
+        own baseline.
+    - What CI no longer catches: with the noise band a false block is
+      estimated at 5 %, a regression of +50 % blocks 31 % of the time,
+      +100 % 60 % of the time and +150 % always. The sample is nine runs, so
+      these numbers are an order of magnitude. Smaller regressions are left
+      to the full local run (1,150 users, `docs/RUNBOOK.md`), which is made
+      at the close of each phase.
+    - Limit in force when the band was adopted: the last five runs are
+      101.08 ms (ed27e7f), 55.37 ms (d7aebe3), 64.21 ms (9277389), 87.29 ms
+      (fbc9be5) and 80.36 ms (30eae8c). The median is 80.36 ms and the MAD
+      16.15 ms, so median × 1.2 is 96.43 ms, median + 2 × MAD is 112.66 ms,
+      and the limit is 112.66 ms (+40 %). It moves with every `main` run.
+    - Level shift of +96 %, uninvestigated: the five runs before 94e2020
+      have a median of 47.07 ms and the ten from it 92.04 ms. It came in
+      with 94e2020 (D43, the component library) before the comparison with
+      `main` existed, and nobody reviewed it. Since a9c4365 (D44) the e2e
+      also runs before k6 on the same stack, so two possible causes are
+      mixed: heavier pages from D43, and a stack that has just served the
+      e2e.
+    - Drift control (informational, never blocks): the reference is
+      92.04 ms, the median of the ten runs from 94e2020. Each pull request's
+      verification table reports the five-run median of `main` against it.
+      More than 50 % above it (138.06 ms) is marked "deriva", and an
+      investigation opens before the phase's next pull request. The
+      reference changes only by the user's explicit decision, noted here.
 
 ---
 

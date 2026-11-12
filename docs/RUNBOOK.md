@@ -182,6 +182,19 @@ THINK_MIN=2 THINK_MAX=6 LOAD_VUS=150 SMALL_VUS=10 npm run load:test
 
 La prueba deja los tenants `load-*` en la base local; la siguiente corrida o `supabase db reset` los borra.
 
+### Qué detecta el CI y qué queda para esta corrida
+
+El job `docker` de CI corre una versión corta (75 usuarios, 40 s a carga completa) en cada PR a `main` y la compara con `main` (D36):
+
+- Línea base: la mediana del p95 en estado estable de las últimas 5 corridas de `main`.
+- Límite: el mayor entre mediana × 1.2 y mediana + 2 × MAD de esas 5 corridas (MAD sin escalar).
+- Una primera corrida sobre el límite se confirma volviendo a correr el job una vez; bloquea si las dos lo pasan. También bloquea si el p95 pasa de 500 ms.
+- Si el diff solo toca `**/*.md`, `docs/**` o `.claude/**`, la comparación no aplica (sin cambios en la imagen).
+
+El CI ya no detecta regresiones menores a ese tamaño. Con esa banda, el bloqueo falso estimado es 5 %; una regresión de +50 % se bloquea 31 % de las veces, una de +100 % el 60 % y una de +150 % siempre. La muestra es de 9 corridas, así que estos números son un orden de magnitud.
+
+Por eso la corrida completa de esta sección (1,150 usuarios) se hace en local al cerrar cada fase.
+
 ## 10. e2e y accesibilidad (D44)
 
 Con la pila arriba (`npm run local:up`), y Chromium de Playwright instalado una vez (`npx playwright install chromium` en `apps/web`):
