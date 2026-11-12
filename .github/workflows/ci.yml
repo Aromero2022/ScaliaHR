@@ -281,11 +281,17 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          if [ -z "$PR_HEAD" ] || [ "$(git rev-parse --verify --quiet HEAD^2 || true)" != "$PR_HEAD" ]; then
-            echo "::error::HEAD is not the merge commit of this pull request"
+          # Empty when HEAD has no second parent (not a merge, or a depth-1 clone).
+          parent="$(git rev-parse --verify --quiet HEAD^2 || true)"
+          if [ -z "$PR_HEAD" ] || [ "$parent" != "$PR_HEAD" ]; then
+            echo "::error::HEAD is not the merge commit of this pull request (HEAD^2: ${parent:-none}, pull request head: ${PR_HEAD:-none})"
             exit 1
           fi
-          git diff -z --name-only --no-renames HEAD^1 HEAD | node scripts/k6-comparison-scope.mjs
+          # To a file first: a failing git diff stops the step before anything is
+          # classified, so it never reads as an empty diff.
+          files="$(mktemp)"
+          git diff -z --name-only --no-renames HEAD^1 HEAD > "$files"
+          node scripts/k6-comparison-scope.mjs < "$files"
 
       - name: Install dependencies
         run: npm ci

@@ -1,6 +1,6 @@
 // D36: whether a pull request's k6 run is compared with main's median.
-// The CI step pipes `git diff -z --name-only --no-renames HEAD^1 HEAD` of the
-// pull request's merge commit into this script. When every path is Markdown,
+// The CI step feeds `git diff -z --name-only --no-renames HEAD^1 HEAD` of the
+// pull request's merge commit to this script on stdin. When every path is Markdown,
 // under docs/ or under .claude/, the images are main's, so the comparison does
 // not apply; k6 still runs and its own p95 < 500 ms threshold still gates.
 import { appendFileSync, readFileSync } from "node:fs";

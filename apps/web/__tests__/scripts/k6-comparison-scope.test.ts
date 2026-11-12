@@ -44,6 +44,7 @@ const stepNamed = (name: string) => {
 function runBlock(step: string): string {
   const lines = step.split("\n");
   const start = lines.findIndex((line) => line.trim() === "run: |");
+  if (start === -1) throw new Error("the step has no `run: |` block");
   const body: string[] = [];
   for (const line of lines.slice(start + 1)) {
     if (line.trim() !== "" && !line.startsWith("          ")) break;
@@ -139,13 +140,16 @@ describe("scripts/k6-comparison-scope.mjs (D36)", () => {
   });
 });
 
-// Each case builds and clones a git repository (about 15 processes), so it gets
-// more than the default 5 s when the whole suite runs in parallel.
+// Each case builds and clones a git repository, so it gets more than the
+// default 5 s when the whole suite runs in parallel.
 describe("the CI step on a merge commit like GitHub's (D36)", { timeout: 20_000 }, () => {
   const step = stepNamed(STEP);
   const script = runBlock(step);
+  // GIT_DIR, GIT_INDEX_FILE and the like (set inside a git hook) would point
+  // git at this repository instead of the temporary ones.
+  const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))) as NodeJS.ProcessEnv;
   const gitEnv: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...inherited,
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_AUTHOR_NAME: "ci",
@@ -190,15 +194,21 @@ describe("the CI step on a merge commit like GitHub's (D36)", { timeout: 20_000 
     return { clone, prHead };
   }
 
-  function runStep(clone: string, prHead: string) {
+  function runStep(clone: string, prHead: string, pathPrefix?: string) {
     const summary = path.join(tempDir("d36-summary-"), "summary.md");
-    const result = spawnSync("bash", ["-e", "-c", script], {
-      cwd: clone,
-      env: { ...gitEnv, PR_HEAD: prHead, GITHUB_STEP_SUMMARY: summary },
-      encoding: "utf-8",
-    });
+    const env: NodeJS.ProcessEnv = { ...gitEnv, PR_HEAD: prHead, GITHUB_STEP_SUMMARY: summary };
+    if (pathPrefix) env.PATH = `${pathPrefix}:${env.PATH}`;
+    // As GitHub runs it: bash -e, with the step's own set -euo pipefail.
+    const result = spawnSync("bash", ["-e", "-c", script], { cwd: clone, env, encoding: "utf-8" });
+    // "a+" reads an empty summary when the step never wrote one.
     return { ...result, summary: readFileSync(summary, { encoding: "utf-8", flag: "a+" }) };
   }
+
+  it("is the step as written in ci.yml", () => {
+    expect(script).toMatch(/^set -euo pipefail\n/);
+    expect(script).toContain('git diff -z --name-only --no-renames HEAD^1 HEAD > "$files"');
+    expect(script).toContain('node scripts/k6-comparison-scope.mjs < "$files"');
+  });
 
   it("is not applicable when the pull request only touches docs, Markdown and .claude", () => {
     const { clone, prHead } = mergeCommit((dir) => {
@@ -216,16 +226,34 @@ describe("the CI step on a merge commit like GitHub's (D36)", { timeout: 20_000 
   });
 
   it("applies when the pull request changes source", () => {
+    const odd = "apps/web/src/ñ\n::warning::x.ts";
     const { clone, prHead } = mergeCommit((dir) => {
       write(dir, "docs/x.md", "# x, edited\n");
       write(dir, "apps/web/src/a.ts", "export const a = 3;\n");
+      write(dir, odd, "export {};\n");
     });
     const result = runStep(clone, prHead);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(APPLIES);
+    expect(result.summary).toContain(APPLIES);
+    expect(result.stdout).toContain("changes 2 of 3 files");
     expect(result.stdout).toContain('- "apps/web/src/a.ts"');
+    // A real git path with a newline and "::" arrives whole and quoted.
+    expect(result.stdout).toContain(`- ${JSON.stringify(odd)}`);
+    expect(result.stdout.split("\n").some((line) => line.startsWith("::"))).toBe(false);
     // main's own change after the branch point is not the pull request's.
     expect(result.stdout).not.toContain("b.ts");
+  });
+
+  it("fails when git diff fails, instead of reading an empty diff", () => {
+    const { clone, prHead } = mergeCommit((dir) => write(dir, "docs/x.md", "# x, edited\n"));
+    const realGit = execFileSync("bash", ["-c", "command -v git"], { encoding: "utf-8" }).trim();
+    const shims = tempDir("d36-git-shim-");
+    writeFileSync(path.join(shims, "git"), `#!/usr/bin/env bash\n[ "$1" = diff ] && exit 128\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+    const result = runStep(clone, prHead, shims);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).not.toContain("D36 comparison");
+    expect(result.summary).toBe("");
   });
 
   it("applies when source is renamed into docs/ (the deleted path counts)", () => {
@@ -292,16 +320,19 @@ describe("where the step sits in the docker job (D36)", () => {
 describe("what the exemption assumes (D36)", () => {
   it("keeps docs/ out of the image build context", () => {
     const ignored = readFileSync(path.join(REPO, ".dockerignore"), "utf-8").split("\n").map((line) => line.trim());
-    expect(ignored).toContain("docs");
+    expect(ignored.some((line) => /^\/?docs\/?$/.test(line))).toBe(true);
   });
 
-  it.each(["apps/web/Dockerfile", "apps/worker/Dockerfile"])("%s: the final stage copies only from earlier stages", (file) => {
+  it.each(["apps/web/Dockerfile", "apps/worker/Dockerfile"])("%s: the final stage copies only build output from earlier stages", (file) => {
     const dockerfile = readFileSync(path.join(REPO, file), "utf-8");
     const finalStage = dockerfile.slice(dockerfile.lastIndexOf("\nFROM "));
     expect(finalStage).toMatch(/^\nFROM \S+ AS runner\n/);
     const copies = finalStage.split("\n").filter((line) => /^COPY\b/.test(line));
     expect(copies.length).toBeGreaterThan(0);
-    for (const copy of copies) expect(copy).toMatch(/^COPY --from=\w+ /);
+    for (const copy of copies) {
+      expect(copy).toMatch(/^COPY --from=\w+ /);
+      expect(copy).not.toMatch(/docs|\.claude|\.md\b/);
+    }
   });
 
   it("no application source reads a Markdown file", () => {
@@ -311,7 +342,8 @@ describe("what the exemption assumes (D36)", () => {
     })
       .split("\n")
       .filter((file) => /\.(ts|tsx|js|mjs|cjs|json|css)$/.test(file));
-    expect(tracked.length).toBeGreaterThan(100);
+    // The scan really covers the application (not an empty file list).
+    expect(tracked).toEqual(expect.arrayContaining(["apps/web/next.config.ts", "apps/web/src/app/layout.tsx", "apps/worker/src/index.ts"]));
     const readers = tracked.filter((file) => /\.md\b/.test(readFileSync(path.join(REPO, file), "utf-8")));
     expect(readers).toEqual([]);
   });
