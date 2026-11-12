@@ -190,6 +190,8 @@ El job `docker` de CI corre una versión corta (75 usuarios, 40 s a carga comple
 - Límite: el mayor entre mediana × 1.2 y mediana + 2 × MAD de esas 5 corridas (MAD sin escalar).
 - Una primera corrida sobre el límite se confirma volviendo a correr el job una vez; bloquea si las dos lo pasan. También bloquea si el p95 pasa de 500 ms.
 - Si el diff solo toca `**/*.md`, `docs/**` o `.claude/**`, la comparación no aplica (sin cambios en la imagen).
+- Edad máxima de la línea base: las 5 corridas válidas se buscan solo entre los últimos 10 commits de `main` (los que `main` fue apuntando, cada uno con su corrida de CI). Si no hay 5, la tabla de verificación dice "sin línea base": la comparación no se aplica (el techo de 500 ms sigue) y el PR no se mergea sin una excepción explícita del usuario. Si alguna de las últimas 3 corridas de `main` no tiene resultado de k6, se abre una investigación de por qué antes del siguiente PR de la fase.
+- Corrida de `main` sobre el límite: cada PR revisa en su tabla de verificación la última corrida de `main` contra la banda de las 5 anteriores. Si la pasa, se anota "main sobre el límite" con el commit. Dos corridas seguidas de `main` sobre su límite cuentan como "deriva": se abre una investigación antes del siguiente PR de la fase.
 
 El CI ya no detecta regresiones menores a unos +50 %. Con esa banda, el bloqueo falso estimado es 5 %; una regresión de +50 % se bloquea 31 % de las veces, una de +100 % el 60 % y una de +150 % siempre. La muestra es de 9 corridas, así que estos números son un orden de magnitud.
 

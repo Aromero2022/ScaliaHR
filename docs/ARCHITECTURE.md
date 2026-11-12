@@ -2000,6 +2000,14 @@ machine):**
       attempt). A cancelled run, or one without a k6 result, is skipped and
       the next older one is taken. Merges of docs-only pull requests count,
       since k6 runs on them too.
+    - Maximum age: the five valid runs are looked for only among the last
+      ten commits of `main` (its first-parent history: the commits `main`
+      pointed to, each with its own CI run). With fewer than five, the
+      verification table says "sin línea base": the comparison is not
+      applied (the 500 ms ceiling still is), and the pull request is not
+      merged without the user's explicit exception. If any of the last
+      three `main` runs has no k6 result, an investigation of why opens
+      before the phase's next pull request.
     - Limit: the larger of median × 1.2 and median + 2 × MAD of those five
       runs. MAD is the median of the absolute deviations from the median,
       unscaled.
@@ -2055,6 +2063,11 @@ machine):**
       marked "deriva", and the phase's next pull request does not open until
       an investigation is open. The reference changes only by the user's
       explicit decision, noted here.
+    - `main` above the limit: every pull request's verification table also
+      checks the latest `main` run against the band of the five valid runs
+      before it. If it is above, the table notes "main sobre el límite" with
+      the commit. Two `main` runs in a row above their limits count as
+      "deriva": an investigation opens before the phase's next pull request.
 
 ---
 
