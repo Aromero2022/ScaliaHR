@@ -2006,8 +2006,9 @@ machine):**
       verification table says "sin línea base": the comparison is not
       applied (the 500 ms ceiling still is), and the pull request is not
       merged without the user's explicit exception. If any of the last
-      three `main` runs has no k6 result, an investigation of why opens
-      before the phase's next pull request.
+      three `main` runs has no k6 result, an investigation of why is due,
+      and the phase's next pull request does not open until the
+      investigation is open.
     - Limit: the larger of median × 1.2 and median + 2 × MAD of those five
       runs. MAD is the median of the absolute deviations from the median,
       unscaled.
@@ -2041,7 +2042,8 @@ machine):**
         windows whose limits went from +20 % to +67 %.
       - A slow creep is not caught by the band either, because its baseline
         moves with `main`. Above +50 % of the drift reference it shows as
-        "deriva"; below that, only the full local run can find it.
+        "deriva (referencia)"; below that, only the full local run can find
+        it.
     - Limit in force when the band was adopted: the last five runs are
       101.08 ms (ed27e7f), 55.37 ms (d7aebe3), 64.21 ms (9277389), 87.29 ms
       (fbc9be5) and 80.36 ms (30eae8c). The median is 80.36 ms and the MAD
@@ -2060,14 +2062,35 @@ machine):**
       uninvestigated level shift. The main loop
       reports the five-run median of `main` against it in every pull
       request's verification table. More than 50 % above it (138.06 ms) is
-      marked "deriva", and the phase's next pull request does not open until
-      an investigation is open. The reference changes only by the user's
+      marked "deriva (referencia)", and the phase's next pull request does
+      not open until the investigation is open. The reference changes only
+      by the user's
       explicit decision, noted here.
     - `main` above the limit: every pull request's verification table also
       checks the latest `main` run against the band of the five valid runs
       before it. If it is above, the table notes "main sobre el límite" with
       the commit. Two `main` runs in a row above their limits count as
-      "deriva": an investigation opens before the phase's next pull request.
+      "deriva (main ×2)", and the phase's next pull request does not open
+      until the investigation is open.
+      - The band of a `main` run comes from the five valid runs before it,
+        all inside the same ten-commit window. With fewer than five valid
+        runs before it, the table says "main sin revisar": informational,
+        it does not block. If the latest `main` run has no k6 result, the
+        rule above for the last three runs applies.
+      - Counted per `main` commit, not per pull request: each pull request
+        checks every `main` run that came in since the previous pull
+        request's table, each one once. "Two in a row" means two
+        consecutive commits of `main`'s first-parent history.
+    - "deriva (referencia)" and "deriva (main ×2)" have the same
+      consequence.
+    - Also:
+      - A `main` run above the limit still counts in the baseline. No
+        outliers are excluded: removing them would lower the band by hand.
+      - An investigation closes when its cause is written in D36, or when
+        the user accepts the new level with a decision noted in D36.
+      - "The last ten commits" are counted when the pull request's
+        verification table is filled, that is, when the CI of its head
+        finishes.
 
 ---
 
