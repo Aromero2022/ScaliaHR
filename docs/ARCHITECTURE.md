@@ -1953,11 +1953,12 @@ machine):**
   two CI runs, and the merge of 6a gave 157.1 ms on `main` after 113.9 ms on
   its pull request.
   - The baseline is the median of the steady-state p95 of the last three CI
-    runs on `main`.
+    runs on `main`. (Replaced by the noise band below.)
   - A pull request blocks if its steady-state p95 is more than 20 % above that
     median in two runs in a row: a first run above it is confirmed by
     re-running the Docker job once. It also blocks if the p95 passes 500 ms
-    (the threshold of the run itself).
+    (the threshold of the run itself). (The noise band below replaces the
+    20 %.)
   - For 6b: 108.5 ms (387e0d8), 96.8 ms (736ee57) and 157.1 ms (e31ae2d), so
     the median is 108.5 ms and the limit 130.2 ms.
   - **Pull requests that cannot change the images (after 9c PR 6c):** when the
@@ -1985,6 +1986,111 @@ machine):**
       verification table writes the second as "no aplica (sin cambios en la
       imagen)". If HEAD is not the pull request's merge commit, or `git diff`
       fails, the step fails the job instead of picking an answer.
+  - **Noise band (after 9c PR 6c, the user's choice among three variants):**
+    it replaces the three-run baseline and the 20 % limit above. With them,
+    #73 and #74, whose images had the same code as `main`'s, blocked in two
+    runs in a row each. Like the rule it replaces, it is applied by hand:
+    the main loop reads the steady-state p95 from the `docker` job's log of
+    each run and fills the pull request's verification table. No script
+    computes the band.
+    - Baseline: the median of the steady-state p95 of the last five CI runs
+      on `main`.
+    - The last five runs: the latest completed CI runs on `main` whose
+      `docker` job reached the k6 summary, one per commit (its latest
+      attempt). A cancelled run, or one without a k6 result, is skipped and
+      the next older one is taken. Merges of docs-only pull requests count,
+      since k6 runs on them too.
+    - Maximum age: the five valid runs are looked for only among the last
+      ten commits of `main` (its first-parent history: the commits `main`
+      pointed to, each with its own CI run). With fewer than five, the
+      verification table says "sin línea base": the comparison is not
+      applied (the 500 ms ceiling still is), and the pull request is not
+      merged without the user's explicit exception. If any of the last
+      three `main` runs has no k6 result, an investigation of why is due,
+      and the phase's next pull request does not open until the
+      investigation is open.
+    - Limit: the larger of median × 1.2 and median + 2 × MAD of those five
+      runs. MAD is the median of the absolute deviations from the median,
+      unscaled.
+    - Unchanged: a first run above the limit is confirmed by re-running the
+      Docker job once, it blocks only if both runs are above, and the run's
+      own 500 ms threshold still blocks.
+    - The three variants, applied to the ten `main` runs from 94e2020 to
+      fbc9be5 and to #73 and #74 as if each were a pull request. The counts
+      use nine samples whose baseline is entirely after the level shift
+      below: the five `main` runs e31ae2d, ed27e7f, d7aebe3, 9277389 and
+      fbc9be5, and the two runs each of #73 and #74.
+      - Three runs, +20 %: false block estimated at 44 % (#73 and #74
+        blocked); a regression of +50 % blocks 60 % of the time, +100 % 79 %.
+      - Five runs, +20 %: 20 % (#74 blocked); +50 % 60 %, +100 % 79 %.
+      - Five runs, the larger of the two (chosen): 5 % (neither blocked);
+        +50 % 31 %, +100 % 60 %, +150 % always.
+      - The figures are for a pull request's two runs. A `main` run has only
+        one, so the chance of a block is taken as the chance of one run
+        above the limit, squared, with each sample compared with its own
+        baseline. For the chosen variant that is 2, 5 and 7 of the nine
+        samples above the limit at +0 %, +50 % and +100 %.
+    - What CI no longer catches: with the noise band a false block is
+      estimated at 5 %, a regression of +50 % blocks 31 % of the time,
+      +100 % 60 % of the time and +150 % always. The sample is nine runs, so
+      these numbers are an order of magnitude. Smaller regressions are left
+      to the full local run (1,150 users, `docs/RUNBOOK.md`), which is made
+      at the close of each phase.
+      - The two runs of a pull request are taken as independent. They may
+        not be (in #73 and #74 the first run was the slower one), so the
+        5 % is more likely low than high. The figures also average past
+        windows whose limits went from +20 % to +67 %.
+      - A slow creep is not caught by the band either, because its baseline
+        moves with `main`. Above +50 % of the drift reference it shows as
+        "deriva (referencia)"; below that, only the full local run can find
+        it.
+    - Limit in force when the band was adopted: the last five runs are
+      101.08 ms (ed27e7f), 55.37 ms (d7aebe3), 64.21 ms (9277389), 87.29 ms
+      (fbc9be5) and 80.36 ms (30eae8c). The median is 80.36 ms and the MAD
+      16.15 ms, so median × 1.2 is 96.43 ms, median + 2 × MAD is 112.66 ms,
+      and the limit is 112.66 ms (+40 %). It moves with every `main` run.
+    - Level shift of +96 %, uninvestigated: the five runs before 94e2020
+      have a median of 47.07 ms and the ten from 94e2020 to fbc9be5
+      92.04 ms. It came in with 94e2020 (D43, the component library) before
+      the comparison with `main` existed, and nobody reviewed it. Since
+      a9c4365 (D44) the e2e also runs before k6 on the same stack, so two
+      possible causes are mixed: heavier pages from D43, and a stack that
+      has just served the e2e.
+    - Drift control (informational, never blocks): the reference is
+      92.04 ms, the median of the ten runs from 94e2020 to fbc9be5 (the
+      sample measured before 30eae8c), so it already includes the
+      uninvestigated level shift. The main loop
+      reports the five-run median of `main` against it in every pull
+      request's verification table. More than 50 % above it (138.06 ms) is
+      marked "deriva (referencia)", and the phase's next pull request does
+      not open until the investigation is open. The reference changes only
+      by the user's
+      explicit decision, noted here.
+    - `main` above the limit: every pull request's verification table also
+      checks the latest `main` run against the band of the five valid runs
+      before it. If it is above, the table notes "main sobre el límite" with
+      the commit. Two `main` runs in a row above their limits count as
+      "deriva (main ×2)", and the phase's next pull request does not open
+      until the investigation is open.
+      - The band of a `main` run comes from the five valid runs before it,
+        all inside the same ten-commit window. With fewer than five valid
+        runs before it, the table says "main sin revisar": informational,
+        it does not block. If the latest `main` run has no k6 result, the
+        rule above for the last three runs applies.
+      - Counted per `main` commit, not per pull request: each pull request
+        checks every `main` run that came in since the previous pull
+        request's table, each one once. "Two in a row" means two
+        consecutive commits of `main`'s first-parent history.
+    - "deriva (referencia)" and "deriva (main ×2)" have the same
+      consequence.
+    - Also:
+      - A `main` run above the limit still counts in the baseline. No
+        outliers are excluded: removing them would lower the band by hand.
+      - An investigation closes when its cause is written in D36, or when
+        the user accepts the new level with a decision noted in D36.
+      - "The last ten commits" are counted when the pull request's
+        verification table is filled, that is, when the CI of its head
+        finishes.
 
 ---
 
