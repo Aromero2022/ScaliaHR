@@ -4,7 +4,7 @@
 # are read at runtime.
 
 ARG NODE_IMAGE=node:22-alpine
-ARG TURBO_VERSION=2.11.10
+ARG TURBO_VERSION=2.11.11
 
 FROM ${NODE_IMAGE} AS base
 WORKDIR /repo
