@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import type { PgBoss } from "pg-boss";
-import type { EmailJobInput } from "@scaliahr/email";
+import { createSmtpTransport, type EmailJobInput, type OutgoingEmail } from "@scaliahr/email";
 // The producer the web app uses (apps/web/src/lib/email), so this suite covers
 // the whole path: web → email.send → worker → SMTP adapter → Mailpit (D20).
 import { createEmailQueue } from "../../../web/src/lib/email/index.js";
@@ -55,6 +55,14 @@ async function finalState(id: string): Promise<string> {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error(`email job ${id} did not finish`);
+}
+
+/** A message's headers as Mailpit stored them; names are matched without regard to case. */
+async function headersOf(id: string): Promise<(name: string) => string[] | undefined> {
+  const res = await fetch(`${mailpitUrl}/api/v1/message/${id}/headers`);
+  if (!res.ok) throw new Error(`Mailpit headers failed: ${res.status}`);
+  const headers = (await res.json()) as Record<string, string[]>;
+  return (name) => Object.entries(headers).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1];
 }
 
 /** Enqueues through the web producer and returns what Mailpit received. */
@@ -149,6 +157,40 @@ describe("each template reaches Mailpit (D20)", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0].Subject).toBe("Tu solicitud fue aprobada");
     expect(messages[0].Text).toContain("Ver en ScaliaHR");
+  });
+});
+
+describe("the SMTP adapter's own contract (D20)", () => {
+  // The worker sends no optional headers and does not use send()'s result, so
+  // these call the adapter directly, against the same Mailpit.
+  async function sendDirect(headers?: Record<string, string>) {
+    const transport = createSmtpTransport({ host: "127.0.0.1", port: smtpPort });
+    const to = `it-${randomUUID()}@example.test`;
+    const email: OutgoingEmail = { from: "no-reply@scaliahr.localhost", to, subject: "Adapter contract", html: "<p>x</p>", text: "x" };
+    try {
+      const { messageId } = await transport.send(headers ? { ...email, headers } : email);
+      const found = await messagesTo(to);
+      mailpitIds.push(...found.map((m) => m.ID));
+      expect(found).toHaveLength(1);
+      return { messageId, header: await headersOf(found[0].ID) };
+    } finally {
+      await transport.close();
+    }
+  }
+
+  it("send() returns a non-empty messageId, the Message-ID Mailpit received", async () => {
+    const { messageId, header } = await sendDirect();
+    expect(messageId.trim()).not.toBe("");
+    expect(header("Message-ID")).toEqual([messageId]);
+  });
+
+  it("the optional headers reach Mailpit, and only when they are given", async () => {
+    const marker = randomUUID();
+    const withHeaders = await sendDirect({ "X-Scalia-Test": marker, "X-Scalia-Suite": "worker-integration" });
+    expect(withHeaders.header("X-Scalia-Test")).toEqual([marker]);
+    expect(withHeaders.header("X-Scalia-Suite")).toEqual(["worker-integration"]);
+    const plain = await sendDirect();
+    expect(plain.header("X-Scalia-Test")).toBeUndefined();
   });
 });
 
