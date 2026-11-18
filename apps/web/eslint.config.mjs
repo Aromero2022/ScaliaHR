@@ -8,7 +8,7 @@ const __dirname = dirname(__filename);
 
 const compat = new FlatCompat({ baseDirectory: __dirname });
 
-export default [
+const eslintConfig = [
   { ignores: [".next/**", "node_modules/**", "dist/**", "coverage/**"] },
   ...compat.extends("next/core-web-vitals"),
   {
@@ -51,3 +51,5 @@ export default [
     rules: { "scalia/no-server-only-in-client": ["error", { srcDir: join(__dirname, "src") }] },
   },
 ];
+
+export default eslintConfig;
