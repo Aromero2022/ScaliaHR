@@ -153,7 +153,7 @@ describe("check-turbo-version, run as CI runs it (D17)", () => {
       expect(result.stderr).toMatch(/^::error file=package-lock\.json::/);
       expect(result.stderr).toContain(message);
       expect(result.stderr).toContain("cannot check ARG TURBO_VERSION");
-      // One annotation per problem: nothing in the message breaks the line.
+      // One annotation per problem, on a single line.
       expect(result.stderr.trim().split("\n")).toHaveLength(1);
     }
   });

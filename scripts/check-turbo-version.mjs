@@ -35,7 +35,10 @@ export function dockerfileTurboVersion(text) {
 
 const reason = (error) => (error.code === "ENOENT" ? "file not found" : error.message);
 
-/** The lockfile's turbo and one problem per file that is missing, unreadable or pins another turbo. */
+/**
+ * The lockfile's turbo and one problem per file that is missing or unreadable,
+ * has no single exact ARG TURBO_VERSION, or pins another turbo.
+ */
 export function turboVersionProblems(root) {
   let locked;
   try {

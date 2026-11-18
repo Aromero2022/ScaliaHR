@@ -44,7 +44,8 @@ jobs:
         run: npm run check:forbidden
         working-directory: .
 
-      # D17: turbo prune runs the Dockerfiles' pinned turbo, not the lockfile's.
+      # D33: turbo prune runs the ARG TURBO_VERSION of the Dockerfiles (D17), not
+      # the lockfile's turbo. From the repo root, where both files live.
       - name: Dockerfiles pin the lockfile's turbo (D17)
         run: node scripts/check-turbo-version.mjs
         working-directory: .
