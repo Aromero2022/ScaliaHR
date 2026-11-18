@@ -1,7 +1,7 @@
-// D17: both Dockerfiles run `npx turbo@${TURBO_VERSION} prune`, which does not
-// read package-lock.json. Dependabot's npm updates (D33) bump turbo in the
-// lockfile and leave the ARG as it was, so CI fails when a Dockerfile's
-// ARG TURBO_VERSION is not the lockfile's turbo.
+// The Dockerfiles (D17) prune with `npx turbo@${TURBO_VERSION}`: the turbo that
+// runs is the ARG's, whatever version package-lock.json locks. Dependabot's npm
+// updates bump turbo only in the lockfile (D33), so CI fails when a
+// Dockerfile's ARG TURBO_VERSION is not the lockfile's turbo.
 //   node scripts/check-turbo-version.mjs [repo root]
 import { readFileSync } from "node:fs";
 import path from "node:path";

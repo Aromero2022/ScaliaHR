@@ -1805,6 +1805,11 @@ MIT (Principle 8). Phase 9b, PR 4.
 - Dependabot does not update the Node base image: the Dockerfiles take it as
   an `ARG` (D17), and `.nvmrc` pins Node. It does not update the gitleaks
   digest or `SUPABASE_CLI_VERSION` in `ci.yml` either. Those move by hand.
+- Dependabot's npm updates bump turbo in `package-lock.json` but not
+  `ARG TURBO_VERSION` in the two Dockerfiles (D17), and that ARG is the turbo
+  `turbo prune` runs. The step "Dockerfiles pin the lockfile's turbo (D17)" of
+  the `app` job (`scripts/check-turbo-version.mjs`) fails until the ARG is set
+  to the lockfile's version by hand.
 - GitHub's own secret scanning and push protection are repository settings,
   outside this repo; turning them on is the owner's call.
 - Ignoring `pg-boss` also silences its security updates. It is checked by hand

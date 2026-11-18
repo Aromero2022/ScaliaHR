@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { dockerfileTurboVersion, lockedTurboVersion } from "../../../../scripts/check-turbo-version.mjs";
+import { DOCKERFILES, dockerfileTurboVersion, lockedTurboVersion } from "../../../../scripts/check-turbo-version.mjs";
 
 /**
  * D17: `turbo prune` in both Dockerfiles runs the turbo of ARG TURBO_VERSION,
@@ -158,12 +158,41 @@ describe("check-turbo-version, run as CI runs it (D17)", () => {
     }
   });
 
+  it("escapes what it quotes from a file, so a value cannot start a workflow command", () => {
+    const result = run(fakeRepo({ ...MATCHING, "apps/web/Dockerfile": dockerfile("ARG TURBO_VERSION=9%0A::warning::x") }));
+    expect(result.status).toBe(1);
+    expect(result.stderr.trim()).toBe('::error file=apps/web/Dockerfile::ARG TURBO_VERSION is "9%250A::warning::x", not an exact version');
+  });
+
   it("passes on this repository's lockfile and Dockerfiles", () => {
     const locked = lockedTurboVersion(readFileSync(path.join(REPO, "package-lock.json"), "utf-8"));
     const result = run(REPO);
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(`ARG TURBO_VERSION is ${locked}`);
+  });
+});
+
+// The script reads only the ARG's value. These pin the rest that makes that
+// value the turbo `prune` runs: without the stage's bare `ARG TURBO_VERSION`,
+// `${TURBO_VERSION}` is empty there and npx fetches the latest turbo.
+describe("what the check assumes about the Dockerfiles (D17)", () => {
+  it.each(DOCKERFILES)("%s: the only turbo prune runs the ARG's turbo, declared before FROM and redeclared in its stage", (file) => {
+    const lines = readFileSync(path.join(REPO, file), "utf-8").split("\n");
+    const isFrom = (line: string) => /^FROM\s/i.test(line);
+    const valued = lines.findIndex((line) => /^ARG\s+TURBO_VERSION=/i.test(line));
+    expect(valued).toBeGreaterThan(-1);
+    expect(valued).toBeLessThan(lines.findIndex(isFrom));
+
+    const prunes = lines.flatMap((line, i) => (/\bturbo\b/.test(line) && /\bprune\b/.test(line) && !line.startsWith("#") ? [i] : []));
+    expect(prunes).toHaveLength(1);
+    const [prune] = prunes;
+    expect(lines[prune]).toMatch(/^RUN npx --yes "turbo@\$\{TURBO_VERSION\}" prune /);
+
+    const stage = lines.slice(0, prune).findLastIndex(isFrom);
+    expect(stage).toBeGreaterThan(valued);
+    expect(lines.slice(stage + 1, prune).some((line) => /^ARG\s+TURBO_VERSION\s*$/i.test(line))).toBe(true);
+    expect(lines.filter((line) => line.includes("turbo@")).every((line) => line.includes("turbo@${TURBO_VERSION}"))).toBe(true);
   });
 });
 
@@ -195,8 +224,11 @@ describe("where the step sits in CI (D17)", () => {
   });
 
   it("runs before the build steps, without the Docker stack", () => {
-    expect(index(`name: ${STEP}`)).toBeGreaterThan(index("name: Install dependencies"));
-    expect(index(`name: ${STEP}`)).toBeLessThan(index("name: Prisma generate"));
+    const [install, check, prisma] = ["name: Install dependencies", `name: ${STEP}`, "name: Prisma generate"].map(index);
+    // Every step is found, so a renamed one fails here instead of comparing -1.
+    expect([install, check, prisma].every((i) => i >= 0)).toBe(true);
+    expect(check).toBeGreaterThan(install);
+    expect(check).toBeLessThan(prisma);
     expect(job("docker").steps.some((s) => s.includes("check-turbo-version"))).toBe(false);
   });
 });
