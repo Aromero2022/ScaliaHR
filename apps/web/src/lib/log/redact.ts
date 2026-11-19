@@ -2,30 +2,16 @@
 // or a sensitive personal field are blanked whatever their value; inside any
 // other string, tokens and Mexican identifiers are masked by pattern, because
 // database errors quote the offending values ("Key (rfc)=(…) already exists").
+// The patterns live in @scaliahr/email/log-masks, the list the worker uses too (D53).
+import { maskText } from "@scaliahr/email/log-masks";
 
 export const REDACTED = "[REDACTED]";
 
 const SENSITIVE_KEY =
   /pass(word)?|secret|token|authorization|cookie|api[-_]?key|jwt|curp|rfc|nss|clabe|salary|salario|sueldo|bank|account_number/i;
 
-const PATTERNS: [RegExp, string][] = [
-  // 9c PR 6c: email addresses, which a database error can quote from a search or a duplicate key
-  [/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[EMAIL]"],
-  // JWTs and bearer tokens
-  [/\beyJ[\w-]+\.[\w-]+\.[\w-]+/g, "[JWT]"],
-  [/\b(Bearer|Basic)\s+[\w.+/=-]+/gi, "$1 [REDACTED]"],
-  // CURP: 4 letters, 6 digits, H/M, 5 letters, 2 alphanumerics
-  [/(?<![A-Z\d])[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d(?![A-Z\d])/gi, "[CURP]"],
-  // RFC: 3-4 letters (incl. Ñ and &), 6 digits, 3 alphanumerics
-  [/(?<![A-ZÑ&\d])[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}(?![A-Z\d])/gi, "[RFC]"],
-  // CLABE (18 digits), card numbers (13-19), NSS (11 digits)
-  [/\b\d{18}\b/g, "[CLABE]"],
-  [/\b\d{13,19}\b/g, "[NUMBER]"],
-  [/\b\d{11}\b/g, "[NSS]"],
-];
-
 export function redactString(value: string): string {
-  return PATTERNS.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), value);
+  return maskText(value);
 }
 
 export function redact(value: unknown, depth = 0): unknown {

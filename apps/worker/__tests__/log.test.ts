@@ -35,6 +35,10 @@ describe("worker JSON logs (D27)", () => {
     expect(smtp).toContain("user unknown");
   });
 
+  it("masks an address before the number masks can split it", () => {
+    expect(mask("12345678901@acme.dev")).toBe("[EMAIL]");
+  });
+
   it("masks a bearer token in an error message", () => {
     const bearer = JSON.stringify(errorFields(new Error("Authorization: Bearer abc.def.ghi")));
     expect(bearer).not.toContain("abc.def.ghi");
