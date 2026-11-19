@@ -1,5 +1,5 @@
 // The masks for free text in the logs (D27, D53): the web app applies them to
-// every string it logs, the worker to its error messages. One list, so the two
+// every string field of its log events, the worker to its error messages. One list, so the two
 // cannot drift apart. The web app reads this file from source (tsconfig path)
 // and the worker from dist (package export "./log-masks"). It must stay free
 // of imports: the web app bundles it for the Edge runtime too.

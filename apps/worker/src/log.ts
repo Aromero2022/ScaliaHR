@@ -2,7 +2,8 @@
 // tenant id when the job has one. Payloads are never logged; error messages go
 // through the list of masks shared with the web app, @scaliahr/email/log-masks
 // (D53), so an SMTP rejection that quotes the recipient is logged without it.
-// log() writes its other fields as given: pass ids and outcomes, not free text.
+// log() writes its other fields as given: besides errorFields(), pass ids and
+// outcomes, not free text.
 import { maskText } from "@scaliahr/email/log-masks";
 
 type Level = "info" | "warn" | "error";

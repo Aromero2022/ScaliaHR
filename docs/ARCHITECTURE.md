@@ -3799,8 +3799,9 @@ rejection can quote the recipient.
 - The web app reads it from source, through a tsconfig path and a vitest
   alias, like `@scaliahr/email/contract`. The module has no imports, so only
   that file enters the server and Edge bundles. None of it reaches the
-  browser: a one-time check of `.next/static` found no mask string, on main
-  and on this change. No CI step checks it.
+  browser: a one-time `grep -rlF` of `.next/static` for `[EMAIL]`, `[CLABE]`,
+  `maskText` and `log-masks` found nothing, on main and on this change. No CI
+  step checks it.
 - The worker reads it from `dist`, through the package's `exports` entry
   `./log-masks`. The worker's Dockerfile already builds `@scaliahr/email` and
   copies its `dist`, so the image gains one small file and no dependency.
