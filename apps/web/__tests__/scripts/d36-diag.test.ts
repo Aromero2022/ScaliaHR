@@ -617,7 +617,9 @@ describe("the diagnostic steps never fail the job, and run when the D36 run fail
     // No count (the second pass crashed before its summary): a visible warning, not a silent skip.
     const unknown = runStep(ISOLATION_STEP, {}, { FAILED: "" });
     expect(unknown.status).toBe(0);
-    expect(unknown.stdout).toContain("::warning::D36-diag: the second k6 pass left no tenant-isolation count");
+    expect(unknown.stdout).toContain(
+      "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step); the first pass tolerates up to 1 % failed checks, so it does not fully cover isolation",
+    );
   });
 
   it.each([DIAG_STEP, SECOND_STEP])("%s runs whenever the D36 run left its summary", (name) => {

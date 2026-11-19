@@ -2119,6 +2119,10 @@ machine):**
       not for the limit. It is informational, and its numbers appear only in
       its "D36-diag:" lines (`second pass`, and `sign-ins` and `requests`
       with `pass=second`) and in the artifact.
+    - CSV transition (pending the user's decision): since D54 the first pass
+      writes a CSV. The baseline mixes `main` runs without and with the CSV
+      until there are five `main` runs with it. During that transition D36
+      is reported the same way, with the label "transición CSV".
 
 ---
 
@@ -3905,8 +3909,9 @@ and the rollback drill, still skip after a failure.)
   - The count comes from the second pass's summary as soon as it can be
     read, whatever k6's exit code.
   - If the second pass leaves no readable count (it crashed before writing
-    its summary), that step warns instead; the first pass's checks threshold
-    (> 99 %) still covers isolation.
+    its summary), that step only warns. The first pass does not fully cover
+    isolation then: its checks threshold (> 99 %) tolerates up to 1 % failed
+    checks, isolation ones included.
 
 **The lines** (`scripts/d36-diag.mjs`), each one for one possible cause.
 `diagLine` refuses any line off the grammar (a closed list of topics,
@@ -3974,7 +3979,18 @@ of the web app; the measurement is not stored in the repo):**
   list the new module, and `packages/email/package.json`, which the trace
   now brings into the standalone output.
 - So `sha256` identifies one build, and `sha256_without_manifests` says
-  whether two builds hold the same code.
+  whether two builds hold the same code, when both builds reuse Next.js's
+  cache.
+- In CI each attempt builds without that cache, and there it does not hold.
+  The two attempts of #79 (same commit, dd61252) differed in 34 of 2,075
+  files: 26 manifests and the `page.js` of the 8 routes with Server Actions
+  (admin-center, ARCO, employee, both MFA pages, performance, skills hub and
+  login). Two local builds after removing `.next` differed in the same 8.
+  Those pages embed the Server Actions' ids and module ids, which Next.js
+  generates again in a build without its cache.
+  - In CI, then, the code is compared with the diff of the two
+    `standalone-files.txt`: a diff of only manifests and those pages means
+    the same code. Neither hash says it alone.
 
 **Artifact:** `d36-diag-attempt-<n>`, kept 14 days: `summary.json`,
 `summary-second.json`, `requests-first.csv.gz`, `requests-second.csv.gz`,

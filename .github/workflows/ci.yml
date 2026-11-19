@@ -491,15 +491,16 @@ jobs:
       # D54: the one result of the second pass that fails the job. A page that
       # showed another tenant's employees is a tenant-isolation failure, not a
       # diagnostic: the second pass's summary counts them, whatever k6's exit
-      # code. If the second pass left no readable count, this step warns; the
-      # first pass's checks threshold still covers isolation.
+      # code. If the second pass left no readable count, this step warns. The
+      # first pass does not fully cover isolation: its checks threshold
+      # tolerates up to 1 % failed checks.
       - name: Tenant isolation held in the second k6 pass (D54)
         if: ${{ !cancelled() && steps.second_pass.outcome != '' && steps.second_pass.outcome != 'skipped' }}
         env:
           FAILED: ${{ steps.second_pass.outputs.tenant_isolation_failed }}
         run: |
           if [ -z "$FAILED" ]; then
-            echo "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step); the first pass's checks threshold still covers isolation"
+            echo "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step); the first pass tolerates up to 1 % failed checks, so it does not fully cover isolation"
           elif [ "$FAILED" != "0" ]; then
             echo "::error::D36-diag: $FAILED page(s) of the second k6 pass showed another tenant's employees"
             exit 1
