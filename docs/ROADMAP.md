@@ -53,7 +53,7 @@
 
 > **Vistas de reporte (D55):** cada módulo de las fases 14–22 expone sus datos en una vista de reporte versionada que consume la Fase 22b, y la construye en su propia fase. La de Employee Central (fases 1–3, ya construido) llega con la Fase 14 o con la 22b, lo que llegue primero.
 >
-> **Requisito de entrada de la Fase 23 (D55):** desde D55 es 9a–22b, también donde esta tabla, la sección de la Fase 23 y el Principio 8 dicen 9a–22.
+> **Requisito de entrada de la Fase 23 (D55):** desde D55 es 9a–22b. La fila de la Fase 23, su sección y el Principio 8 dicen 9a–22, y se leen como 9a–22b.
 
 ---
 
@@ -410,13 +410,13 @@ Depende de: worker y lib/email (9a), Admin Center con "Ver dato sensible" y el r
 ### Reportes estándar
 
 - Headcount, altas y bajas, rotación, ausentismo, desempeño vs. potencial, avance de metas y embudo de RCM.
-- Cada uno depende de su módulo: headcount, altas, bajas y rotación de Employee Central y de Onboarding y Offboarding (14), avance de metas de PMGM (las metas que existen hoy y las de la Fase 16), desempeño vs. potencial de Calibración (18a), ausentismo del registro de tiempo (21) y el embudo de RCM (22).
+- Cada uno depende de su módulo: headcount, altas, bajas y rotación de Employee Central y de Onboarding y Offboarding (14), avance de metas de PMGM (las metas que existen al 2026-11-19 y las de la Fase 16), desempeño vs. potencial de Calibración (18a), ausentismo del registro de tiempo (21) y el embudo de RCM (22).
 
 ### Reportes programados
 
 - Programación por reporte; el worker corre cada programación y avisa por el adaptador de correo (D20).
-- Requisito previo: hoy la programación de pg-boss está apagada (D17). Hace falta la migración que declare su cola interna y la decisión de cómo la inserta el worker.
-- Cada corrida revisa de nuevo los permisos y los flags de módulo (D12) de su dueño; sin ellos, no corre. Si el dueño queda inactivo, se detienen todas sus programaciones.
+- Requisito previo: al 2026-11-19 la programación de pg-boss está apagada (D17). Hace falta la migración que declare su cola interna y la decisión de cómo la inserta el worker.
+- Cada corrida revisa de nuevo los permisos y los flags de módulo (D12) de su dueño; sin ellos, no corre. Si se desactiva al usuario dueño, se detienen todas sus programaciones.
 - La corrida no genera filas para los destinatarios: valida al dueño y manda el aviso. El correo solo lleva un enlace a la app (D20), con asunto genérico y sin el nombre del reporte, sus filtros ni sus datos; las filas se calculan al abrir el enlace, con la sesión y los permisos de quien lo abre, nunca con los del dueño ni con un archivo del dueño.
 - Destinatarios: solo usuarios activos del mismo tenant, sin direcciones externas.
 
