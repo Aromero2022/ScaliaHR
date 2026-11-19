@@ -605,7 +605,7 @@ describe("the diagnostic steps never fail the job, and run when the D36 run fail
   it("fails the job, in a step of its own, only on a page of the second pass that showed another tenant's employees", () => {
     const step = stepNamed(ISOLATION_STEP);
     expect(step).not.toContain("continue-on-error");
-    expect(step).toContain("if: ${{ !cancelled() && steps.second_pass.outputs.tenant_isolation_failed != '' }}");
+    expect(step).toContain("if: ${{ !cancelled() && steps.second_pass.outcome != '' && steps.second_pass.outcome != 'skipped' }}");
     expect(step).toContain("FAILED: ${{ steps.second_pass.outputs.tenant_isolation_failed }}");
     expect(stepNamed(SECOND_STEP)).toMatch(/^ {8}id: second_pass$/m);
     const ok = runStep(ISOLATION_STEP, {}, { FAILED: "0" });
@@ -614,6 +614,10 @@ describe("the diagnostic steps never fail the job, and run when the D36 run fail
     const leak = runStep(ISOLATION_STEP, {}, { FAILED: "2" });
     expect(leak.status).toBe(1);
     expect(leak.stdout).toContain("::error::D36-diag: 2 page(s) of the second k6 pass showed another tenant's employees");
+    // No count (the second pass crashed before its summary): a visible warning, not a silent skip.
+    const unknown = runStep(ISOLATION_STEP, {}, { FAILED: "" });
+    expect(unknown.status).toBe(0);
+    expect(unknown.stdout).toContain("::warning::D36-diag: the second k6 pass left no tenant-isolation count");
   });
 
   it.each([DIAG_STEP, SECOND_STEP])("%s runs whenever the D36 run left its summary", (name) => {
@@ -762,9 +766,25 @@ describe("the new steps, run as ci.yml writes them (D54)", () => {
       expect(result.stdout).toContain("D36-diag: sign-ins pass=second ramp=71 steady=4");
       expect(result.stdout).toContain("D36-diag: requests pass=second artifact=requests-second.csv.gz");
     } else {
-      expect(result.githubOutput).toBe("");
+      // A broken run that still wrote its summary passes its isolation count on; one that wrote none, nothing.
+      expect(result.githubOutput).toBe(k6Exit === 1 ? "" : "tenant_isolation_failed=0\n");
       expect(result.stderr).toContain(`the second k6 pass failed with exit code ${k6Exit}`);
       expect(result.stderr).toContain("  ERRO[0001] something broke");
+    }
+  });
+
+  it("second pass: the isolation count reaches the gate even when the rest of the summary cannot be read", () => {
+    const dir = tempDir("d36-partial-");
+    const file = path.join(dir, "summary-second.json");
+    const partial = summary({ isolationFails: 3 });
+    delete (partial.metrics as Record<string, unknown>)["http_req_duration{kind:page,phase:steady}"];
+    writeFileSync(file, JSON.stringify(partial));
+    const output = path.join(dir, "github-output");
+    for (const code of ["0", "107"]) {
+      writeFileSync(output, "");
+      const result = spawnSync("node", [DIAG, "second-pass", file, code, "90"], { encoding: "utf-8", env: { ...process.env, GITHUB_OUTPUT: output } });
+      expect(result.status).toBe(1);
+      expect(readFileSync(output, "utf-8")).toBe("tenant_isolation_failed=3\n");
     }
   });
 

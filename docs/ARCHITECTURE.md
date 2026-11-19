@@ -2117,7 +2117,8 @@ machine):**
     - The second pass never counts for D36: not as a pull request's run, not
       as the confirming re-run, not as a `main` sample of the baseline, and
       not for the limit. It is informational, and its numbers appear only in
-      its "D36-diag: second pass" line and in the artifact.
+      its "D36-diag:" lines (`second pass`, and `sign-ins` and `requests`
+      with `pass=second`) and in the artifact.
 
 ---
 
@@ -3901,6 +3902,11 @@ and the rollback drill, still skip after a failure.)
   employees fails the job, in its own step ("Tenant isolation held in the
   second k6 pass (D54)"), because that is a tenant-isolation failure, not a
   diagnostic.
+  - The count comes from the second pass's summary as soon as it can be
+    read, whatever k6's exit code.
+  - If the second pass leaves no readable count (it crashed before writing
+    its summary), that step warns instead; the first pass's checks threshold
+    (> 99 %) still covers isolation.
 
 **The lines** (`scripts/d36-diag.mjs`), each one for one possible cause.
 `diagLine` refuses any line off the grammar (a closed list of topics,
@@ -3947,9 +3953,10 @@ lower-case keys, only strings and finite numbers as values):
      `counts_for_d36=no`. Its k6 summary goes to `second-pass.txt` in the
      artifact, not to the log.
    - A crossed threshold (exit 99) is reported. Any other exit, or any page
-     with another tenant's employees, fails the step; the isolation count
-     then fails the job in the step that follows the artifact. A failed run
-     prints the tail of its output, indented and without any p95 line.
+     with another tenant's employees, fails the step; the isolation count,
+     when the summary holds it, then fails the job in the step that follows
+     the artifact. A failed run prints the tail of its output, indented and
+     without any p95 line.
 
 **Why two hashes (measured locally by this pull request's author, four builds
 of the web app; the measurement is not stored in the repo):**

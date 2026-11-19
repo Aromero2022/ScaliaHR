@@ -400,16 +400,25 @@ function main() {
     }
     case "second-pass": {
       const [summaryFile, exitCode, seconds, outputFile] = argsOf(rest, ["<summary.json>", "<k6 exit code>", "<seconds>"]);
+      // The isolation count goes to the step that fails the job on it as soon
+      // as it can be read, whatever k6's exit code and the rest of the summary.
+      let summary;
+      try {
+        summary = readJson(summaryFile);
+      } catch {
+        summary = undefined; // a broken run may leave no summary: its exit code says why below
+      }
+      const leaked = summary?.root_group?.checks?.[ISOLATION_CHECK]?.fails;
+      if (typeof leaked === "number" && process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `tenant_isolation_failed=${leaked}\n`);
       try {
         secondPassExit(exitCode); // a broken run fails on its exit code, not on a missing summary
       } catch (error) {
         if (outputFile) console.error(outputTail(readOrEmpty(outputFile).text));
         throw error;
       }
-      const { line, isolationFailures } = secondPassLine(readJson(summaryFile), exitCode, seconds);
+      if (summary === undefined) throw new Error(`cannot read ${summaryFile}`);
+      const { line, isolationFailures } = secondPassLine(summary, exitCode, seconds);
       emit(line);
-      // Read by the step that fails the job on a tenant-isolation failure.
-      if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `tenant_isolation_failed=${isolationFailures}\n`);
       if (isolationFailures > 0) throw new Error(`${isolationFailures} page(s) of the second pass showed another tenant's employees`);
       return;
     }
@@ -425,7 +434,7 @@ const isMain = () => {
   try {
     given = realpathSync(given);
   } catch {
-    // Compare the path as given: a path node ran cannot fail to resolve, but never skip main() silently over it.
+    // A path node ran resolves; if it ever does not, compare it as given rather than give up.
   }
   return pathToFileURL(given).href === import.meta.url || given === fileURLToPath(import.meta.url);
 };

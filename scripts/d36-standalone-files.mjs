@@ -95,7 +95,7 @@ const isMain = () => {
   try {
     given = realpathSync(given);
   } catch {
-    // Compare the path as given: a path node ran cannot fail to resolve, but never skip main() silently over it.
+    // A path node ran resolves; if it ever does not, compare it as given rather than give up.
   }
   return pathToFileURL(given).href === import.meta.url || given === fileURLToPath(import.meta.url);
 };

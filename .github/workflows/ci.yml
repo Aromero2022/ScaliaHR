@@ -442,7 +442,7 @@ jobs:
       # line is the first pass's. A crossed threshold (k6 exit 99) is reported;
       # any other exit, or a page that showed another tenant's employees, fails
       # the step with an ::error:: annotation. Each command runs even if another
-      # failed. The step never fails the job: the isolation result does, in the
+      # failed. The step never fails the job: the isolation count does, in the
       # step "Tenant isolation held in the second k6 pass (D54)".
       - name: Second k6 pass, informational, not part of D36 (D54)
         id: second_pass
@@ -490,18 +490,22 @@ jobs:
 
       # D54: the one result of the second pass that fails the job. A page that
       # showed another tenant's employees is a tenant-isolation failure, not a
-      # diagnostic. Skipped when the second pass gave no result (its own step
-      # then carries the error).
+      # diagnostic: the second pass's summary counts them, whatever k6's exit
+      # code. If the second pass left no readable count, this step warns; the
+      # first pass's checks threshold still covers isolation.
       - name: Tenant isolation held in the second k6 pass (D54)
-        if: ${{ !cancelled() && steps.second_pass.outputs.tenant_isolation_failed != '' }}
+        if: ${{ !cancelled() && steps.second_pass.outcome != '' && steps.second_pass.outcome != 'skipped' }}
         env:
           FAILED: ${{ steps.second_pass.outputs.tenant_isolation_failed }}
         run: |
-          if [ "$FAILED" != "0" ]; then
+          if [ -z "$FAILED" ]; then
+            echo "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step); the first pass's checks threshold still covers isolation"
+          elif [ "$FAILED" != "0" ]; then
             echo "::error::D36-diag: $FAILED page(s) of the second k6 pass showed another tenant's employees"
             exit 1
+          else
+            echo "No page of the second k6 pass showed another tenant's employees."
           fi
-          echo "No page of the second k6 pass showed another tenant's employees."
 
       - name: Per-tenant export through the running worker (D23)
         run: |
