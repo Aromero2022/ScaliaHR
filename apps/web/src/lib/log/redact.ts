@@ -1,6 +1,6 @@
 // Redaction for everything that reaches the logs (D27). Keys that name a secret
 // or a sensitive personal field are blanked whatever their value; inside any
-// other string, tokens and Mexican identifiers are masked by pattern, because
+// other string, email addresses, tokens and Mexican identifiers are masked by pattern, because
 // database errors quote the offending values ("Key (rfc)=(…) already exists").
 // The patterns live in @scaliahr/email/log-masks, the list the worker uses too (D53).
 import { maskText } from "@scaliahr/email/log-masks";

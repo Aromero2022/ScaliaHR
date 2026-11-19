@@ -29,10 +29,9 @@ describe("worker JSON logs (D27)", () => {
   });
 
   it("masks the recipient an SMTP rejection quotes", () => {
-    const smtp = JSON.stringify(errorFields(new Error("550 5.1.1 <ana.lopez@acme.dev>: user unknown")));
-    expect(smtp).not.toContain("ana.lopez@acme.dev");
-    expect(smtp).toContain("550 5.1.1");
-    expect(smtp).toContain("user unknown");
+    const smtp = errorFields(new Error("550 5.1.1 <ana.lopez@acme.dev>: user unknown"));
+    expect(JSON.stringify(smtp)).not.toContain("ana.lopez@acme.dev");
+    expect(smtp).toEqual({ name: "Error", message: "550 5.1.1 <[EMAIL]>: user unknown" });
   });
 
   it("masks an address before the number masks can split it", () => {
@@ -40,8 +39,8 @@ describe("worker JSON logs (D27)", () => {
   });
 
   it("masks a bearer token in an error message", () => {
-    const bearer = JSON.stringify(errorFields(new Error("Authorization: Bearer abc.def.ghi")));
-    expect(bearer).not.toContain("abc.def.ghi");
-    expect(bearer).toContain("Authorization:");
+    const bearer = errorFields(new Error("Authorization: Bearer abc.def.ghi"));
+    expect(JSON.stringify(bearer)).not.toContain("abc.def.ghi");
+    expect(bearer).toEqual({ name: "Error", message: "Authorization: Bearer [REDACTED]" });
   });
 });

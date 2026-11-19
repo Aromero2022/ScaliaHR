@@ -1053,7 +1053,8 @@ required and validated with zod at start. Each job is parsed with the
 contract, branded, rendered and sent; a missing or suspended tenant completes
 the job as `dropped` without sending. Logs carry the job id and outcome, never
 addresses or links. An SMTP rejection that quotes the recipient is logged with
-the address masked (D53).
+the address masked (D53). The masks cover addresses, not links: when the worker
+refuses a link, the error names that link's origin (`urls.ts`).
 
 **Local stack:** `supabase/config.toml` exposes Mailpit's SMTP on
 `127.0.0.1:54325` for the integration tests. In docker-compose the worker
@@ -1429,7 +1430,7 @@ into it in Phase 23. Phase 9b, PR 2.
   Edge runtimes.
 - `redact()` blanks sensitive keys at any depth: passwords, secrets, tokens,
   authorization, cookies, API keys, CURP, RFC, NSS, CLABE, salary and bank
-  fields. Inside free text it masks JWTs, bearer tokens, CURP, RFC, CLABE, card
+  fields. Inside free text it masks email addresses, JWTs, bearer tokens, CURP, RFC, CLABE, card
   numbers and NSS, because database errors quote the offending values.
 - The worker writes the same kind of JSON lines (`apps/worker/src/log.ts`)
   with the job id and the tenant id of the job. It never logs payloads, and
@@ -1495,7 +1496,9 @@ into it in Phase 23. Phase 9b, PR 2.
   errors. The instrumentation test now puts an email and a `person` id in the
   query and checks that neither reaches the line.
 - **Emails are masked as `[EMAIL]`** in every string that reaches the logs.
-  In the worker's error messages that holds since D53. A
+  In the worker that covers error messages since D53: `log()` writes its other
+  fields as given, so callers pass ids and outcomes, and the operator CLIs keep
+  plain text. A
   database error can quote one from a duplicate key or a search filter
   (`failed to parse logic tree ((email.ilike."%…%"))`). No log records an
   email on purpose: a failed login logs its status, and the rate-limit keys
@@ -3790,13 +3793,14 @@ Only `CLAUDE.md`, this document and `docs/ROADMAP.md` change.
 both call it. Until this decision the worker kept its own copy of the list,
 without email addresses or Bearer/Basic tokens, while its comment and D27 said
 it used the same masks. `errorFields()` logs `error.message`, and an SMTP
-rejection usually quotes the recipient.
+rejection can quote the recipient.
 
 **How each app consumes it:**
 - The web app reads it from source, through a tsconfig path and a vitest
   alias, like `@scaliahr/email/contract`. The module has no imports, so only
   that file enters the server and Edge bundles. None of it reaches the
-  browser: `.next/static` carries no mask string, before or after.
+  browser: a one-time check of `.next/static` found no mask string, on main
+  and on this change. No CI step checks it.
 - The worker reads it from `dist`, through the package's `exports` entry
   `./log-masks`. The worker's Dockerfile already builds `@scaliahr/email` and
   copies its `dist`, so the image gains one small file and no dependency.
@@ -3835,7 +3839,8 @@ worker gains the email and token masks.
 an SMTP rejection quoting `ana.lopez@acme.dev`, `Authorization: Bearer
 abc.def.ghi`, and an address the NSS mask used to split. The web app's
 redaction tests are unchanged and green. The patterns are byte-identical to
-the web app's on main, `.next/static` carries no mask string, and lint, tsc
+the web app's on main, the one-time check of `.next/static` found no mask
+string, and lint, tsc
 and build are at zero in the web app, the worker and the email package.
 
 ---

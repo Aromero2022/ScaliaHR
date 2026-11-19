@@ -1,8 +1,8 @@
 // Worker logs as JSON lines (D27), like the web app's, with the job id and the
 // tenant id when the job has one. Payloads are never logged; error messages go
-// through the web app's own list of masks, @scaliahr/email/log-masks (D53):
-// email addresses, JWTs, Bearer/Basic tokens, CURP, RFC, CLABE, card numbers
-// and NSS. An SMTP rejection that quotes the recipient is logged without it.
+// through the list of masks shared with the web app, @scaliahr/email/log-masks
+// (D53), so an SMTP rejection that quotes the recipient is logged without it.
+// log() writes its other fields as given: pass ids and outcomes, not free text.
 import { maskText } from "@scaliahr/email/log-masks";
 
 type Level = "info" | "warn" | "error";
