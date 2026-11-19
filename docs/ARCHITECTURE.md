@@ -2123,6 +2123,34 @@ machine):**
       writes a CSV. The baseline mixes `main` runs without and with the CSV
       until there are five `main` runs with it. During that transition D36
       is reported the same way, with the label "transición CSV".
+      - Accepted by the user on 2026-11-19, in #79, so it is no longer
+        pending. The label stays until there are five `main` runs with the
+        CSV.
+  - **Exception for #79 (D54), approved by the user on 2026-11-19:** D36
+    blocked #79. Its head 0342b31 was above the limit of 96.43 ms on the
+    first attempt and on the re-run, both on AMD EPYC 7763 runners. The user
+    approved the merge as an explicit exception, because the block followed
+    the runner's hardware and not the code: the images of dd61252 and
+    0342b31 hold the same code, and dd61252 gave 54.73 and 61.61 ms on
+    Intel Xeon 6975P-C runners. Between the two heads only a `ci.yml`
+    warning and its comment, the text one test expects, and docs changed:
+    `.github` and `docs` are outside the Docker build context, and the test
+    is not in the standalone output. The rule and the band do not change.
+
+    | Head | Attempt | Runner CPU | k6 p95 steady | Against 96.43 ms |
+    |---|---|---|---|---|
+    | dd61252 | 1 | Intel(R) Xeon(R) 6975P-C | 54.73 ms | −43.2 % |
+    | dd61252 | 2 | Intel(R) Xeon(R) 6975P-C | 61.61 ms | −36.1 % |
+    | 0342b31 | 1 | AMD EPYC 7763 64-Core Processor | 98.13 ms | +1.8 %, above |
+    | 0342b31 | 2 (re-run) | AMD EPYC 7763 64-Core Processor | 112.8 ms | +17.0 %, above |
+
+    - Runs 44602211249 (dd61252) and 44608857876 (0342b31); the CPU comes
+      from their "D36-diag: runner" lines.
+    - By the same decision, #79's closing commit, which only adds this
+      text, is measured once, without a re-run. If that run is above the
+      limit, this exception covers it too.
+    - It covers #79 only. Any other pull request above the limit follows
+      the rule above.
 
 ---
 
@@ -4043,6 +4071,16 @@ request's CI measures the real cost.
   submetric with no sample is exported at 0, and `root_group.checks` holds
   each check), and the builds above.
 - CI: the lines of this pull request's attempts and of `main`.
+
+**Provisional conclusion (#79, 2026-11-19):** inconclusive, but it points to
+the runner's hardware (AMD EPYC 7763 against Intel Xeon 6975P-C) and not to a
+cold start; more runs with D36-diag are needed to confirm it.
+- On #79's four attempts the second pass, on the same runner, gave about the
+  same p95 as the first: 55.41 and 53.51 ms on Intel, 93.29 and 119.52 ms on
+  AMD.
+- The p95 did not follow the seconds from healthy to k6 (392.8, 483.1, 273.9
+  and 277.2 s): the two runs with the highest first-pass p95 (AMD, 98.13 and
+  112.8 ms) had the fewest seconds (273.9 and 277.2 s).
 
 ---
 
