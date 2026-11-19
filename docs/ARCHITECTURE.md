@@ -1022,6 +1022,8 @@ Mailpit of Supabase local; Resend plugs into the same adapter in Phase 23
   render a job whose link points anywhere else.
 - `transport.ts`: the adapter interface (`send`, `close`) and its SMTP
   implementation (nodemailer, no auth or TLS, meant for Mailpit only).
+- `log-masks.ts`: the masks for free text in the logs of the web app and the
+  worker (D53), exported as `@scaliahr/email/log-masks`.
 - The worker uses the compiled `dist`; the web app compiles `contract.ts` from
   source (tsconfig paths and `transpilePackages`, like `@scaliahr/shared`).
 
@@ -1050,7 +1052,8 @@ pg-boss is pinned to the same exact version as the worker, and
 required and validated with zod at start. Each job is parsed with the
 contract, branded, rendered and sent; a missing or suspended tenant completes
 the job as `dropped` without sending. Logs carry the job id and outcome, never
-addresses or links.
+addresses or links. An SMTP rejection that quotes the recipient is logged with
+the address masked (D53).
 
 **Local stack:** `supabase/config.toml` exposes Mailpit's SMTP on
 `127.0.0.1:54325` for the integration tests. In docker-compose the worker
@@ -1430,7 +1433,9 @@ into it in Phase 23. Phase 9b, PR 2.
   numbers and NSS, because database errors quote the offending values.
 - The worker writes the same kind of JSON lines (`apps/worker/src/log.ts`)
   with the job id and the tenant id of the job. It never logs payloads, and
-  error messages get the same masks. The operator CLIs (`smoke.js`,
+  error messages get the same masks. Until D53 the worker's copy of the list
+  lacked email addresses and Bearer/Basic tokens; since D53 both apps call one
+  list, `@scaliahr/email/log-masks`. The operator CLIs (`smoke.js`,
   `export-tenant.js`) keep plain text.
 
 **Errors:**
@@ -1489,7 +1494,8 @@ into it in Phase 23. Phase 9b, PR 2.
   every other event carries its name, the request and tenant ids and redacted
   errors. The instrumentation test now puts an email and a `person` id in the
   query and checks that neither reaches the line.
-- **Emails are masked as `[EMAIL]`** in every string that reaches the logs. A
+- **Emails are masked as `[EMAIL]`** in every string that reaches the logs.
+  In the worker's error messages that holds since D53. A
   database error can quote one from a duplicate key or a search filter
   (`failed to parse logic tree ((email.ilike."%…%"))`). No log records an
   email on purpose: a failed login logs its status, and the rate-limit keys
@@ -3773,6 +3779,64 @@ commands and 5 skills, listed in `CLAUDE.md`. They stay installed, so
 **Checks:** eslint and tsc in `apps/web`, `packages/email` and `apps/worker`,
 the build, `check:forbidden` and gitleaks over the whole history, all at zero.
 Only `CLAUDE.md`, this document and `docs/ROADMAP.md` change.
+
+---
+
+## D53 — One List of Log Masks for the Web App and the Worker
+
+**Decision:** The patterns that mask free text in the logs live in one module,
+`packages/email/src/log-masks.ts`, exported as `@scaliahr/email/log-masks`
+(`maskText`). The web app's `redactString()` (D27) and the worker's `mask()`
+both call it. Until this decision the worker kept its own copy of the list,
+without email addresses or Bearer/Basic tokens, while its comment and D27 said
+it used the same masks. `errorFields()` logs `error.message`, and an SMTP
+rejection usually quotes the recipient.
+
+**How each app consumes it:**
+- The web app reads it from source, through a tsconfig path and a vitest
+  alias, like `@scaliahr/email/contract`. The module has no imports, so only
+  that file enters the server and Edge bundles. None of it reaches the
+  browser: `.next/static` carries no mask string, before or after.
+- The worker reads it from `dist`, through the package's `exports` entry
+  `./log-masks`. The worker's Dockerfile already builds `@scaliahr/email` and
+  copies its `dist`, so the image gains one small file and no dependency.
+- The Dockerfiles, `turbo prune`, CI, `next.config.ts` and the lockfile do not
+  change.
+
+**The list:** the web app's eight patterns, byte for byte and in its order.
+Email addresses go first, because otherwise the NSS and RFC masks split an
+address and leave its domain (`[NSS]@acme.dev`). Then JWT, Bearer/Basic, CURP,
+RFC, CLABE, card numbers and NSS. The web app's output does not change; the
+worker gains the email and token masks.
+
+**Options weighed:**
+- A subpath of `@scaliahr/email` (chosen): no infrastructure change, because
+  it is the one package both apps already consume.
+- A subpath of `@scaliahr/shared`: the worker does not depend on it, its
+  `dist` is not built for Node's ESM, and it would bring
+  `@supabase/supabase-js` into the worker image.
+- A package of its own: the best cohesion, at the cost of a new workspace, its
+  builds in CI and in the worker's Dockerfile, and new lockfile entries.
+- Two lists with a parity test: no infrastructure either, but every change is
+  made twice.
+
+**Limits:**
+- Cohesion: log masks sit in the email package. A package of their own is the
+  way out if the module grows.
+- The module must stay free of imports, because the web app bundles it for
+  the Edge runtime.
+- `\w` is ASCII only: an address with a non-ASCII local part or an IDN domain
+  is not masked, in either app.
+- Only the patterns are shared. The web app also blanks sensitive keys and
+  masks `stack` and `cause`; the worker logs only an error's name, message
+  and code.
+
+**Checks:** worker unit tests that failed before the change and pass after:
+an SMTP rejection quoting `ana.lopez@acme.dev`, `Authorization: Bearer
+abc.def.ghi`, and an address the NSS mask used to split. The web app's
+redaction tests are unchanged and green. The patterns are byte-identical to
+the web app's on main, `.next/static` carries no mask string, and lint, tsc
+and build are at zero in the web app, the worker and the email package.
 
 ---
 
