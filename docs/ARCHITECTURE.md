@@ -734,8 +734,8 @@ docker-compose, Supabase local, tenants on `*.localhost`, and the
 `db-remote-sync` production mode with reset blocked, tested without touching
 any remote project. PITR and per-tenant exports are still enabled only when the
 first billable customer is onboarded.
-Since D55 that condition also covers Phase 22b (Reports and People Analytics):
-phases 9a–22b.
+Since D55 the Principle 8 range quoted above (phases 9a–22) also includes
+Phase 22b (Reports and People Analytics): phases 9a–22b.
 
 **Deployment:**
 - `main` deploys to staging; a tag or release deploys to production. CI green
@@ -4119,11 +4119,16 @@ Neither the UI nor the public API (Phase 13) accepts SQL.
 - Sharing a report (folder, role or group) shares its definition, not its
   rows.
 - A scheduled run re-checks its owner's permissions and module flags every
-  time; without them it does not run.
-- The email carries only a link to the app's origin (D20) and no report data.
-  The report opens or downloads with the session and permissions of whoever
-  follows the link, never the owner's, so a recipient who sees fewer employees
-  never receives the owner's rows.
+  time; without them it does not run. Deactivating the owner stops all of the
+  owner's schedules.
+- A scheduled run produces no rows for its recipients: it checks the owner and
+  sends the notice. The email carries only a link to the app's origin (D20),
+  with a generic subject and no report name, filter values or data. The rows
+  are computed when the link is opened, with the session and permissions of
+  whoever opens it, never the owner's and never from a file made for the
+  owner, so a recipient who sees fewer employees never receives the owner's
+  rows.
+- Recipients are active users of the same tenant; no external addresses.
 - Prerequisite: cron scheduling is off in the worker today (D17). Scheduled
   reports need the migration that declares pg-boss's internal
   `__pgboss__send-it` queue and the decision on how the worker may insert it.
@@ -4134,16 +4139,27 @@ Neither the UI nor the public API (Phase 13) accepts SQL.
   rate-limit token (D28). They are not the per-tenant backup export (D23,
   `tenant_export_rows`), which never serves reports, nor transport packages
   (Roadmap, Principle 5).
+- A generated file is served only to the person who requested it, in the same
+  tenant, through a route with a session that re-checks `can()`, the module
+  flags and "Ver dato sensible" on download. Never through a public link or a
+  signed link without a session.
+- The worker never reads a report view as a role that skips RLS, nor through a
+  SECURITY DEFINER function that takes a user id as an argument. Whatever
+  mechanism 22b picks keeps `worker_app` NOBYPASSRLS and without direct grants
+  on `public` (D17, D20), and the rows come from a query evaluated under the
+  requester's RLS context. Until that is decided, no export is built.
 - Without "Ver dato sensible" (Roadmap, Phase 11), CURP, RFC, NSS, CLABE and
-  salary are masked on the server, the same on screen, in files and in email.
+  salary are masked on the server, the same on screen and in files; the email
+  carries no data.
 - Every export calls `writeAuditLog()` with the report, its version, the format
   and the row count, never the values.
-- Job payloads carry ids only, and logs never carry row values. The worker's
-  logs also go through the single list of masks (D53), but that list does not
-  cover salary, so the rule is not to log values, not the masks.
+- Report and export jobs carry ids only; the email job also carries the
+  recipients' addresses, as D20 allows. Logs never carry row values. The
+  worker's logs also go through the single list of masks (D53), but that list
+  does not cover salary, so the rule is not to log values, not the masks.
 
 **Principle 8:** everything runs locally. The worker generates the files with
-open-source libraries in its image, and email goes through the adapter to
+libraries in its image (chosen in 22b), and email goes through the adapter to
 Mailpit (D20). No paid service is part of 22b.
 
 **Options weighed:**
@@ -4162,12 +4178,17 @@ Mailpit (D20). No paid service is part of 22b.
 - Open for Phase 22b: whether reports sit behind the existing `is_wfa_active`
   (Workforce Analytics) module flag (D12); how the worker takes on a user's
   identity to run a report through RLS without BYPASSRLS; and where export
-  files live and for how long (retention, Phase 20).
+  files live and for how long (retention, Phase 20), decided before the first
+  export is built.
+- Also open: the value of the row limit and of the platform cap, and whether
+  masked columns may be used to filter, sort or group, with a minimum group
+  size for aggregates, so a masked value cannot be inferred.
 
 **Checks (in Phase 22b):** a test against the local database compares, per
 account and with the modules on and off, the rows of each standard report, of
-its export in the three formats and of a scheduled report with what `can()` and
-RLS allow that account. Sensitive fields come out masked without "Ver dato
+its export in the three formats and of what a scheduled report's link opens
+with what `can()` and RLS allow that account. A file downloaded by anyone but
+its requester is refused, sensitive fields come out masked without "Ver dato
 sensible", each export leaves one audit entry without values, and the static
 rate-limit and zod coverage tests (D31, D39) include the new actions and
 routes.

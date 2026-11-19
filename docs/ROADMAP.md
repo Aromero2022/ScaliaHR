@@ -52,6 +52,8 @@
 | 23 | Lanzamiento a producción | Única fase con servicios de pago: dominio y Cloudflare, Supabase staging/producción en Pro, Railway, Resend, CI/CD y preview por PR, Sentry, uptime, réplicas, k6 en staging, respaldos diarios y proveedores reales detrás de los adaptadores. Requisito de entrada: fases 9a–22 completas y probadas en local. PITR y export por tenant solo con el primer cliente facturable. |
 
 > **Vistas de reporte (D55):** cada módulo de las fases 14–22 expone sus datos en una vista de reporte versionada que consume la Fase 22b, y la construye en su propia fase. La de Employee Central (fases 1–3, ya construido) llega con la Fase 14 o con la 22b, lo que llegue primero.
+>
+> **Requisito de entrada de la Fase 23 (D55):** desde D55 es 9a–22b, también donde esta tabla, la sección de la Fase 23 y el Principio 8 dicen 9a–22.
 
 ---
 
@@ -298,7 +300,7 @@ La "configuración de empresa (logo, tema...)" se resuelve con un Theme Manager 
 ### Datos sensibles
 
 - Permiso RBP "Ver dato sensible": CURP, RFC, NSS, CLABE y salario enmascarados por defecto; botón "mostrar" solo con ese permiso, y cada revelación registrada con `writeAuditLog()`. Hoy la ficha del empleado muestra CURP, RFC y salario completos a quien pasa RLS (el propio empleado, su jefe directo y admin; D6). NSS y CLABE todavía no existen en el esquema: llegan con la Fase 14. `can()` ya admite permisos por campo (`field_key`).
-- Desde D55, "Ver dato sensible" y la auditoría también cubren las exportaciones y los reportes de la Fase 22b: sin el permiso, CURP, RFC, NSS, CLABE y salario salen enmascarados en el archivo exportado y en el reporte programado, y cada exportación queda en la bitácora con `writeAuditLog()` (reporte, versión, formato y número de filas, sin los valores); el reporte de auditoría las muestra.
+- Desde D55, "Ver dato sensible" y la auditoría también cubren las exportaciones y los reportes de la Fase 22b: sin el permiso, CURP, RFC, NSS, CLABE y salario salen enmascarados en el reporte, en el archivo exportado y en lo que abre el enlace de un reporte programado, y cada exportación queda en la bitácora con `writeAuditLog()` (reporte, versión, formato y número de filas, sin los valores). El reporte de auditoría muestra esas exportaciones.
 
 ### Protección de cuentas
 
@@ -408,33 +410,44 @@ Depende de: worker y lib/email (9a), Admin Center con "Ver dato sensible" y el r
 ### Reportes estándar
 
 - Headcount, altas y bajas, rotación, ausentismo, desempeño vs. potencial, avance de metas y embudo de RCM.
-- Cada uno depende de su módulo: headcount, altas, bajas y rotación de Employee Central y de Onboarding y Offboarding (14), avance de metas de PMGM v2 (16), desempeño vs. potencial de Calibración (18a), ausentismo del registro de tiempo (21) y el embudo de RCM (22).
+- Cada uno depende de su módulo: headcount, altas, bajas y rotación de Employee Central y de Onboarding y Offboarding (14), avance de metas de PMGM (las metas que existen hoy y las de la Fase 16), desempeño vs. potencial de Calibración (18a), ausentismo del registro de tiempo (21) y el embudo de RCM (22).
 
 ### Reportes programados
 
-- Programación por reporte; el worker los corre y los distribuye por el adaptador de correo (D20).
+- Programación por reporte; el worker corre cada programación y avisa por el adaptador de correo (D20).
 - Requisito previo: hoy la programación de pg-boss está apagada (D17). Hace falta la migración que declare su cola interna y la decisión de cómo la inserta el worker.
-- Cada corrida revisa de nuevo los permisos y los flags de módulo (D12) de su dueño; sin ellos, no corre.
-- El correo solo lleva un enlace a la app (D20), sin datos del reporte. El reporte se abre o se descarga con la sesión y los permisos de quien sigue el enlace, nunca con los del dueño.
+- Cada corrida revisa de nuevo los permisos y los flags de módulo (D12) de su dueño; sin ellos, no corre. Si el dueño queda inactivo, se detienen todas sus programaciones.
+- La corrida no genera filas para los destinatarios: valida al dueño y manda el aviso. El correo solo lleva un enlace a la app (D20), con asunto genérico y sin el nombre del reporte, sus filtros ni sus datos; las filas se calculan al abrir el enlace, con la sesión y los permisos de quien lo abre, nunca con los del dueño ni con un archivo del dueño.
+- Destinatarios: solo usuarios activos del mismo tenant, sin direcciones externas.
 
 ### Exportación
 
 - CSV, XLSX y PDF generados por el worker, no por el proceso web, con límite de filas por tenant dentro de un tope de la plataforma y rate limiting al pedirla (D28).
+- Un archivo exportado solo se entrega a quien lo pidió, en su tenant, por una ruta con sesión que revisa de nuevo `can()`, los flags de módulo y "Ver dato sensible" al descargar; nunca por un enlace público ni firmado sin sesión.
 - No es el export por tenant de los respaldos (D23) ni los transport packages (Principio 5).
 
 ### Seguridad
 
-- RLS y poblaciones de RBP (D47): las vistas de reporte se leen como quien ve el reporte (`security_invoker`), así que nunca muestran más que las pantallas de su módulo. `worker_app` sigue sin BYPASSRLS.
+- RLS y poblaciones de RBP (D47): las vistas de reporte se leen como quien abre el reporte (`security_invoker`). En un reporte de varios dominios, cada vista muestra solo lo que su módulo le deja ver a esa persona, nunca más que las pantallas del módulo. `worker_app` sigue sin BYPASSRLS.
+- El worker nunca lee una vista de reporte con un rol que salte RLS ni con una función SECURITY DEFINER que reciba un id de usuario; mientras no esté decidido cómo toma la identidad de quien pidió la exportación (D55), no se construyen las exportaciones.
 - Siguen las reglas de talento de D47: calificaciones solo con `talent_scores()`; `job_informations`, `succession_nominees` y `talent_pool_entries` cerradas hasta la Fase 18a, y el feedback PRIVATE solo para autor y sujeto.
-- Sin "Ver dato sensible" (Fase 11), CURP, RFC, NSS, CLABE y salario salen enmascarados en la pantalla, en el archivo y en el correo. El enmascarado se hace en el servidor.
+- Sin "Ver dato sensible" (Fase 11), CURP, RFC, NSS, CLABE y salario salen enmascarados en la pantalla y en el archivo; el correo no lleva datos. El enmascarado se hace en el servidor.
 - Cada exportación queda en la bitácora con `writeAuditLog()`: quién, qué reporte y versión, el formato y el número de filas, nunca los valores.
-- Los trabajos del worker llevan solo ids, y los logs nunca llevan valores de las filas; además pasan por la lista única de máscaras (D53).
+- Los trabajos de reporte y de exportación llevan solo ids; el de correo lleva además las direcciones de los destinatarios, como permite D20. Los logs nunca llevan valores de las filas: la lista única de máscaras (D53) no cubre el sueldo, así que la regla es no registrar valores.
 
 ### LFPDPPP
 
 - Minimización de datos en los reportes programados: solo las columnas que define el reporte, cada destinatario ve lo que su población de RBP le deja ver y el correo no lleva datos personales.
 
-**Criterio de cierre:** un test contra la base local compara, por cuenta y con los módulos encendidos y apagados, las filas de cada reporte estándar, de su exportación en los tres formatos y de un reporte programado con lo que `can()` y RLS le dejan ver a esa cuenta. Sin "Ver dato sensible" los campos sensibles salen enmascarados, y cada exportación deja una entrada en la bitácora sin los valores.
+### Abierto para esta fase (D55)
+
+- Si los reportes quedan detrás del flag `is_wfa_active` (Workforce Analytics, D12).
+- Cómo toma el worker la identidad de quien pidió una exportación para leer por RLS sin BYPASSRLS.
+- Dónde viven los archivos exportados y por cuánto tiempo (retención, Fase 20); se decide antes de construir la primera exportación.
+- El valor del límite de filas y del tope de la plataforma.
+- Si las columnas enmascaradas pueden usarse para filtrar, ordenar o agrupar, y un tamaño mínimo de grupo en los agregados, para que no se deduzca un dato enmascarado.
+
+**Criterio de cierre:** un test contra la base local compara, por cuenta y con los módulos encendidos y apagados, las filas de cada reporte estándar, de su exportación en los tres formatos y de lo que abre el enlace de un reporte programado con lo que `can()` y RLS le dejan ver a esa cuenta. Un archivo pedido por otra cuenta se rechaza al descargarlo, sin "Ver dato sensible" los campos sensibles salen enmascarados y cada exportación deja una entrada en la bitácora sin los valores.
 
 ---
 
@@ -557,7 +570,7 @@ Contratar PITR y encender su export por tenant:
 | Mismos patrones de enmascarado en los logs de web y worker | D27 + D53 | Cumple: `@scaliahr/email/log-masks` es la única lista de máscaras de texto libre; la web la lee desde la fuente y el worker desde `dist`. Correos, JWT, tokens Bearer/Basic, CURP, RFC, CLABE, tarjetas y NSS, con el correo primero. Probado con tests unitarios del worker que fallaban antes (rechazo SMTP con el destinatario, `Bearer` y una dirección que la máscara de NSS partía) y con los tests de redacción de la web sin cambios. Solo se comparten los patrones: el worker no registra `stack` ni `cause` y no vacía claves sensibles |
 | Diagnóstico del primer intento de k6 en CI | D36 + D54 + RUNBOOK §9 | Parcial: solo instrumentación, la parte A de la investigación de D36. El job `docker` imprime líneas `D36-diag:` (runner, segundos desde que la web queda sana hasta k6, inicios de sesión y reintentos por fase, hash del código de la imagen web y CSV por petición) y corre una segunda pasada de k6 que no cuenta para D36. Los diagnósticos nunca hacen fallar el job: si uno no puede dar su línea, deja una anotación de error. La excepción es una página de la segunda pasada con empleados de otro tenant en su resumen, que sí lo hace fallar; si la segunda pasada no deja ese conteo, solo advierte. El artifact queda 14 días y nunca lleva `accounts.json`. La regla de D36 no cambia: misma ventana, `HOLD`, fase y límites, y se lee la línea de la primera pasada; la primera pasada suma el CSV y la fase en los inicios de sesión, y su costo no se puede mostrar nulo. Probado con tests unitarios y con los pasos nuevos corridos con `docker` y `npm` falsos. Falta la causa: se escribe en D36 cuando los datos la muestren |
 | Reportes respetan RLS y poblaciones RBP | 22b (D47, D55) | ⏳ Pendiente: la Fase 22b no ha empezado. Las vistas de reporte se leerán como quien ve o abre el reporte (`security_invoker`), con su población de RBP y los flags de módulo; un test contra la base local comparará, por cuenta, las filas de cada reporte con lo que `can()` permite |
-| Datos sensibles enmascarados en reportes y exportaciones | 11 + 22b (D55) | ⏳ Pendiente: "Ver dato sensible" llega en la Fase 11 y los reportes en la 22b. Sin ese permiso, CURP, RFC, NSS, CLABE y salario saldrán enmascarados, desde el servidor, en la pantalla, en el archivo y en el correo |
+| Datos sensibles enmascarados en reportes y exportaciones | 11 + 22b (D55) | ⏳ Pendiente: "Ver dato sensible" llega en la Fase 11 y los reportes en la 22b. Sin ese permiso, CURP, RFC, NSS, CLABE y salario saldrán enmascarados, desde el servidor, en la pantalla y en el archivo exportado; el correo de un reporte programado no lleva datos |
 | Exportaciones auditadas y con límite | 11 + 22b (D28, D55) | ⏳ Pendiente: cada exportación quedará en la bitácora con `writeAuditLog()` (reporte, versión, formato y número de filas, sin los valores), con límite de filas por tenant dentro de un tope y rate limiting al pedirla |
 | LFPDPPP: minimización de datos en reportes programados | 22b (D55) | ⏳ Pendiente: un reporte programado llevará solo las columnas que define; el correo solo lleva un enlace, sin datos personales, y quien lo abre ve lo que su población de RBP le deja ver |
 
