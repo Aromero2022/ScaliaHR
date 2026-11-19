@@ -8,6 +8,7 @@
 > **Regla de inversión (Principio 8):** nada que requiera pago se contrata hasta
 > que las fases 9a–22 estén completas y probadas al 100 % en local. Todo lo que
 > requiere pago vive en la Fase 23.
+> Desde D55 ese rango incluye la Fase 22b (Reportes y People Analytics): las fases 9a–22b.
 
 ---
 
@@ -47,7 +48,10 @@
 | 20 | Retención y Bloqueo (DRTM) + autoservicio ARCO | Data Retention & Transparency Module, incluido el autoservicio ARCO. |
 | 21 | Time Tracking | Registro de tiempo, aprobaciones, integración con nómina por adaptador (local/prueba). Consume la API de la Fase 13. |
 | 22 | RCM | Recruiting Management: requisiciones, candidatos, pipeline y ofertas. Al contratar un candidato, inicia el Onboarding de la Fase 14. |
+| 22b | Reportes y People Analytics | Report Center (catálogo por tenant, carpetas y compartir por RBP), constructor de reportes de tabla y de varios dominios sin SQL libre, dashboards y tiles configurables en Admin Center, reportes estándar (headcount, altas y bajas, rotación, ausentismo, desempeño vs. potencial, avance de metas y embudo de RCM), reportes programados que distribuye el worker (correo por adaptador) y exportación CSV/XLSX/PDF desde el worker, con límite de filas y rate limiting. Seguridad heredada de RLS y de las poblaciones de RBP (D47); datos sensibles enmascarados sin "Ver dato sensible" y cada exportación en la bitácora. Consume las vistas de reporte versionadas de las fases 14–22 (D55). Entra en el requisito de entrada de la Fase 23, igual que 9a–22. |
 | 23 | Lanzamiento a producción | Única fase con servicios de pago: dominio y Cloudflare, Supabase staging/producción en Pro, Railway, Resend, CI/CD y preview por PR, Sentry, uptime, réplicas, k6 en staging, respaldos diarios y proveedores reales detrás de los adaptadores. Requisito de entrada: fases 9a–22 completas y probadas en local. PITR y export por tenant solo con el primer cliente facturable. |
+
+> **Vistas de reporte (D55):** cada módulo de las fases 14–22 expone sus datos en una vista de reporte versionada que consume la Fase 22b, y la construye en su propia fase. La de Employee Central (fases 1–3, ya construido) llega con la Fase 14 o con la 22b, lo que llegue primero.
 
 ---
 
@@ -294,6 +298,7 @@ La "configuración de empresa (logo, tema...)" se resuelve con un Theme Manager 
 ### Datos sensibles
 
 - Permiso RBP "Ver dato sensible": CURP, RFC, NSS, CLABE y salario enmascarados por defecto; botón "mostrar" solo con ese permiso, y cada revelación registrada con `writeAuditLog()`. Hoy la ficha del empleado muestra CURP, RFC y salario completos a quien pasa RLS (el propio empleado, su jefe directo y admin; D6). NSS y CLABE todavía no existen en el esquema: llegan con la Fase 14. `can()` ya admite permisos por campo (`field_key`).
+- Desde D55, "Ver dato sensible" y la auditoría también cubren las exportaciones y los reportes de la Fase 22b: sin el permiso, CURP, RFC, NSS, CLABE y salario salen enmascarados en el archivo exportado y en el reporte programado, y cada exportación queda en la bitácora con `writeAuditLog()` (reporte, versión, formato y número de filas, sin los valores); el reporte de auditoría las muestra.
 
 ### Protección de cuentas
 
@@ -380,6 +385,59 @@ Data Retention & Transparency Module, incluido el autoservicio ARCO (LFPDPPP 202
 
 ---
 
+## Fase 22b — Reportes y People Analytics
+
+Report Center, constructor de reportes, dashboards, reportes estándar, reportes programados y exportaciones, sobre las vistas de reporte versionadas que publica cada módulo (D55). Todo corre en local, sin servicios de pago (Principio 8): el worker genera los archivos y el correo sale por el adaptador hacia Mailpit (D20).
+
+Depende de: worker y lib/email (9a), Admin Center con "Ver dato sensible" y el reporte de auditoría (11) y las vistas de reporte de las fases 14–22. Cada reporte estándar llega cuando existe su módulo.
+
+### Report Center
+
+- Catálogo de reportes por tenant, con carpetas.
+- Compartir un reporte o una carpeta por RBP (rol o grupo). Compartir da la definición, no las filas: cada quien ve solo lo que su población de RBP le deja ver (D47).
+
+### Constructor de reportes
+
+- Reportes de tabla y de varios dominios (por ejemplo, datos laborales con metas y habilidades), armados con las columnas, filtros, agrupaciones y orden de las vistas de reporte.
+- Sin SQL libre, ni en la pantalla ni en la API (Fase 13): cada columna y cada filtro se valida con zod contra el catálogo de las vistas (D31).
+
+### Dashboards y tiles
+
+- Dashboards y tiles configurables en Admin Center (Principio 4), sobre los mismos reportes y la biblioteca base de la 9c (D43). Un tile muestra lo que su reporte le mostraría a quien lo ve.
+
+### Reportes estándar
+
+- Headcount, altas y bajas, rotación, ausentismo, desempeño vs. potencial, avance de metas y embudo de RCM.
+- Cada uno depende de su módulo: headcount, altas, bajas y rotación de Employee Central y de Onboarding y Offboarding (14), avance de metas de PMGM v2 (16), desempeño vs. potencial de Calibración (18a), ausentismo del registro de tiempo (21) y el embudo de RCM (22).
+
+### Reportes programados
+
+- Programación por reporte; el worker los corre y los distribuye por el adaptador de correo (D20).
+- Requisito previo: hoy la programación de pg-boss está apagada (D17). Hace falta la migración que declare su cola interna y la decisión de cómo la inserta el worker.
+- Cada corrida revisa de nuevo los permisos y los flags de módulo (D12) de su dueño; sin ellos, no corre.
+- El correo solo lleva un enlace a la app (D20), sin datos del reporte. El reporte se abre o se descarga con la sesión y los permisos de quien sigue el enlace, nunca con los del dueño.
+
+### Exportación
+
+- CSV, XLSX y PDF generados por el worker, no por el proceso web, con límite de filas por tenant dentro de un tope de la plataforma y rate limiting al pedirla (D28).
+- No es el export por tenant de los respaldos (D23) ni los transport packages (Principio 5).
+
+### Seguridad
+
+- RLS y poblaciones de RBP (D47): las vistas de reporte se leen como quien ve el reporte (`security_invoker`), así que nunca muestran más que las pantallas de su módulo. `worker_app` sigue sin BYPASSRLS.
+- Siguen las reglas de talento de D47: calificaciones solo con `talent_scores()`; `job_informations`, `succession_nominees` y `talent_pool_entries` cerradas hasta la Fase 18a, y el feedback PRIVATE solo para autor y sujeto.
+- Sin "Ver dato sensible" (Fase 11), CURP, RFC, NSS, CLABE y salario salen enmascarados en la pantalla, en el archivo y en el correo. El enmascarado se hace en el servidor.
+- Cada exportación queda en la bitácora con `writeAuditLog()`: quién, qué reporte y versión, el formato y el número de filas, nunca los valores.
+- Los trabajos del worker llevan solo ids, y los logs nunca llevan valores de las filas; además pasan por la lista única de máscaras (D53).
+
+### LFPDPPP
+
+- Minimización de datos en los reportes programados: solo las columnas que define el reporte, cada destinatario ve lo que su población de RBP le deja ver y el correo no lleva datos personales.
+
+**Criterio de cierre:** un test contra la base local compara, por cuenta y con los módulos encendidos y apagados, las filas de cada reporte estándar, de su exportación en los tres formatos y de un reporte programado con lo que `can()` y RLS le dejan ver a esa cuenta. Sin "Ver dato sensible" los campos sensibles salen enmascarados, y cada exportación deja una entrada en la bitácora sin los valores.
+
+---
+
 ## Fase 23 — Lanzamiento a producción
 
 Única fase en la que se contratan servicios de pago (Principio 8). Conecta los proveedores reales detrás de los adaptadores ya probados en local; no agrega funcionalidad de producto.
@@ -387,6 +445,7 @@ Data Retention & Transparency Module, incluido el autoservicio ARCO (LFPDPPP 202
 ### Requisito de entrada (antes del primer cliente)
 
 - Fases 9a–22 completas y probadas al 100 % en local.
+- Fase 22b (Reportes y People Analytics, D55) completa y probada al 100 % en local: el requisito es 9a–22b.
 - Cambiar el factor MFA del owner.
 - Sacar los datos demo de las migraciones a seed.sql.
 - Sin credenciales demo en ninguna pantalla.
@@ -497,6 +556,10 @@ Contratar PITR y encender su export por tenant:
 | Versión de turbo de las imágenes igual a la del lockfile | D17 + D33 + `scripts/check-turbo-version.mjs` (job `app` de CI) | Cumple: el paso «Dockerfiles pin the lockfile's turbo (D17)» del job `app` corre en cada corrida de CI, sin Docker, y falla si `ARG TURBO_VERSION` de `apps/web/Dockerfile` o de `apps/worker/Dockerfile` no es la versión de `node_modules/turbo` en `package-lock.json`, si falta el ARG o si el lockfile no tiene turbo, con un error por archivo. `turbo prune` corre el turbo del ARG, no el del lockfile, y las actualizaciones de npm de Dependabot suben turbo solo en el lockfile, así que su PR falla hasta que se iguala el ARG a mano. Probado con tests del script (coincide, no coincide, falta el ARG o el Dockerfile, lockfile sin turbo o inválido) y del lugar del paso en `ci.yml` |
 | Mismos patrones de enmascarado en los logs de web y worker | D27 + D53 | Cumple: `@scaliahr/email/log-masks` es la única lista de máscaras de texto libre; la web la lee desde la fuente y el worker desde `dist`. Correos, JWT, tokens Bearer/Basic, CURP, RFC, CLABE, tarjetas y NSS, con el correo primero. Probado con tests unitarios del worker que fallaban antes (rechazo SMTP con el destinatario, `Bearer` y una dirección que la máscara de NSS partía) y con los tests de redacción de la web sin cambios. Solo se comparten los patrones: el worker no registra `stack` ni `cause` y no vacía claves sensibles |
 | Diagnóstico del primer intento de k6 en CI | D36 + D54 + RUNBOOK §9 | Parcial: solo instrumentación, la parte A de la investigación de D36. El job `docker` imprime líneas `D36-diag:` (runner, segundos desde que la web queda sana hasta k6, inicios de sesión y reintentos por fase, hash del código de la imagen web y CSV por petición) y corre una segunda pasada de k6 que no cuenta para D36. Los diagnósticos nunca hacen fallar el job: si uno no puede dar su línea, deja una anotación de error. La excepción es una página de la segunda pasada con empleados de otro tenant en su resumen, que sí lo hace fallar; si la segunda pasada no deja ese conteo, solo advierte. El artifact queda 14 días y nunca lleva `accounts.json`. La regla de D36 no cambia: misma ventana, `HOLD`, fase y límites, y se lee la línea de la primera pasada; la primera pasada suma el CSV y la fase en los inicios de sesión, y su costo no se puede mostrar nulo. Probado con tests unitarios y con los pasos nuevos corridos con `docker` y `npm` falsos. Falta la causa: se escribe en D36 cuando los datos la muestren |
+| Reportes respetan RLS y poblaciones RBP | 22b (D47, D55) | ⏳ Pendiente: la Fase 22b no ha empezado. Las vistas de reporte se leerán como quien ve o abre el reporte (`security_invoker`), con su población de RBP y los flags de módulo; un test contra la base local comparará, por cuenta, las filas de cada reporte con lo que `can()` permite |
+| Datos sensibles enmascarados en reportes y exportaciones | 11 + 22b (D55) | ⏳ Pendiente: "Ver dato sensible" llega en la Fase 11 y los reportes en la 22b. Sin ese permiso, CURP, RFC, NSS, CLABE y salario saldrán enmascarados, desde el servidor, en la pantalla, en el archivo y en el correo |
+| Exportaciones auditadas y con límite | 11 + 22b (D28, D55) | ⏳ Pendiente: cada exportación quedará en la bitácora con `writeAuditLog()` (reporte, versión, formato y número de filas, sin los valores), con límite de filas por tenant dentro de un tope y rate limiting al pedirla |
+| LFPDPPP: minimización de datos en reportes programados | 22b (D55) | ⏳ Pendiente: un reporte programado llevará solo las columnas que define; el correo solo lleva un enlace, sin datos personales, y quien lo abre ve lo que su población de RBP le deja ver |
 
 ---
 
@@ -517,3 +580,4 @@ Contratar PITR y encender su export por tenant:
 7. **Producción primero.** Ningún módulo nuevo sale a clientes sin pasar por staging, con rate limiting, monitoreo y respaldos activos.
 
 8. **Sin inversión hasta tener el producto completo.** Todo se desarrolla y prueba en local (Docker + Supabase local). Los servicios de pago se integran por adaptador, con una implementación local o de prueba, y se contratan solo en la Fase 23, cuando las fases 9a–22 están completas y probadas al 100 % en local. Hasta entonces no hay clientes ni staging; el Principio 7 rige desde el lanzamiento de la Fase 23.
+   Desde D55 ese rango incluye la Fase 22b (Reportes y People Analytics): las fases 9a–22b.
