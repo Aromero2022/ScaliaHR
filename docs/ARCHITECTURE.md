@@ -4121,14 +4121,18 @@ Neither the UI nor the public API (Phase 13) accepts SQL.
 - A scheduled run re-checks its owner's permissions and module flags every
   time; without them it does not run. Deactivating the owner stops all of the
   owner's schedules.
-- A scheduled run produces no rows for its recipients: it checks the owner and
-  sends the notice. The email carries only a link to the app's origin (D20),
-  with a generic subject and no report name, filter values or data. The rows
+- Proposal, pending the user's confirmation ("propuesta, pendiente de confirmar
+  por el usuario"): a scheduled run produces no rows for its recipients; it
+  checks the owner and sends the notice. The email carries only a link to the
+  app's origin (D20), with a generic subject and no report name, filter values
+  or data. The rows
   are computed when the link is opened, with the session and permissions of
   whoever opens it, never the owner's and never from a file made for the
   owner, so a recipient who sees fewer employees never receives the owner's
   rows.
-- Recipients are active users of the same tenant; no external addresses.
+- Proposal, pending the user's confirmation ("propuesta, pendiente de confirmar
+  por el usuario"): recipients are active users of the same tenant; no
+  external addresses.
 - Prerequisite: cron scheduling is off in the worker today (D17). Scheduled
   reports need the migration that declares pg-boss's internal
   `__pgboss__send-it` queue and the decision on how the worker may insert it.

@@ -417,8 +417,8 @@ Depende de: worker y lib/email (9a), Admin Center con "Ver dato sensible" y el r
 - Programación por reporte; el worker corre cada programación y avisa por el adaptador de correo (D20).
 - Requisito previo: al 2026-11-19 la programación de pg-boss está apagada (D17). Hace falta la migración que declare su cola interna y la decisión de cómo la inserta el worker.
 - Cada corrida revisa de nuevo los permisos y los flags de módulo (D12) de su dueño; sin ellos, no corre. Si se desactiva al usuario dueño, se detienen todas sus programaciones.
-- La corrida no genera filas para los destinatarios: valida al dueño y manda el aviso. El correo solo lleva un enlace a la app (D20), con asunto genérico y sin el nombre del reporte, sus filtros ni sus datos; las filas se calculan al abrir el enlace, con la sesión y los permisos de quien lo abre, nunca con los del dueño ni con un archivo del dueño.
-- Destinatarios: solo usuarios activos del mismo tenant, sin direcciones externas.
+- Propuesta, pendiente de confirmar por el usuario: la corrida no genera filas para los destinatarios; valida al dueño y manda el aviso. El correo solo lleva un enlace a la app (D20), con asunto genérico y sin el nombre del reporte, sus filtros ni sus datos; las filas se calculan al abrir el enlace, con la sesión y los permisos de quien lo abre, nunca con los del dueño ni con un archivo del dueño.
+- Propuesta, pendiente de confirmar por el usuario: destinatarios solo usuarios activos del mismo tenant, sin direcciones externas.
 
 ### Exportación
 
