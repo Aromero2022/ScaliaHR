@@ -1,0 +1,783 @@
+import { afterAll, describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { gzipSync } from "node:zlib";
+import {
+  diagLine,
+  firstHealthy,
+  firstRequestMs,
+  formatValue,
+  healthyGapLine,
+  isManifest,
+  outputTail,
+  pageSteadyStats,
+  percentile,
+  readCsvRows,
+  requestsLine,
+  runnerLine,
+  secondPassExit,
+  secondPassLine,
+  signInsLine,
+  standaloneLine,
+} from "../../../../scripts/d36-diag.mjs";
+import { MARKER, standaloneFiles } from "../../../../scripts/d36-standalone-files.mjs";
+
+/**
+ * D54: diagnostics of why the first CI attempt of k6 tends to be slower than
+ * its rerun. They add "D36-diag:" lines and an artifact, and must leave alone
+ * the number D36 compares: the steady-state page p95 of the first k6 pass.
+ */
+
+const REPO = path.resolve(__dirname, "../../../..");
+const DIAG = path.join(REPO, "scripts/d36-diag.mjs");
+const FILES = path.join(REPO, "scripts/d36-standalone-files.mjs");
+const CI = readFileSync(path.join(REPO, ".github/workflows/ci.yml"), "utf-8");
+const PAGES = readFileSync(path.join(REPO, "load/pages.js"), "utf-8");
+const D36_STEP = "k6 load test, short run (D36)";
+const SECOND_STEP = "Second k6 pass, informational, not part of D36 (D54)";
+const DIAG_STEP = "D36 diagnostics of the first pass (D54)";
+const HEALTHY_STEP = "First healthy probe of the web container (D54)";
+const ARTIFACT_STEP = "D36 diagnostics artifact (D54)";
+
+const dirs: string[] = [];
+afterAll(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+const tempDir = (prefix: string) => {
+  const dir = mkdtempSync(path.join(tmpdir(), prefix));
+  dirs.push(dir);
+  return dir;
+};
+
+/** A "D36-diag:" line: the prefix, a topic in lower-case words, then key=value pairs (JSON-quoted when not a plain token). */
+const LINE = /^D36-diag: [a-z][a-z0-9 -]*?(?: [a-z][a-z0-9_]*=(?:[\w.:+\-/<>]+|"(?:[^"\\]|\\.)*"))+$/;
+
+describe('the "D36-diag:" line format (D54)', () => {
+  it("starts with the fixed prefix and keeps the fields in order", () => {
+    expect(diagLine("second pass", { p95_steady_ms: "51.95", counts_for_d36: "no" })).toBe(
+      "D36-diag: second pass p95_steady_ms=51.95 counts_for_d36=no",
+    );
+  });
+
+  it.each([
+    ["AMD EPYC 7763 64-Core Processor", '"AMD EPYC 7763 64-Core Processor"'],
+    ["2026-11-19T18:50:08.123Z", "2026-11-19T18:50:08.123Z"],
+    [4, "4"],
+    ['say "hi"', '"say \\"hi\\""'],
+    ["", '""'],
+  ])("writes %j as %s", (value, expected) => {
+    expect(formatValue(value)).toBe(expected);
+  });
+
+  it("every command's line matches the format", () => {
+    const lines = [
+      runnerLine({ lscpu: LSCPU, nproc: "4\n", meminfo: MEMINFO, runAttempt: "2" }),
+      healthyGapLine({ healthyAt: "2026-11-19T18:50:08.000Z", exact: true, firstRequest: Date.parse("2026-11-19T18:54:22.500Z") }),
+      signInsLine(summary({}), "first"),
+      requestsLine(readCsvRows(csv(CSV_ROWS)), "first", "requests-first.csv.gz", CSV_SUMMARY),
+      standaloneLine(`${"a".repeat(64)}  server.js\n`),
+      secondPassLine(summary({}), "0", "92"),
+    ];
+    for (const line of lines) expect(line).toMatch(LINE);
+  });
+
+  it("goes to the job summary too, as code", () => {
+    const dir = tempDir("d36-summary-");
+    const stepSummary = path.join(dir, "summary.md");
+    const file = path.join(dir, "summary.json");
+    writeFileSync(file, JSON.stringify(summary({ ramp: 60, steady: 4 })));
+    const result = spawnSync("node", [DIAG, "sign-ins", file, "first"], {
+      encoding: "utf-8",
+      env: { ...process.env, GITHUB_STEP_SUMMARY: stepSummary },
+    });
+    expect(result.status).toBe(0);
+    const line = "D36-diag: sign-ins pass=first ramp=60 steady=4 retries_ramp=0 retries_steady=0";
+    expect(result.stdout).toBe(`${line}\n`);
+    expect(readFileSync(stepSummary, "utf-8")).toBe(`\`${line}\`\n\n`);
+  });
+
+  it("fails with a workflow error, not a wrong line, on an unknown command", () => {
+    const result = spawnSync("node", [DIAG, "nonsense"], { encoding: "utf-8" });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain('::error::D36-diag: unknown command "nonsense"');
+  });
+});
+
+const LSCPU = "Architecture:  x86_64\nCPU(s):  4\nModel name:  AMD EPYC 7763 64-Core Processor\nThread(s) per core:  2\n";
+const MEMINFO = "MemTotal:       16373428 kB\nMemFree:         1234 kB\n";
+
+describe("1. the runner (D54)", () => {
+  it("names the CPU model, nproc, MemTotal and the run attempt", () => {
+    expect(runnerLine({ lscpu: LSCPU, nproc: "4\n", meminfo: MEMINFO, runAttempt: "2" })).toBe(
+      'D36-diag: runner cpu="AMD EPYC 7763 64-Core Processor" nproc=4 mem_total_kb=16373428 run_attempt=2',
+    );
+  });
+
+  it('says "unavailable" for what it cannot read, instead of guessing', () => {
+    expect(runnerLine({ lscpu: "", nproc: "", meminfo: "", runAttempt: undefined })).toBe(
+      "D36-diag: runner cpu=unavailable nproc=unavailable mem_total_kb=unavailable run_attempt=unavailable",
+    );
+  });
+});
+
+const probe = (end: string, exitCode: number) => ({ Start: end, End: end, ExitCode: exitCode, Output: "" });
+
+describe("2. seconds from the first healthy probe to k6 (D54)", () => {
+  it("takes the oldest passing probe, as an exact time while the log still shows a failing one", () => {
+    const health = {
+      Status: "healthy",
+      Log: [
+        probe("2026-11-19T18:49:50.100000000Z", 1),
+        probe("2026-11-19T18:50:00.250000000Z", 0),
+        probe("2026-11-19T18:50:10.250000000Z", 0),
+      ],
+    };
+    expect(firstHealthy(health)).toEqual({ at: "2026-11-19T18:50:00.250Z", exact: true });
+  });
+
+  it("is not exact when all five probes in the log passed: the change may be older", () => {
+    const log = [0, 10, 20, 30, 40].map((s) => probe(new Date(Date.parse("2026-11-19T18:50:00Z") + s * 1000).toISOString(), 0));
+    expect(firstHealthy({ Status: "healthy", Log: log })).toEqual({ at: "2026-11-19T18:50:00.000Z", exact: false });
+  });
+
+  it("fails when no probe passed", () => {
+    expect(() => firstHealthy({ Status: "starting", Log: [probe("2026-11-19T18:49:50Z", 1)] })).toThrow(
+      "no passing probe in State.Health.Log (status starting)",
+    );
+    expect(() => firstHealthy(null)).toThrow("no passing probe");
+  });
+
+  it("measures up to k6's first request, read from its CSV", () => {
+    const first = firstRequestMs(readCsvRows(csv(CSV_ROWS)));
+    expect(first).toBe(1795115428109);
+    expect(healthyGapLine({ healthyAt: "2026-11-19T19:06:18.992Z", exact: false, firstRequest: first })).toBe(
+      "D36-diag: healthy to k6 seconds=249.1 web_healthy_at=2026-11-19T19:06:18.992Z k6_first_request_at=2026-11-19T19:10:28.109Z exact=no",
+    );
+  });
+
+  it("fails when the earlier step did not record the healthy time", () => {
+    const dir = tempDir("d36-gap-");
+    const file = path.join(dir, "requests.csv.gz");
+    writeFileSync(file, csv(CSV_ROWS));
+    const env = { ...process.env };
+    delete env.D36_WEB_HEALTHY_AT;
+    const result = spawnSync("node", [DIAG, "healthy-gap", file], { encoding: "utf-8", env });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("D36_WEB_HEALTHY_AT is not set");
+  });
+
+  it("is read right after local:up, before the e2e, from the web container", () => {
+    const names = dockerSteps().map(stepName);
+    const healthy = names.indexOf(HEALTHY_STEP);
+    expect(healthy).toBe(names.indexOf("Build images and start the local stack (npm run local:up)") + 1);
+    expect(healthy).toBeLessThan(names.indexOf("e2e with axe, zoom and screenshots (D44)"));
+    expect(stepNamed(HEALTHY_STEP)).toContain("run: node scripts/d36-diag.mjs healthy-at scaliahr-web-1");
+  });
+});
+
+/** A k6 summary export, with the D54 submetrics given (k6 leaves out a submetric that saw no sample). */
+function summary({ ramp, steady, retriesRamp }: { ramp?: number; steady?: number; retriesRamp?: number }) {
+  const metrics: Record<string, unknown> = {
+    "http_req_duration{kind:page,phase:steady}": { avg: 26.51, med: 22.78, "p(90)": 40.28, "p(95)": 51.951, "p(99)": 91.96, max: 162.04 },
+    http_req_failed: { passes: 0, fails: 1230, value: 0 },
+  };
+  if (ramp !== undefined) metrics["http_reqs{kind:auth,phase:ramp}"] = { count: ramp, rate: 1 };
+  if (steady !== undefined) metrics["http_reqs{kind:auth,phase:steady}"] = { count: steady, rate: 1 };
+  if (retriesRamp !== undefined) metrics["sign_in_retries{phase:ramp}"] = { count: retriesRamp, rate: 1 };
+  return { metrics };
+}
+
+describe("3. sign-ins and retries per phase (D54)", () => {
+  it("reads the per-phase counts of the summary export", () => {
+    expect(signInsLine(summary({ ramp: 71, steady: 4, retriesRamp: 2 }), "second")).toBe(
+      "D36-diag: sign-ins pass=second ramp=71 steady=4 retries_ramp=2 retries_steady=0",
+    );
+  });
+
+  it("rejects an unknown pass and a summary without metrics", () => {
+    expect(() => signInsLine(summary({}), "third")).toThrow('unknown pass "third"');
+    expect(() => signInsLine({}, "first")).toThrow("the k6 summary has no metrics");
+    expect(() => signInsLine({ metrics: { "http_reqs{kind:auth,phase:ramp}": { rate: 1 } } }, "first")).toThrow("has no count");
+  });
+});
+
+const CSV_HEADER =
+  "metric_name,timestamp,metric_value,check,error,error_code,expected_response,group,method,name,proto,scenario,service,status,subproto,tls_version,url,extra_tags,metadata";
+// Lines as k6 v1.8.2 writes them (--out csv=…,timeFormat=unix_milli), from a run against a local stub.
+const CSV_ROWS = [
+  "http_reqs,1795115428109,1.000000,,,1400,false,,POST,http://127.0.0.1:54399/auth/v1/token?grant_type=password,HTTP/1.1,other_tenants_load-c,,400,,,http://127.0.0.1:54399/auth/v1/token?grant_type=password,kind=auth&phase=ramp,",
+  "http_req_duration,1795115432106,0.491990,,,,true,,POST,http://127.0.0.1:54399/auth/v1/token?grant_type=password,HTTP/1.1,other_tenants_load-b,,200,,,http://127.0.0.1:54399/auth/v1/token?grant_type=password,phase=steady&kind=auth,",
+  "http_req_duration,1795115428123,9.882309,,,,true,,GET,http://127.0.0.1:3999/employees,HTTP/1.1,other_tenants_load-a,,200,,,http://127.0.0.1:3999/employees,page=/employees&kind=page&phase=ramp,",
+  "http_req_duration,1795115432118,11.803474,,,,true,,GET,http://127.0.0.1:3999/profile,HTTP/1.1,other_tenants_load-b,,200,,,http://127.0.0.1:3999/profile,page=/profile&kind=page&phase=steady,",
+  "http_reqs,1795115429244,1.000000,,,,true,,GET,http://127.0.0.1:3999/employees?q=Empleado%201,HTTP/1.1,one_tenant,,200,,,http://127.0.0.1:3999/employees?q=Empleado%201,phase=ramp&page=/employees&kind=page,",
+  "checks,1795115428110,0.000000,signed in,,,,,,,,other_tenants_load-c,,,,,,,",
+];
+const csv = (rows: string[]) => gzipSync(`${CSV_HEADER}\n${rows.join("\n")}\n`);
+/** The summary export of the run CSV_ROWS comes from: one steady-state page, 11.803474 ms. */
+const CSV_SUMMARY = { metrics: { "http_req_duration{kind:page,phase:steady}": { avg: 11.803474, "p(95)": 11.803474, max: 11.803474 } } };
+const pageRow = (ms: number, phase = "steady") =>
+  `http_req_duration,1795115432118,${ms.toFixed(6)},,,,true,,GET,http://127.0.0.1:3999/profile,HTTP/1.1,one_tenant,,200,,,http://127.0.0.1:3999/profile,page=/profile&kind=page&phase=${phase},`;
+
+describe("5. per-request durations (D54)", () => {
+  it("reads the metric, time, value and tags of each CSV row", () => {
+    const rows = readCsvRows(csv(CSV_ROWS));
+    expect(rows).toHaveLength(6);
+    expect(rows[3]).toEqual({ metric: "http_req_duration", time: 1795115432118, value: 11.803474, tags: { page: "/profile", kind: "page", phase: "steady" } });
+    expect(rows[5].tags).toEqual({});
+  });
+
+  it("counts the duration rows and the steady-state pages, and checks them against the summary", () => {
+    expect(requestsLine(readCsvRows(csv(CSV_ROWS)), "first", "requests-first.csv.gz", CSV_SUMMARY)).toBe(
+      "D36-diag: requests pass=first artifact=requests-first.csv.gz http_req_duration_rows=3 page_steady_rows=1 page_p95_steady_ms=11.80 matches_summary=yes",
+    );
+  });
+
+  it("computes percentiles the way k6 does (linear between the closest ranks)", () => {
+    expect(percentile([1, 2, 3, 4], 0.95)).toBeCloseTo(3.85, 10);
+    expect(percentile([5], 0.95)).toBe(5);
+    // With 841 values the rank is exact (840 × 0.95 = 798): no interpolation.
+    const values = Array.from({ length: 841 }, (_, i) => i);
+    expect(percentile(values, 0.95)).toBe(798);
+    expect(() => percentile([], 0.95)).toThrow("no values");
+  });
+
+  it("keeps only steady-state pages: no ramp page and no sign-in", () => {
+    const rows = readCsvRows(csv([pageRow(10), pageRow(20), pageRow(900, "ramp"), CSV_ROWS[1]]));
+    expect(pageSteadyStats(rows)).toEqual({ count: 2, p95: 19.5, avg: 15, max: 20 });
+  });
+
+  it("fails when the CSV is not the sample the summary measured", () => {
+    const rows = readCsvRows(csv(CSV_ROWS));
+    const other = { metrics: { "http_req_duration{kind:page,phase:steady}": { avg: 11.803474, "p(95)": 12.5, max: 11.803474 } } };
+    expect(() => requestsLine(rows, "first", "requests-first.csv.gz", other)).toThrow("steady-state page p95 (11.803474) is not the summary's (12.5)");
+    expect(() => requestsLine(rows, "first", "requests-first.csv.gz", { metrics: {} })).toThrow("the summary has no steady-state page p95");
+    expect(() => requestsLine(readCsvRows(csv([CSV_ROWS[0]])), "first", "x", CSV_SUMMARY)).toThrow("no steady-state page durations");
+  });
+
+  it("fails on an empty CSV or one without the columns it reads", () => {
+    expect(() => readCsvRows(gzipSync(""))).toThrow("the k6 CSV is empty");
+    expect(() => readCsvRows(gzipSync("metric_name,value\nx,1\n"))).toThrow('no "timestamp" column');
+    expect(() => firstRequestMs(readCsvRows(csv([CSV_ROWS[5]])))).toThrow("no http_reqs rows");
+  });
+
+  it("is written by the D36 run and the second pass, each to its own file", () => {
+    expect(runLine(stepNamed(D36_STEP))).toBe(
+      'run: npm run load:test -- --out "csv=fileName=/out/requests-first.csv.gz,timeFormat=unix_milli"',
+    );
+    expect(runBlock(stepNamed(SECOND_STEP))).toContain('--out "csv=fileName=/out/requests-second.csv.gz,timeFormat=unix_milli"');
+  });
+
+  it("uploads an explicit list of files, never accounts.json or the whole load/.out", () => {
+    const step = stepNamed(ARTIFACT_STEP);
+    expect(step).toContain("uses: actions/upload-artifact@v7");
+    expect(step).toContain("if: always() && hashFiles('load/.out/requests-first.csv.gz') != ''");
+    const paths = step
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("load/"));
+    expect(paths).toEqual([
+      "load/.out/summary.json",
+      "load/.out/summary-second.json",
+      "load/.out/requests-first.csv.gz",
+      "load/.out/requests-second.csv.gz",
+      "load/.out/second-pass.txt",
+      "load/.out/standalone-files.txt",
+    ]);
+    expect(step).not.toContain("accounts");
+    expect(step).not.toMatch(/load\/\.out\/?\s*$|\*/m);
+  });
+});
+
+/** A fake .next/standalone with BUILD_ID in a path, in file contents and in the skipped static folder. */
+function standaloneTree(buildId: string): string {
+  const root = tempDir("d36-standalone-");
+  const write = (rel: string, text: string) => {
+    mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    writeFileSync(path.join(root, rel), text);
+  };
+  write("apps/web/.next/BUILD_ID", `${buildId}\n`);
+  write("apps/web/server.js", "require('next')\n");
+  write("apps/web/.next/server/pages/500.html", `<script src="/_next/static/${buildId}/_buildManifest.js"></script>`);
+  write("apps/web/.next/build-manifest.json", `{"buildId":"${buildId}"}`);
+  write(`apps/web/.next/server/${buildId}/data.json`, "{}");
+  write(`apps/web/.next/static/${buildId}/_buildManifest.js`, "static, left out");
+  write("node_modules/react/index.js", "module.exports = {}\n");
+  symlinkSync("../react/index.js", path.join(root, "node_modules/react/link.js"));
+  return root;
+}
+
+describe("4. the content hash of .next/standalone (D54)", () => {
+  it("replaces BUILD_ID in every path and every file, and leaves .next/static out", () => {
+    const files = standaloneFiles(standaloneTree("Jrodzi43SsfnNQNcKwNQC"));
+    expect(files.map((line: string) => line.slice(66))).toEqual([
+      "apps/web/.next/BUILD_ID",
+      "apps/web/.next/build-manifest.json",
+      `apps/web/.next/server/${MARKER}/data.json`,
+      "apps/web/.next/server/pages/500.html",
+      "apps/web/server.js",
+      "node_modules/react/index.js",
+      "node_modules/react/link.js",
+    ]);
+    for (const line of files) expect(line).toMatch(/^[0-9a-f]{64} {2}\S/);
+  });
+
+  it("gives the same list for two builds that differ only in BUILD_ID", () => {
+    expect(standaloneFiles(standaloneTree("Jrodzi43SsfnNQNcKwNQC"))).toEqual(standaloneFiles(standaloneTree("I3hwmMoHfS0juqENfgULN")));
+  });
+
+  it("changes when a file's content changes", () => {
+    const a = standaloneTree("Jrodzi43SsfnNQNcKwNQC");
+    const b = standaloneTree("Jrodzi43SsfnNQNcKwNQC");
+    writeFileSync(path.join(b, "apps/web/server.js"), "require('next') // changed\n");
+    expect(standaloneFiles(a)).not.toEqual(standaloneFiles(b));
+  });
+
+  it("hashes a symlink by its target instead of following it", () => {
+    const a = standaloneTree("Jrodzi43SsfnNQNcKwNQC");
+    const b = standaloneTree("Jrodzi43SsfnNQNcKwNQC");
+    writeFileSync(path.join(b, "node_modules/react/index.js"), "module.exports = { changed: true }\n");
+    const link = (root: string) => standaloneFiles(root).find((line: string) => line.endsWith("link.js"));
+    expect(link(a)).toBe(link(b));
+  });
+
+  it("fails, as a script, when BUILD_ID is missing or empty", () => {
+    const root = standaloneTree("x");
+    writeFileSync(path.join(root, "apps/web/.next/BUILD_ID"), "\n");
+    expect(() => standaloneFiles(root)).toThrow("apps/web/.next/BUILD_ID is empty");
+    const result = spawnSync("node", [FILES, tempDir("d36-empty-")], { encoding: "utf-8" });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("cannot read apps/web/.next/BUILD_ID: ENOENT");
+  });
+
+  it("prints the hash of all files and of all but the manifests, whose keys come in a different order each build", () => {
+    const lines = [`${"1".repeat(64)}  apps/web/.next/app-path-routes-manifest.json`, `${"2".repeat(64)}  apps/web/server.js`];
+    const line = standaloneLine(`${lines.join("\n")}\n`);
+    expect(line).toMatch(/^D36-diag: standalone sha256=[0-9a-f]{64} sha256_without_manifests=[0-9a-f]{64} files=2 manifests=1 build_id=replaced$/);
+    // Reordering a manifest's keys changes only the first hash.
+    const reordered = standaloneLine(`${"3".repeat(64)}  apps/web/.next/app-path-routes-manifest.json\n${lines[1]}\n`);
+    const field = (text: string, key: string) => new RegExp(`${key}=(\\w+)`).exec(text)?.[1];
+    expect(field(reordered, "sha256")).not.toBe(field(line, "sha256"));
+    expect(field(reordered, "sha256_without_manifests")).toBe(field(line, "sha256_without_manifests"));
+    expect(isManifest("apps/web/.next/server/app/page_client-reference-manifest.js")).toBe(true);
+    expect(isManifest("apps/web/.next/server/manifest-free/page.js")).toBe(false);
+  });
+
+  it("rejects a list that is empty or not made of manifest lines", () => {
+    expect(() => standaloneLine("")).toThrow("the standalone file list is empty");
+    expect(() => standaloneLine("not a hash  file\n")).toThrow('not a "<sha256>  <path>" line');
+  });
+
+  it("is computed inside the image the measured container runs, offline and read-only", () => {
+    const run = runBlock(stepNamed(DIAG_STEP));
+    expect(run).toContain(`image="$(docker inspect -f '{{.Image}}' scaliahr-web-1)"`);
+    expect(run).toContain("docker run --rm --network none --read-only --entrypoint node");
+    expect(run).toContain('-v "$PWD/scripts/d36-standalone-files.mjs:/d36/standalone-files.mjs:ro"');
+    expect(run).toContain('"$image" /d36/standalone-files.mjs /app > load/.out/standalone-files.txt');
+  });
+});
+
+describe("6. the second k6 pass is never part of D36 (D54)", () => {
+  it("reports its p95, failures and cost, and says it does not count", () => {
+    expect(secondPassLine(summary({}), "0", "92")).toBe(
+      "D36-diag: second pass p95_steady_ms=51.95 failed=0/1230 k6_exit=0 seconds=92 counts_for_d36=no",
+    );
+  });
+
+  it("reports a crossed threshold (k6 exit 99) instead of failing the job", () => {
+    expect(secondPassExit("99")).toBe(99);
+    expect(secondPassLine(summary({}), "99", "95")).toContain("k6_exit=99");
+  });
+
+  it("fails on any other exit code, before it reads a summary that may not exist", () => {
+    expect(() => secondPassExit("107")).toThrow("the second k6 pass failed with exit code 107");
+    expect(() => secondPassExit("")).toThrow("is not a number");
+    const result = spawnSync("node", [DIAG, "second-pass", "/nonexistent/summary-second.json", "107", "90"], { encoding: "utf-8" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("exit code 107");
+    expect(() => secondPassLine({ metrics: {} }, "0", "90")).toThrow("no steady-state page p95");
+    expect(() => secondPassLine(summary({}), "0", "ninety")).toThrow("is not a number of seconds");
+  });
+
+  it("shows the tail of a broken run's output, without its steady-state page line", () => {
+    const output = ["seeded load-big: 60 employees", "      { kind:page,phase:steady }...: avg=1ms p(95)=2ms", "ERRO[0001] setup failed", ""].join("\n");
+    expect(outputTail(output)).toBe("seeded load-big: 60 employees\nERRO[0001] setup failed");
+    const dir = tempDir("d36-second-");
+    const file = path.join(dir, "second-pass.txt");
+    writeFileSync(file, output);
+    const result = spawnSync("node", [DIAG, "second-pass", path.join(dir, "missing.json"), "107", "90", file], { encoding: "utf-8" });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("ERRO[0001] setup failed");
+    expect(result.stderr).not.toContain("kind:page,phase:steady");
+  });
+
+  it("runs after the D36 run, with its own summary file and its output in a file, not in the log", () => {
+    const names = dockerSteps().map(stepName);
+    expect(names.indexOf(DIAG_STEP)).toBe(names.indexOf(D36_STEP) + 1);
+    expect(names.indexOf(SECOND_STEP)).toBe(names.indexOf(DIAG_STEP) + 1);
+    expect(names.indexOf(ARTIFACT_STEP)).toBe(names.indexOf(SECOND_STEP) + 1);
+    const run = runBlock(stepNamed(SECOND_STEP));
+    expect(run).toContain(
+      'LOAD_SUMMARY=summary-second.json npm run load:test -- --out "csv=fileName=/out/requests-second.csv.gz,timeFormat=unix_milli" > load/.out/second-pass.txt 2>&1 || code=$?',
+    );
+    expect(run).toContain(
+      'node scripts/d36-diag.mjs second-pass load/.out/summary-second.json "$code" "$(( $(date +%s) - start ))" load/.out/second-pass.txt',
+    );
+    expect(run).toContain("requests load/.out/requests-second.csv.gz second load/.out/summary-second.json");
+  });
+
+  it("uses the same k6 settings as the D36 run", () => {
+    expect(envBlock(stepNamed(SECOND_STEP))).toEqual(envBlock(stepNamed(D36_STEP)));
+  });
+
+  it("leaves the D36 run the only k6 run whose summary reaches the log, and its summary.json the first pass's", () => {
+    // The p95 that D36 reads is the `{ kind:page,phase:steady }` line of this step's log.
+    const d36 = stepNamed(D36_STEP);
+    expect(d36).not.toContain("LOAD_SUMMARY");
+    expect(d36).not.toMatch(/>\s*\S/);
+    const otherRuns = dockerSteps().filter((step) => step.includes("npm run load:test") && step !== d36);
+    expect(otherRuns).toEqual([stepNamed(SECOND_STEP)]);
+    for (const step of otherRuns) {
+      for (const line of runBlock(step).split("\n").filter((l) => l.includes("npm run load:test"))) {
+        expect(line).toMatch(/> load\/\.out\/second-pass\.txt 2>&1/);
+        expect(line).toMatch(/LOAD_SUMMARY=(?!summary\.json)[\w-]+\.json/);
+      }
+    }
+    // The diagnostics of the first pass read the first pass's files, and its CSV
+    // must reproduce that summary's steady-state page p95 (matches_summary).
+    const diag = runBlock(stepNamed(DIAG_STEP));
+    expect(diag).toContain("sign-ins load/.out/summary.json first");
+    expect(diag).toContain("requests load/.out/requests-first.csv.gz first load/.out/summary.json");
+  });
+
+  it("is cheap enough to run on every pull request: under 120 s, about what the D36 run takes", () => {
+    // RAMP 20 s + HOLD 40 s + 20 s ramp-down (+ up to 10 s graceful stop), plus the seed:
+    // the D36 step took 92 s on main 6a33b6a. Above 120 s it would go behind a variable.
+    const env = envBlock(stepNamed(SECOND_STEP));
+    const seconds = (value: string) => Number(value.replace(/s$/, ""));
+    expect(seconds(env.RAMP) + seconds(env.HOLD) + 20 + 10).toBeLessThan(120);
+  });
+});
+
+/**
+ * Runs a step's `run: |` block as GitHub does (bash -e), in a temp checkout
+ * whose scripts/ is the repo's, with fake commands first on PATH.
+ */
+function runStep(
+  name: string,
+  fakes: Record<string, string>,
+  env: Record<string, string> = {},
+  files: Record<string, string | Buffer> = {},
+) {
+  const work = tempDir("d36-step-");
+  // Copies, not a symlink: Node resolves a symlinked main script, and the
+  // scripts' "run directly" guard would then skip main().
+  mkdirSync(path.join(work, "scripts"));
+  for (const file of [DIAG, FILES]) copyFileSync(file, path.join(work, "scripts", path.basename(file)));
+  mkdirSync(path.join(work, "load/.out"), { recursive: true });
+  for (const [rel, content] of Object.entries(files)) writeFileSync(path.join(work, rel), content);
+  const bin = path.join(work, "bin");
+  mkdirSync(bin);
+  for (const [command, body] of Object.entries(fakes)) writeFileSync(path.join(bin, command), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
+  const stepSummary = path.join(work, "step-summary.md");
+  const githubEnv = path.join(work, "github-env");
+  const step = stepNamed(name);
+  writeFileSync(path.join(work, "step.sh"), step.includes("run: |") ? runBlock(step) : runLine(step).slice("run: ".length));
+  const result = spawnSync("bash", ["-e", "step.sh"], {
+    cwd: work,
+    encoding: "utf-8",
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_STEP_SUMMARY: stepSummary, GITHUB_ENV: githubEnv, ...env },
+  });
+  const read = (file: string) => {
+    try {
+      return readFileSync(file, "utf-8");
+    } catch {
+      return "";
+    }
+  };
+  return { ...result, work, stepSummary: read(stepSummary), githubEnv: read(githubEnv) };
+}
+
+describe("the new steps, run as ci.yml writes them (D54)", () => {
+  it("records when the web container turned healthy for the later steps", () => {
+    const health = JSON.stringify({ Status: "healthy", Log: [probe("2026-11-19T18:49:58Z", 1), probe("2026-11-19T18:50:08.5Z", 0)] });
+    const result = runStep(HEALTHY_STEP, { docker: `[ "$*" = "inspect -f {{json .State.Health}} scaliahr-web-1" ] || exit 9\necho '${health}'` });
+    expect(result.stdout).toBe("scaliahr-web-1 turned healthy at 2026-11-19T18:50:08.500Z\n");
+    expect(result.status).toBe(0);
+    expect(result.githubEnv).toBe("D36_WEB_HEALTHY_AT=2026-11-19T18:50:08.500Z\nD36_WEB_HEALTHY_EXACT=true\n");
+  });
+
+  it("prints the first pass's diagnostics, one D36-diag line per point", () => {
+    const tree = standaloneTree("Jrodzi43SsfnNQNcKwNQC");
+    // Only the two expected commands are answered; the run reaches the hashing script, on a fixture tree.
+    const docker = [
+      'case "$*" in',
+      '  "inspect -f {{.Image}} scaliahr-web-1") echo sha256:1234 ;;',
+      `  "run --rm --network none --read-only --entrypoint node -v $PWD/scripts/d36-standalone-files.mjs:/d36/standalone-files.mjs:ro sha256:1234 /d36/standalone-files.mjs /app") exec node scripts/d36-standalone-files.mjs "${tree}" ;;`,
+      '  *) echo "unexpected: docker $*" >&2; exit 9 ;;',
+      "esac",
+    ].join("\n");
+    // What the k6 step leaves in load/.out.
+    const files = {
+      "load/.out/summary.json": JSON.stringify({ metrics: { ...summary({ ramp: 71, steady: 4 }).metrics, ...CSV_SUMMARY.metrics } }),
+      "load/.out/requests-first.csv.gz": csv(CSV_ROWS),
+    };
+    const env = { D36_WEB_HEALTHY_AT: "2026-11-19T19:06:18.992Z", D36_WEB_HEALTHY_EXACT: "true", GITHUB_RUN_ATTEMPT: "1" };
+    const result = runStep(DIAG_STEP, { docker }, env, files);
+    expect(result.status, result.stderr).toBe(0);
+    const lines = result.stdout.trim().split("\n");
+    expect(lines.map((line) => /^D36-diag: ([a-z0-9 -]+?) [a-z0-9_]+=/.exec(line)?.[1])).toEqual(["runner", "healthy to k6", "sign-ins", "requests", "standalone"]);
+    for (const line of lines) expect(line).toMatch(LINE);
+    expect(lines[0]).toMatch(/ run_attempt=1$/);
+    expect(lines[1]).toBe(
+      "D36-diag: healthy to k6 seconds=249.1 web_healthy_at=2026-11-19T19:06:18.992Z k6_first_request_at=2026-11-19T19:10:28.109Z exact=yes",
+    );
+    expect(lines[2]).toBe("D36-diag: sign-ins pass=first ramp=71 steady=4 retries_ramp=0 retries_steady=0");
+    expect(lines[3]).toContain("matches_summary=yes");
+    expect(lines[4]).toContain(" files=7 ");
+    expect(result.stepSummary.match(/`D36-diag: /g)).toHaveLength(5);
+  });
+
+  it("fails the first pass's diagnostics loudly when the k6 step left no output", () => {
+    const result = runStep(DIAG_STEP, { docker: "exit 9" }, { D36_WEB_HEALTHY_AT: "2026-11-19T19:06:18.992Z" });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("::error::D36-diag:");
+  });
+
+  it.each([
+    [0, 0],
+    [99, 0],
+    [107, 1],
+    [1, 1],
+  ])("second pass: k6 exit %i ends the step with %i, and its steady line never reaches the log", (k6Exit, stepExit) => {
+    const fixture = tempDir("d36-fixture-");
+    writeFileSync(path.join(fixture, "summary-second.json"), JSON.stringify({ metrics: { ...summary({ ramp: 71, steady: 4 }).metrics, ...CSV_SUMMARY.metrics, http_req_failed: { passes: 0, fails: 1230, value: 0 } } }));
+    writeFileSync(path.join(fixture, "requests-second.csv.gz"), csv(CSV_ROWS));
+    const npm = [
+      `printf '%s\\n' "LOAD_SUMMARY=$LOAD_SUMMARY RAMP=$RAMP HOLD=$HOLD $*" > load/.out/npm-call.txt`,
+      'echo "      { kind:page,phase:steady }...: avg=1ms p(95)=999.99ms"',
+      'echo "ERRO[0001] something broke"',
+      `[ "${k6Exit}" = 1 ] || cp "${fixture}"/summary-second.json "${fixture}"/requests-second.csv.gz load/.out/`,
+      `exit ${k6Exit}`,
+    ].join("\n");
+    const result = runStep(SECOND_STEP, { npm }, envBlock(stepNamed(SECOND_STEP)));
+    expect(result.status, result.stderr).toBe(stepExit);
+    expect(readFileSync(path.join(result.work, "load/.out/npm-call.txt"), "utf-8")).toBe(
+      "LOAD_SUMMARY=summary-second.json RAMP=20s HOLD=40s run load:test -- --out csv=fileName=/out/requests-second.csv.gz,timeFormat=unix_milli\n",
+    );
+    // The fake k6 printed a steady line: it is in second-pass.txt, never in the step's output or summary.
+    expect(readFileSync(path.join(result.work, "load/.out/second-pass.txt"), "utf-8")).toContain("kind:page,phase:steady");
+    for (const text of [result.stdout, result.stderr, result.stepSummary]) expect(text).not.toContain("kind:page,phase:steady");
+    if (stepExit === 0) {
+      expect(result.stdout).toContain(`D36-diag: second pass p95_steady_ms=11.80 failed=0/1230 k6_exit=${k6Exit} seconds=`);
+      expect(result.stdout).toContain("counts_for_d36=no");
+      expect(result.stdout).toContain("D36-diag: sign-ins pass=second ramp=71 steady=4");
+      expect(result.stdout).toContain("D36-diag: requests pass=second artifact=requests-second.csv.gz");
+    } else {
+      expect(result.stderr).toContain(`the second k6 pass failed with exit code ${k6Exit}`);
+      expect(result.stderr).toContain("ERRO[0001] something broke");
+    }
+  });
+});
+
+// load/pages.js runs in k6, not Node: its imports are replaced by stubs that
+// record every request, check, sleep and counter.
+interface Recorded {
+  requests: { method: string; url: string; tags: Record<string, string> }[];
+  sleeps: number[];
+  counters: { name: string; value: number; tags: Record<string, string> }[];
+}
+function loadPages({ authStatus = 200, ramp = "20s" } = {}) {
+  const recorded: Recorded = { requests: [], sleeps: [], counters: [] };
+  const clock = { ms: 0 };
+  const stubs = {
+    "k6/http": {
+      default: {
+        post: (url: string, _body: string, params: { tags: Record<string, string> }) => {
+          recorded.requests.push({ method: "POST", url, tags: params.tags });
+          return { status: authStatus, json: () => ({ access_token: "a.b.c" }) };
+        },
+        get: (url: string, params: { tags: Record<string, string> }) => {
+          recorded.requests.push({ method: "GET", url, tags: params.tags });
+          return { status: 200, body: "<html></html>" };
+        },
+        cookieJar: () => ({ set: () => undefined }),
+      },
+    },
+    "k6/encoding": { default: { b64encode: (text: string) => Buffer.from(text).toString("base64url") } },
+    "k6/execution": {
+      default: {
+        vu: { idInTest: 1 },
+        instance: {
+          get currentTestRunDuration() {
+            return clock.ms;
+          },
+        },
+      },
+    },
+    k6: {
+      check: (res: unknown, checks: Record<string, (r: unknown) => boolean>) => Object.values(checks).every((fn) => fn(res)),
+      sleep: (seconds: number) => recorded.sleeps.push(seconds),
+    },
+    "k6/data": { SharedArray: function SharedArray(_name: string, make: () => unknown[]) { return make(); } },
+    "k6/metrics": {
+      Counter: class {
+        constructor(private readonly name: string) {}
+        add(value: number, tags: Record<string, string>) {
+          recorded.counters.push({ name: this.name, value, tags });
+        }
+      },
+    },
+  };
+  let source = PAGES.replace(/^import (\w+) from "([^"]+)";$/gm, 'const $1 = __k6["$2"].default;')
+    .replace(/^import \{ ([^}]+) \} from "([^"]+)";$/gm, 'const { $1 } = __k6["$2"];')
+    .replace(/^export const options =/m, "const options =")
+    .replace(/^export default function \(\) \{/m, "function __iteration() {");
+  expect(source).not.toMatch(/^\s*(import|export)\b/m);
+  source += "\nreturn { options, iteration: __iteration };";
+  const accounts = JSON.stringify({ password: "p", accounts: [{ email: "a@load.test", tenant: "load-big", tag: "LoadGrande" }] });
+  const env = { RAMP: ramp, HOLD: "40s", TENANT: "load-big", THINK_MIN: "2", THINK_MAX: "6" };
+  const script = new Function("__k6", "__ENV", "open", source)(stubs, env, () => accounts) as {
+    options: { thresholds: Record<string, string[]>; scenarios: Record<string, { stages: unknown[] }> };
+    iteration: () => void;
+  };
+  return { ...script, recorded, clock };
+}
+
+/** Whether k6 puts a sample with these tags in the submetric of this selector, e.g. {kind:page,phase:steady}. */
+const inSubmetric = (selector: Record<string, string>, tags: Record<string, string>) =>
+  Object.entries(selector).every(([key, value]) => tags[key] === value);
+
+describe("load/pages.js: the sign-in phase tag leaves the page p95 alone (D54)", () => {
+  it("keeps the page thresholds, and adds only listing thresholds on sign-ins and retries", () => {
+    const { options } = loadPages();
+    expect(options.thresholds).toEqual({
+      "http_req_duration{kind:page,phase:steady}": ["p(95)<500"],
+      "http_req_duration{kind:page,phase:ramp}": ["max>=0"],
+      "http_req_failed{kind:page}": ["rate<0.01"],
+      checks: ["rate>0.99"],
+      "http_reqs{kind:auth,phase:ramp}": ["count>=0"],
+      "http_reqs{kind:auth,phase:steady}": ["count>=0"],
+      "sign_in_retries{phase:ramp}": ["count>=0"],
+      "sign_in_retries{phase:steady}": ["count>=0"],
+    });
+    expect(options.scenarios.one_tenant.stages).toEqual([
+      { duration: "20s", target: 1000 },
+      { duration: "40s", target: 1000 },
+      { duration: "20s", target: 0 },
+    ]);
+  });
+
+  it("tags a page with exactly kind, page and phase, with the phase boundary at RAMP", () => {
+    for (const [ms, phase] of [
+      [19_999, "ramp"],
+      [20_000, "steady"],
+    ] as const) {
+      const { iteration, recorded, clock } = loadPages();
+      clock.ms = ms;
+      iteration();
+      const page = recorded.requests.find((request) => request.method === "GET");
+      expect(page?.tags).toEqual({ kind: "page", page: expect.stringMatching(/^\/[\w-]*$/), phase });
+    }
+  });
+
+  it("tags a sign-in with kind auth and its phase", () => {
+    const { iteration, recorded, clock } = loadPages();
+    clock.ms = 20_000;
+    iteration();
+    expect(recorded.requests[0]).toMatchObject({ method: "POST", tags: { kind: "auth", phase: "steady" } });
+    expect(recorded.counters).toEqual([]);
+  });
+
+  it("counts a failed sign-in as a retry in its phase, sleeps 5 s and opens no page", () => {
+    const { iteration, recorded, clock } = loadPages({ authStatus: 400 });
+    clock.ms = 3_000;
+    iteration();
+    clock.ms = 25_000;
+    iteration();
+    expect(recorded.requests.map((request) => request.method)).toEqual(["POST", "POST"]);
+    expect(recorded.counters).toEqual([
+      { name: "sign_in_retries", value: 1, tags: { phase: "ramp" } },
+      { name: "sign_in_retries", value: 1, tags: { phase: "steady" } },
+    ]);
+    expect(recorded.sleeps).toEqual([5, 5]);
+  });
+
+  it("puts no sign-in in the submetric D36 reads, with or without its phase tag", () => {
+    const { iteration, recorded, clock } = loadPages();
+    for (const ms of [0, 5_000, 19_999, 20_000, 30_000, 59_000]) {
+      clock.ms = ms;
+      iteration();
+    }
+    const steady = { kind: "page", phase: "steady" };
+    const selected = recorded.requests.filter((request) => inSubmetric(steady, request.tags));
+    const withoutAuthPhase = recorded.requests
+      .map((request) => (request.tags.kind === "auth" ? { ...request, tags: { kind: "auth" } } : request))
+      .filter((request) => inSubmetric(steady, request.tags));
+    expect(selected).toHaveLength(3);
+    expect(selected.every((request) => request.method === "GET")).toBe(true);
+    expect(selected).toEqual(withoutAuthPhase);
+  });
+});
+
+describe("scripts/load-test.sh: LOAD_SUMMARY (D54)", () => {
+  it.each(["../summary.json", "summary", "a b.json", "/tmp/summary.json"])("rejects %j before doing anything", (value) => {
+    const result = spawnSync("bash", [path.join(REPO, "scripts/load-test.sh")], {
+      encoding: "utf-8",
+      env: { ...process.env, LOAD_SUMMARY: value },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("::error::LOAD_SUMMARY must be a file name like summary.json");
+  });
+
+  it("defaults to summary.json, the file the D36 run writes", () => {
+    const script = readFileSync(path.join(REPO, "scripts/load-test.sh"), "utf-8");
+    expect(script).toContain('SUMMARY="${LOAD_SUMMARY:-summary.json}"');
+    expect(script).toContain('run --summary-export "/out/$SUMMARY" "$@" /load/pages.js');
+  });
+});
+
+/** The docker job, split into its steps (each starts with "      - "). */
+function dockerSteps(): string[] {
+  const start = CI.indexOf("\n  docker:\n");
+  if (start === -1) throw new Error("no docker job in ci.yml");
+  const rest = CI.slice(start + 1);
+  const next = rest.slice(1).search(/\n {2}[a-z][\w-]*:\n/);
+  const job = next === -1 ? rest : rest.slice(0, next + 1);
+  return job.split("\n      - ").slice(1);
+}
+const stepName = (step: string) => /name: (.+)/.exec(step)?.[1] ?? "";
+function stepNamed(name: string): string {
+  const step = dockerSteps().find((s) => stepName(s) === name);
+  if (!step) throw new Error(`no step "${name}" in the docker job`);
+  return step;
+}
+/** The step's `run: |` block, dedented. */
+function runBlock(step: string): string {
+  const lines = step.split("\n");
+  const start = lines.findIndex((line) => line.trim() === "run: |");
+  if (start === -1) throw new Error("the step has no `run: |` block");
+  const body: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() !== "" && !line.startsWith("          ")) break;
+    body.push(line.slice(10));
+  }
+  return body.join("\n");
+}
+const runLine = (step: string) => step.split("\n").find((line) => line.trim().startsWith("run: "))?.trim() ?? "";
+/** The step's `env:` block, as key/value pairs (quotes and comments dropped). */
+function envBlock(step: string): Record<string, string> {
+  const lines = step.split("\n");
+  const start = lines.findIndex((line) => line.trim() === "env:");
+  if (start === -1) throw new Error("the step has no env block");
+  const env: Record<string, string> = {};
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === "" || line.trim().startsWith("#")) continue;
+    const match = /^ {10}([A-Z_]+): "?([^"]*)"?$/.exec(line);
+    if (!match) break;
+    env[match[1]] = match[2];
+  }
+  return env;
+}
