@@ -24,6 +24,9 @@
       ],
       "@scaliahr/email/contract": [
         "../../packages/email/src/contract.ts"
+      ],
+      "@scaliahr/email/log-masks": [
+        "../../packages/email/src/log-masks.ts"
       ]
     },
     "plugins": [

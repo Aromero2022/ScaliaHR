@@ -27,4 +27,20 @@ describe("worker JSON logs (D27)", () => {
       code: "23505",
     });
   });
+
+  it("masks the recipient an SMTP rejection quotes", () => {
+    const smtp = errorFields(new Error("550 5.1.1 <ana.lopez@acme.dev>: user unknown"));
+    expect(JSON.stringify(smtp)).not.toContain("ana.lopez@acme.dev");
+    expect(smtp).toEqual({ name: "Error", message: "550 5.1.1 <[EMAIL]>: user unknown" });
+  });
+
+  it("masks an address before the number masks can split it", () => {
+    expect(mask("12345678901@acme.dev")).toBe("[EMAIL]");
+  });
+
+  it("masks a bearer token in an error message", () => {
+    const bearer = errorFields(new Error("Authorization: Bearer abc.def.ghi"));
+    expect(JSON.stringify(bearer)).not.toContain("abc.def.ghi");
+    expect(bearer).toEqual({ name: "Error", message: "Authorization: Bearer [REDACTED]" });
+  });
 });
