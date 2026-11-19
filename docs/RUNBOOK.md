@@ -173,6 +173,7 @@ Variables para otras corridas:
 | `LOAD_VUS`, `SMALL_VUS` | 1000, 50 | Usuarios concurrentes en `load-big` y en cada tenant chico (no más que los empleados) |
 | `RAMP`, `HOLD` | `2m`, `4m` | Tiempo de subida y tiempo a carga completa |
 | `THINK_MIN`, `THINK_MAX` | 20, 40 | Segundos entre páginas de cada usuario |
+| `LOAD_SUMMARY` | `summary.json` | Nombre del resumen dentro de `load/.out`; la segunda pasada de CI usa `summary-second.json` (D54) |
 
 Capacidad de un proceso web, con pausas cortas:
 
@@ -202,6 +203,23 @@ El job `docker` de CI corre una versión corta (75 usuarios, 40 s a carga comple
 El CI ya no detecta regresiones menores a unos +50 %. Con esa banda, el bloqueo falso estimado es 5 %; una regresión de +50 % se bloquea 31 % de las veces, una de +100 % el 60 % y una de +150 % siempre. La muestra es de 9 corridas, así que estos números son un orden de magnitud.
 
 Por eso la corrida completa de esta sección (1,150 usuarios) se hace en local al cerrar cada fase.
+
+### Diagnóstico del primer intento (D54)
+
+En CI, el job `docker` imprime líneas `D36-diag:` en el log y en el resumen del job, y sube el artifact `d36-diag-attempt-<n>` (14 días). Sirven para explicar por qué el intento 1 de k6 tiende a salir más alto que la repetición; no cambian la comparación de D36. Los pasos de diagnóstico, el del artifact incluido, nunca hacen fallar el job: si uno no puede dar su línea, deja una anotación `::error::`. La única excepción es el aislamiento entre tenants de la segunda pasada, que se revisa en su propio paso: falla si su resumen cuenta alguna página con empleados de otro tenant, sea cual sea el código de salida de k6, y si la segunda pasada no dejó ese conteo, solo advierte. La primera pasada no cubre del todo el aislamiento: su umbral de checks tolera hasta 1 % de checks fallidos.
+
+- `runner`: modelo de CPU, `nproc`, `MemTotal` y número de intento.
+- `healthy to k6`: segundos entre que el contenedor web queda sano y la primera petición de k6. Dice `exact=no` si las 5 pruebas que guarda Docker ya estaban sanas.
+- `sign-ins`: inicios de sesión y reintentos por fase, de cada pasada.
+- `standalone`: hash de `.next/standalone` de la imagen web con el BUILD_ID reemplazado. Para comparar el código de dos builds sirve `sha256_without_manifests`: en la medición de D54 (local, del autor del PR, no guardada en el repo), entre dos builds del mismo commit solo cambiaron los manifiestos. Eso vale solo si las dos builds reusan la caché de Next.js: en CI cada intento compila sin ella, y entre los dos intentos de #79 cambiaron además los `page.js` de las 8 rutas con Server Actions, que llevan IDs que se generan en cada build. En CI se compara el código con el `diff` de los dos `standalone-files.txt`: si solo cambian manifiestos y esas páginas, es el mismo código.
+- `requests`: filas del CSV de cada pasada y su p95 de páginas en estado estable, que tiene que coincidir con el resumen (`matches_summary=yes`).
+- `second pass`: la segunda corrida de k6, en el mismo runner y con la misma configuración, solo informativa. Trae también los checks fallidos y las páginas que mostraron empleados de otro tenant. Una sola página con empleados de otro tenant en su resumen hace fallar el paso «Tenant isolation held in the second k6 pass (D54)», y con él el job.
+
+La segunda pasada no cuenta para D36: ni como corrida del PR, ni como repetición, ni en la línea base de `main`, ni para el límite. El p95 que se compara sigue siendo la línea `{ kind:page,phase:steady }` del paso «k6 load test, short run (D36)», que desde D54 es la única en el log del job.
+
+Para recalcular el p95 con otra ventana, `requests-first.csv.gz` tiene una fila por muestra de cada métrica: `metric_name`, `timestamp` (ms), `metric_value` (ms en `http_req_duration`), `status` y `extra_tags` (`kind`, `page`, `phase`). El percentil de k6 es interpolación lineal entre los rangos vecinos. Para comparar dos imágenes, se hace `diff` de los `standalone-files.txt` de los dos artifacts.
+
+El artifact nunca lleva `accounts.json`: tiene los correos de las cuentas de carga y su contraseña.
 
 ## 10. e2e y accesibilidad (D44)
 

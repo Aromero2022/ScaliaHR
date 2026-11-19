@@ -7,11 +7,15 @@
 //   other_tenants   50 users in each of load-a, load-b and load-c
 // Thresholds: page p95 < 500 ms, < 1 % failed requests, > 99 % checks; every
 // page is also checked to show no other tenant's employees.
+// D54 (diagnostics only): sign-ins carry the phase too, and the retries after a
+// failed sign-in are counted per phase. Both are listed in the summary; neither
+// is a page request, so the page p95 that D36 reads is the same set of samples.
 import http from "k6/http";
 import encoding from "k6/encoding";
 import exec from "k6/execution";
 import { check, sleep } from "k6";
 import { SharedArray } from "k6/data";
+import { Counter } from "k6/metrics";
 
 const BASE_URL = __ENV.BASE_URL ?? "http://localhost:3000";
 const SUPABASE_URL = __ENV.SUPABASE_URL ?? "http://localhost:54321";
@@ -30,6 +34,13 @@ const ACCOUNTS_FILE = __ENV.ACCOUNTS ?? "/out/accounts.json";
 const ACCOUNTS = new SharedArray("accounts", () => JSON.parse(open(ACCOUNTS_FILE)).accounts);
 const PASSWORD = new SharedArray("password", () => [JSON.parse(open(ACCOUNTS_FILE)).password])[0];
 const TAGS = ["LoadGrande", "LoadAlfa", "LoadBravo", "LoadCharlie"];
+// D54: one per failed sign-in, the sleep(5) before the VU tries again.
+const signInRetries = new Counter("sign_in_retries");
+
+/** "ramp" until RAMP has passed on the whole test's clock, then "steady" (ramp-down included). */
+function currentPhase() {
+  return exec.instance.currentTestRunDuration / 1000 < RAMP_SECONDS ? "ramp" : "steady";
+}
 
 const stages = (target) => [
   { duration: RAMP, target },
@@ -54,6 +65,11 @@ export const options = {
     "http_req_duration{kind:page,phase:ramp}": ["max>=0"], // listed in the summary only
     "http_req_failed{kind:page}": ["rate<0.01"],
     checks: ["rate>0.99"],
+    // D54: listed in the summary only, like the ramp line above.
+    "http_reqs{kind:auth,phase:ramp}": ["count>=0"],
+    "http_reqs{kind:auth,phase:steady}": ["count>=0"],
+    "sign_in_retries{phase:ramp}": ["count>=0"],
+    "sign_in_retries{phase:steady}": ["count>=0"],
   },
   summaryTrendStats: ["avg", "med", "p(90)", "p(95)", "p(99)", "max"],
   // Keep each user's session across iterations, as a browser would (k6 clears
@@ -95,12 +111,16 @@ function accountFor(tenant) {
 
 function signIn() {
   const account = (myAccount = accountFor(__ENV.TENANT));
+  const phase = currentPhase();
   const res = http.post(
     `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
     JSON.stringify({ email: account.email, password: PASSWORD }),
-    { headers: { apikey: ANON_KEY, "Content-Type": "application/json" }, tags: { kind: "auth" } },
+    { headers: { apikey: ANON_KEY, "Content-Type": "application/json" }, tags: { kind: "auth", phase } },
   );
-  if (!check(res, { "signed in": (r) => r.status === 200 })) return false;
+  if (!check(res, { "signed in": (r) => r.status === 200 })) {
+    signInRetries.add(1, { phase });
+    return false;
+  }
   const jar = http.cookieJar();
   for (const [name, value] of Object.entries(sessionCookies(res.json()))) jar.set(BASE_URL, name, value);
   return true;
@@ -115,7 +135,7 @@ export default function () {
     }
   }
   const path = WEIGHTED[Math.floor(Math.random() * WEIGHTED.length)];
-  const phase = exec.instance.currentTestRunDuration / 1000 < RAMP_SECONDS ? "ramp" : "steady";
+  const phase = currentPhase();
   const res = http.get(`${BASE_URL}${path}`, { redirects: 0, tags: { kind: "page", page: path.split("?")[0], phase } });
   const ownTag = myAccount.tag;
   check(res, {

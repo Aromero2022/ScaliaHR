@@ -317,6 +317,14 @@ jobs:
       - name: Build images and start the local stack (npm run local:up)
         run: npm run local:up
 
+      # D54: when the web container turned healthy, for the D36 diagnostics.
+      # Read now: Docker keeps only the last five probes in State.Health.Log
+      # (50 s at the image's 10 s interval), and the e2e runs before k6.
+      # Diagnostics never fail the job: a failure shows as an ::error:: annotation.
+      - name: First healthy probe of the web container (D54)
+        continue-on-error: true
+        run: node scripts/d36-diag.mjs healthy-at scaliahr-web-1
+
       - name: Images run as non-root and carry no secrets
         run: |
           for image in scaliahr-web:local scaliahr-worker:local; do
@@ -383,8 +391,10 @@ jobs:
 
       # D36: a short run of the load test, so the tooling keeps working and a
       # large regression shows up. The full 1,000-user run is local (RUNBOOK).
+      # D54: k6 also writes every sample to requests-first.csv.gz (the artifact
+      # below), to recompute the p95 with other windows without new runs.
       - name: k6 load test, short run (D36)
-        run: npm run load:test
+        run: npm run load:test -- --out "csv=fileName=/out/requests-first.csv.gz,timeFormat=unix_milli"
         env:
           LOAD_BIG_USERS: "60"
           LOAD_SMALL_USERS: "5"
@@ -395,6 +405,108 @@ jobs:
           # Short pauses, so 75 users send real traffic (about 18 pages/s at full load).
           THINK_MIN: "2"
           THINK_MAX: "6"
+
+      # D54: diagnostics of why a first attempt tends to be slower than its
+      # rerun, one "D36-diag:" line each, in the log and in the job summary.
+      # None of them touches the number D36 compares: the
+      # `{ kind:page,phase:steady }` line of the step above. They also run when
+      # that step failed, as long as it left its summary, and they never fail
+      # the job: each command runs even if another failed, and a failure shows
+      # as an ::error:: annotation.
+      - name: D36 diagnostics of the first pass (D54)
+        if: ${{ !cancelled() && hashFiles('load/.out/summary.json') != '' }}
+        continue-on-error: true
+        run: |
+          status=0
+          node scripts/d36-diag.mjs runner || status=1
+          node scripts/d36-diag.mjs healthy-gap load/.out/requests-first.csv.gz || status=1
+          node scripts/d36-diag.mjs sign-ins load/.out/summary.json first || status=1
+          node scripts/d36-diag.mjs requests load/.out/requests-first.csv.gz first load/.out/summary.json || status=1
+          # The image the measured container runs, offline, read-only and without privileges.
+          if image="$(docker inspect -f '{{.Image}}' scaliahr-web-1)" &&
+            docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+              --entrypoint node -v "$PWD/scripts/d36-standalone-files.mjs:/d36/standalone-files.mjs:ro" \
+              "$image" /d36/standalone-files.mjs /app > load/.out/standalone-files.txt; then
+            node scripts/d36-diag.mjs standalone load/.out/standalone-files.txt || status=1
+          else
+            echo "::error::D36-diag: could not list the web image's standalone files"
+            rm -f load/.out/standalone-files.txt # never upload a partial list
+            status=1
+          fi
+          exit "$status"
+
+      # D54: the same k6 run again, on the same runner and stack, to test the
+      # cold-start hypothesis. Informational only: never part of D36, neither its
+      # baseline nor its limit. Its k6 summary goes to second-pass.txt in the
+      # artifact, not to this log, so the job's only `{ kind:page,phase:steady }`
+      # line is the first pass's. A crossed threshold (k6 exit 99) is reported;
+      # any other exit, or a page that showed another tenant's employees, fails
+      # the step with an ::error:: annotation. Each command runs even if another
+      # failed. The step never fails the job: the isolation count does, in the
+      # step "Tenant isolation held in the second k6 pass (D54)".
+      - name: Second k6 pass, informational, not part of D36 (D54)
+        id: second_pass
+        if: ${{ !cancelled() && hashFiles('load/.out/summary.json') != '' }}
+        continue-on-error: true
+        run: |
+          start="$(date +%s)"
+          code=0
+          LOAD_SUMMARY=summary-second.json npm run load:test -- --out "csv=fileName=/out/requests-second.csv.gz,timeFormat=unix_milli" > load/.out/second-pass.txt 2>&1 || code=$?
+          status=0
+          node scripts/d36-diag.mjs second-pass load/.out/summary-second.json "$code" "$(( $(date +%s) - start ))" load/.out/second-pass.txt || status=1
+          node scripts/d36-diag.mjs sign-ins load/.out/summary-second.json second || status=1
+          node scripts/d36-diag.mjs requests load/.out/requests-second.csv.gz second load/.out/summary-second.json || status=1
+          exit "$status"
+        env:
+          LOAD_BIG_USERS: "60"
+          LOAD_SMALL_USERS: "5"
+          LOAD_VUS: "60"
+          SMALL_VUS: "5"
+          RAMP: "20s"
+          HOLD: "40s"
+          THINK_MIN: "2"
+          THINK_MAX: "6"
+
+      # D54: an explicit list, never the whole load/.out: accounts.json there
+      # holds the load accounts' emails and their shared password. load/.out is
+      # a hidden folder, which upload-artifact skips unless told otherwise.
+      # Like the other diagnostics, a failed upload never fails the job.
+      - name: D36 diagnostics artifact (D54)
+        if: always() && hashFiles('load/.out/requests-first.csv.gz') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: d36-diag-attempt-${{ github.run_attempt }}
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            load/.out/summary.json
+            load/.out/summary-second.json
+            load/.out/requests-first.csv.gz
+            load/.out/requests-second.csv.gz
+            load/.out/second-pass.txt
+            load/.out/standalone-files.txt
+          retention-days: 14
+
+      # D54: the one result of the second pass that fails the job. A page that
+      # showed another tenant's employees is a tenant-isolation failure, not a
+      # diagnostic: the second pass's summary counts them, whatever k6's exit
+      # code. If the second pass left no readable count, this step warns. The
+      # first pass does not fully cover isolation: its checks threshold
+      # tolerates up to 1 % failed checks.
+      - name: Tenant isolation held in the second k6 pass (D54)
+        if: ${{ !cancelled() && steps.second_pass.outcome != '' && steps.second_pass.outcome != 'skipped' }}
+        env:
+          FAILED: ${{ steps.second_pass.outputs.tenant_isolation_failed }}
+        run: |
+          if [ -z "$FAILED" ]; then
+            echo "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step); the first pass tolerates up to 1 % failed checks, so it does not fully cover isolation"
+          elif [ "$FAILED" != "0" ]; then
+            echo "::error::D36-diag: $FAILED page(s) of the second k6 pass showed another tenant's employees"
+            exit 1
+          else
+            echo "No page of the second k6 pass showed another tenant's employees."
+          fi
 
       - name: Per-tenant export through the running worker (D23)
         run: |

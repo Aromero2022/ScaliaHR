@@ -2105,6 +2105,52 @@ machine):**
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.
+  - **Diagnostics of the first attempt (D54):** since D54 the `docker` job
+    prints "D36-diag:" lines (runner, seconds from the web container turning
+    healthy to k6, sign-ins and retries per phase, a content hash of the web
+    image's `.next/standalone`, the per-request CSV) and runs a second k6
+    pass after the first, with an artifact per attempt. None of it changes
+    what D36 compares.
+    - The value read is still the `{ kind:page,phase:steady }` line of the
+      step "k6 load test, short run (D36)": the first pass. Since D54 it is
+      the only such line in the job's log.
+    - The second pass never counts for D36: not as a pull request's run, not
+      as the confirming re-run, not as a `main` sample of the baseline, and
+      not for the limit. It is informational, and its numbers appear only in
+      its "D36-diag:" lines (`second pass`, and `sign-ins` and `requests`
+      with `pass=second`) and in the artifact.
+    - CSV transition (pending the user's decision): since D54 the first pass
+      writes a CSV. The baseline mixes `main` runs without and with the CSV
+      until there are five `main` runs with it. During that transition D36
+      is reported the same way, with the label "transición CSV".
+      - Accepted by the user on 2026-11-19, in #79, so it is no longer
+        pending. The label stays until there are five `main` runs with the
+        CSV.
+  - **Exception for #79 (D54), approved by the user on 2026-11-19:** D36
+    blocked #79. Its head 0342b31 was above the limit of 96.43 ms on the
+    first attempt and on the re-run, both on AMD EPYC 7763 runners. The user
+    approved the merge as an explicit exception, because the block followed
+    the runner's hardware and not the code: the images of dd61252 and
+    0342b31 hold the same code, and dd61252 gave 54.73 and 61.61 ms on
+    Intel Xeon 6975P-C runners. Between the two heads only a `ci.yml`
+    warning and its comment, the text one test expects, and docs changed:
+    `.github` and `docs` are outside the Docker build context, and the test
+    is not in the standalone output. The rule and the band do not change.
+
+    | Head | Attempt | Runner CPU | k6 p95 steady | Against 96.43 ms |
+    |---|---|---|---|---|
+    | dd61252 | 1 | Intel(R) Xeon(R) 6975P-C | 54.73 ms | −43.2 % |
+    | dd61252 | 2 | Intel(R) Xeon(R) 6975P-C | 61.61 ms | −36.1 % |
+    | 0342b31 | 1 | AMD EPYC 7763 64-Core Processor | 98.13 ms | +1.8 %, above |
+    | 0342b31 | 2 (re-run) | AMD EPYC 7763 64-Core Processor | 112.8 ms | +17.0 %, above |
+
+    - Runs 44602211249 (dd61252) and 44608857876 (0342b31); the CPU comes
+      from their "D36-diag: runner" lines.
+    - By the same decision, #79's closing commit, which only adds this
+      text, is measured once, without a re-run. If that run is above the
+      limit, this exception covers it too.
+    - It covers #79 only. Any other pull request above the limit follows
+      the rule above.
 
 ---
 
@@ -3835,6 +3881,9 @@ worker gains the email and token masks.
 - Only the patterns are shared. The web app also blanks sensitive keys and
   masks `stack` and `cause`; the worker logs only an error's name, message
   and code.
+- An address whose domain has no dot, such as `user@localhost`, is not
+  masked: the pattern needs a dot after the `@`. Accepted by the user's
+  decision in #78.
 
 **Checks:** worker unit tests that failed before the change and pass after:
 an SMTP rejection quoting `ana.lopez@acme.dev`, `Authorization: Bearer
@@ -3843,6 +3892,195 @@ redaction tests are unchanged and green. The patterns are byte-identical to
 the web app's on main, the one-time check of `.next/static` found no mask
 string, and lint, tsc
 and build are at zero in the web app, the worker and the email package.
+
+---
+
+## D54 — Diagnostics of the First k6 Attempt in CI
+
+**Decision:** the `docker` job prints one "D36-diag:" line per diagnostic, in
+the log and in the job summary, uploads an artifact per attempt and runs a
+second, informational k6 pass. The goal is to explain why a pull request's
+first attempt tends to be slower than its rerun (#76 111.3 → 63.11 ms, #77
+120.28 → 69.37 ms, #78 123.28 → 51.95 ms, from the verification tables of
+those pull requests), and why `main`, which only has first attempts, gave
+91.5, 108.81 and 72.57 ms (28ab653, 839eb08 and 6a33b6a). This is part A of
+the D36 investigation: instrumentation only. Part B (warm-up, window, `HOLD`,
+baseline) is a later decision. Phase 9c, before its PR 6d (`motion/react`,
+ROADMAP).
+
+**What does not change:** the window, `RAMP`, `HOLD`, the phase rule, the
+thresholds, the noise band and its limits, and the number D36 reads: the
+`{ kind:page,phase:steady }` line of the first pass, in the step "k6 load
+test, short run (D36)". That step still fails the job on its own thresholds,
+as before.
+- Two things are added to the first pass, and neither is a page request:
+  - k6 writes every sample to a CSV (`--out csv=…`, `timeFormat=unix_milli`).
+    The writer runs in the background while k6 measures. Its cost cannot be
+    shown to be zero, but from now on it is the same in every run, `main`'s
+    included.
+  - The sign-in request carries its phase, a `sign_in_retries` counter counts
+    the retries, and four listing thresholds (`count>=0`) put both in the
+    summary. The submetric D36 reads selects `kind:page` samples only, so it
+    holds the same samples as before.
+
+**The diagnostics never fail the job:** their steps, the artifact's
+included, have `continue-on-error`. A diagnostic that cannot produce its
+line prints an `::error::` annotation instead of a guessed value, and the
+step shows as failed. The diagnostic steps after the D36 run also run when
+that run failed, as long as it left its summary: the slow attempts are the
+ones to explain. (The job's other later steps, such as the per-tenant export
+and the rollback drill, still skip after a failure.)
+- One exception: a page of the second pass that showed another tenant's
+  employees fails the job, in its own step ("Tenant isolation held in the
+  second k6 pass (D54)"), because that is a tenant-isolation failure, not a
+  diagnostic.
+  - The count comes from the second pass's summary as soon as it can be
+    read, whatever k6's exit code.
+  - If the second pass leaves no readable count (it crashed before writing
+    its summary), that step only warns. The first pass does not fully cover
+    isolation then: its checks threshold (> 99 %) tolerates up to 1 % failed
+    checks, isolation ones included.
+
+**The lines** (`scripts/d36-diag.mjs`), each one for one possible cause.
+`diagLine` refuses any line off the grammar (a closed list of topics,
+lower-case keys, only strings and finite numbers as values):
+1. `runner`: CPU model (`lscpu`), `nproc`, `MemTotal` and
+   `GITHUB_RUN_ATTEMPT`. Tests the hardware. A field it cannot read says
+   "unavailable", with an `::warning::` that gives the reason.
+2. `healthy to k6`: seconds from the web container turning healthy to k6's
+   first request in the CSV. Tests the time since the stack came up.
+   - The probe log is read in the step "First healthy probe of the web
+     container (D54)", right after `local:up`. Docker keeps only the last
+     five probes in `State.Health.Log` (50 s at the image's 10 s interval),
+     and the e2e runs between that step and k6.
+   - The time is the first passing probe after the last failing one.
+     `exact=no` when the log holds five probes and none failed: older probes
+     rolled out, so the change may be older.
+3. `sign-ins`: per pass, the sign-ins and the retries in each phase. Tests
+   whether sign-ins (bcrypt) fall inside the measured window. k6 exports the
+   four submetrics even at 0, because of their thresholds, so a missing one
+   is an error, not a 0.
+4. `standalone`: two sha256 of the web image's `.next/standalone`. Tests
+   whether two images hold the same code.
+   - `scripts/d36-standalone-files.mjs` runs in the image of the measured
+     container, offline, read-only and without capabilities. It lists every
+     file of `/app` but `apps/web/.next/static` (copied in by the
+     Dockerfile, not standalone) with its sha256, with BUILD_ID replaced by
+     `<BUILD_ID>` in paths and contents, sorted by the replaced path's
+     bytes. Symlinks are hashed by their target.
+   - `sha256` covers every file. `sha256_without_manifests` leaves out the
+     Next.js manifests: files under a `.next/` folder whose name ends in
+     `manifest.json` or `manifest.js`.
+5. `requests`: per pass, the CSV's rows and its steady-state page p95. The
+   CSV can recompute the p95 with other windows without new runs.
+   - Its p95, average and maximum must equal the same pass's summary within
+     0.001 ms (`matches_summary=yes`). k6's percentile is linear
+     interpolation between the closest ranks.
+   - A row with another number of cells than the header, or a time or value
+     that is not a number, is an error.
+6. `second pass`: the same k6 run again, right after the first, on the same
+   runner and stack, with the same settings, re-seeded like the first. Tests
+   the cold-start hypothesis.
+   - It prints its p95, failed requests, failed checks, the pages that
+     showed another tenant's employees, k6's exit code, its seconds and
+     `counts_for_d36=no`. Its k6 summary goes to `second-pass.txt` in the
+     artifact, not to the log.
+   - A crossed threshold (exit 99) is reported. Any other exit, or any page
+     with another tenant's employees, fails the step; the isolation count,
+     when the summary holds it, then fails the job in the step that follows
+     the artifact. A failed run prints the tail of its output, indented and
+     without any p95 line.
+
+**Why two hashes (measured locally by this pull request's author, four builds
+of the web app; the measurement is not stored in the repo):**
+- Two `next build`s of the same commit, with BUILD_ID replaced, differed in
+  24 of 2,091 files. All were manifests of the same size whose JSON keys came
+  out in another order: `app-path-routes-manifest.json`,
+  `server-reference-manifest.json` and the `*_client-reference-manifest.js`
+  of each route. Without the manifests, no file differed. With the final
+  scripts, two builds of the same tree gave different `sha256` and the same
+  `sha256_without_manifests`.
+- A build of 839eb08 against one of 6a33b6a (D53 in between) also differed
+  without the manifests, where the code changed: the files that bundle
+  `redact.ts` (the middleware, both instrumentation files, three routes and
+  three chunks, one of them renamed), the trace files (`*.nft.json`) that
+  list the new module, and `packages/email/package.json`, which the trace
+  now brings into the standalone output.
+- So `sha256` identifies one build, and `sha256_without_manifests` says
+  whether two builds hold the same code, when both builds reuse Next.js's
+  cache.
+- In CI each attempt builds without that cache, and there it does not hold.
+  The two attempts of #79 (same commit, dd61252) differed in 34 of 2,075
+  files: 26 manifests and the `page.js` of the 8 routes with Server Actions
+  (admin-center, ARCO, employee, both MFA pages, performance, skills hub and
+  login). Two local builds after removing `.next` differed in the same 8.
+  Those pages embed the Server Actions' ids and module ids, which Next.js
+  generates again in a build without its cache.
+  - In CI, then, the code is compared with the diff of the two
+    `standalone-files.txt`: a diff of only manifests and those pages means
+    the same code. Neither hash says it alone.
+
+**Artifact:** `d36-diag-attempt-<n>`, kept 14 days: `summary.json`,
+`summary-second.json`, `requests-first.csv.gz`, `requests-second.csv.gz`,
+`second-pass.txt` and `standalone-files.txt`.
+- An explicit list, never `load/.out` whole: `accounts.json` there holds the
+  load accounts' emails and their shared password.
+- `load/.out` is a hidden folder, which `upload-artifact` skips by default,
+  so the step sets `include-hidden-files`, and it fails (without failing the
+  job) if it finds no file.
+- The CSV holds metric rows, URLs and tags; no bodies, headers or cookies.
+
+**Cost:** estimated at about 100–115 s more per run of the `docker` job:
+the second pass takes about as long as the D36 step, and the hash, the other
+lines and the upload add about 10–20 s. The D36 step took 92 s on 6a33b6a
+(run 44591133282: about 3 s of seed, 3 s to start k6 and 86 s of k6, from
+the log's timestamps). The second pass is under 120 s, so it runs on every
+pull request and on `main`, with no variable to switch it on. This pull
+request's CI measures the real cost.
+
+**Limits:**
+- Diagnostics only: they show what differs between attempts, not what to
+  change. Part B decides.
+- A sign-in that answers 200 with a body that is not JSON ends the iteration
+  without `sleep(5)`, and is not counted as a retry. Supabase Auth answers a
+  token request with JSON, so this is not expected.
+- The second pass re-seeds the load tenants: it repeats the first pass's
+  procedure on a stack that has just served it, so it separates a warm stack
+  from a cold one, not fresh data from old.
+- The CSV reader expects k6 v1.8.2's columns; a k6 upgrade that changes them
+  makes the `requests` and `healthy to k6` lines fail loudly, not misread.
+
+**Checks:**
+- Unit tests (`apps/web/__tests__/scripts/d36-diag.test.ts`): the line
+  grammar, the parsing behind each line, the hash on fixture trees (BUILD_ID
+  in paths and contents, ids that sort before and after their siblings,
+  symlinks), and `load/pages.js` run in Node, in strict mode, with stubbed k6
+  modules (page parameters and tags, the phase boundary at `RAMP`, the
+  sign-in tag, a retry).
+- `scripts/load-test.sh` run with fake `supabase`, `curl`, `node` and
+  `docker`: the summary goes to `/out/summary.json` by default, to the
+  `LOAD_SUMMARY` file otherwise, and extra arguments reach k6 before the
+  script.
+- The new steps run as `ci.yml` writes them, with fake `docker` and `npm`:
+  the second pass's steady line never reaches the log or the job summary,
+  exit 0 and 99 pass and any other exit fails, and one failing diagnostic
+  does not stop the others.
+- Locally, not stored in the repo: k6 v1.8.2 (checked against the release's
+  checksum) against a stub server, with `pages.js` before and after (the
+  steady line is unchanged, the CSV reproduces the summary's percentiles, a
+  submetric with no sample is exported at 0, and `root_group.checks` holds
+  each check), and the builds above.
+- CI: the lines of this pull request's attempts and of `main`.
+
+**Provisional conclusion (#79, 2026-11-19):** inconclusive, but it points to
+the runner's hardware (AMD EPYC 7763 against Intel Xeon 6975P-C) and not to a
+cold start; more runs with D36-diag are needed to confirm it.
+- On #79's four attempts the second pass, on the same runner, gave about the
+  same p95 as the first: 55.41 and 53.51 ms on Intel, 93.29 and 119.52 ms on
+  AMD.
+- The p95 did not follow the seconds from healthy to k6 (392.8, 483.1, 273.9
+  and 277.2 s): the two runs with the highest first-pass p95 (AMD, 98.13 and
+  112.8 ms) had the fewest seconds (273.9 and 277.2 s).
 
 ---
 
