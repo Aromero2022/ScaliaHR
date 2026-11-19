@@ -44,11 +44,17 @@ jobs:
         run: npm run check:forbidden
         working-directory: .
 
+      # D33: turbo prune runs the ARG TURBO_VERSION of the Dockerfiles (D17), not
+      # the lockfile's turbo. From the repo root, where both files live.
+      - name: Dockerfiles pin the lockfile's turbo (D17)
+        run: node scripts/check-turbo-version.mjs
+        working-directory: .
+
       - name: Prisma generate
         run: npx prisma generate
 
       - name: Lint
-        run: npx eslint .
+        run: npx eslint . --max-warnings=0
 
       - name: Typecheck
         run: npx tsc --noEmit
@@ -58,14 +64,14 @@ jobs:
 
       - name: Email package lint, typecheck, unit tests and build
         run: |
-          npx eslint .
+          npx eslint . --max-warnings=0
           npx tsc --noEmit
           npx vitest run
           npm run build
         working-directory: packages/email
 
       - name: Worker lint
-        run: npx eslint .
+        run: npx eslint . --max-warnings=0
         working-directory: apps/worker
 
       - name: Worker typecheck
