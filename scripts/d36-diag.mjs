@@ -18,7 +18,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const PREFIX = "D36-diag: ";
 /** The topics, one per diagnostic. A line with any other topic is a bug. */
@@ -134,8 +134,9 @@ export function readCsvRows(gzBytes) {
   };
   const [metric, time, value, tags] = ["metric_name", "timestamp", "metric_value", "extra_tags"].map(col);
   return lines.slice(1).map((line, i) => {
-    // k6 percent-encodes tag values, and no column it writes here holds a comma:
-    // a row with another cell count is a format this reader does not know.
+    // k6 v1.8.2 percent-encodes tag values, and the URLs here hold no comma. A
+    // row with another cell count (a comma somewhere, or another k6 format)
+    // fails here instead of being misread.
     const cells = line.split(",");
     if (cells.length !== header.length) throw new Error(`k6 CSV row ${i + 2} has ${cells.length} cells, the header ${header.length}`);
     const number = (cell, name) => {
@@ -198,7 +199,7 @@ export function signInsLine(summary, pass) {
  * their JSON keys come out in a different order from one build to the next.
  */
 export function isManifest(file) {
-  return file.includes(".next/") && /manifest\.(?:json|js)$/.test(file.slice(file.lastIndexOf("/") + 1));
+  return /(?:^|\/)\.next\//.test(file) && /manifest\.(?:json|js)$/.test(file.slice(file.lastIndexOf("/") + 1));
 }
 
 export const MANIFEST_LINE = /^[0-9a-f]{64} {2}\S/;
@@ -278,8 +279,9 @@ export function requestsLine(rows, pass, file, summary) {
 
 /**
  * The last lines of the second pass's output, indented so none can start a
- * workflow command, and without k6's steady-state page lines (the header and
- * its p(95) line): those belong to the D36 run alone.
+ * workflow command, and without any line holding "kind:page,phase:steady" or
+ * "p(95)" (every p95 of k6's summary): the D36 number belongs to the first
+ * pass alone.
  */
 export function outputTail(text, lines = 20) {
   return text
@@ -406,6 +408,8 @@ function main() {
       }
       const { line, isolationFailures } = secondPassLine(readJson(summaryFile), exitCode, seconds);
       emit(line);
+      // Read by the step that fails the job on a tenant-isolation failure.
+      if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `tenant_isolation_failed=${isolationFailures}\n`);
       if (isolationFailures > 0) throw new Error(`${isolationFailures} page(s) of the second pass showed another tenant's employees`);
       return;
     }
@@ -416,11 +420,14 @@ function main() {
 
 /** True when this file is the script node was asked to run, through a symlink too. */
 const isMain = () => {
+  if (!process.argv[1]) return false;
+  let given = process.argv[1];
   try {
-    return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+    given = realpathSync(given);
   } catch {
-    return false;
+    // Compare the path as given: a path node ran cannot fail to resolve, but never skip main() silently over it.
   }
+  return pathToFileURL(given).href === import.meta.url || given === fileURLToPath(import.meta.url);
 };
 
 if (isMain()) {

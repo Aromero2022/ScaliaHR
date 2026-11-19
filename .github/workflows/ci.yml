@@ -430,6 +430,7 @@ jobs:
             node scripts/d36-diag.mjs standalone load/.out/standalone-files.txt || status=1
           else
             echo "::error::D36-diag: could not list the web image's standalone files"
+            rm -f load/.out/standalone-files.txt # never upload a partial list
             status=1
           fi
           exit "$status"
@@ -440,17 +441,22 @@ jobs:
       # artifact, not to this log, so the job's only `{ kind:page,phase:steady }`
       # line is the first pass's. A crossed threshold (k6 exit 99) is reported;
       # any other exit, or a page that showed another tenant's employees, fails
-      # the step with an ::error:: annotation, but never the job.
+      # the step with an ::error:: annotation. Each command runs even if another
+      # failed. The step never fails the job: the isolation result does, in the
+      # step "Tenant isolation held in the second k6 pass (D54)".
       - name: Second k6 pass, informational, not part of D36 (D54)
+        id: second_pass
         if: ${{ !cancelled() && hashFiles('load/.out/summary.json') != '' }}
         continue-on-error: true
         run: |
           start="$(date +%s)"
           code=0
           LOAD_SUMMARY=summary-second.json npm run load:test -- --out "csv=fileName=/out/requests-second.csv.gz,timeFormat=unix_milli" > load/.out/second-pass.txt 2>&1 || code=$?
-          node scripts/d36-diag.mjs second-pass load/.out/summary-second.json "$code" "$(( $(date +%s) - start ))" load/.out/second-pass.txt
-          node scripts/d36-diag.mjs sign-ins load/.out/summary-second.json second
-          node scripts/d36-diag.mjs requests load/.out/requests-second.csv.gz second load/.out/summary-second.json
+          status=0
+          node scripts/d36-diag.mjs second-pass load/.out/summary-second.json "$code" "$(( $(date +%s) - start ))" load/.out/second-pass.txt || status=1
+          node scripts/d36-diag.mjs sign-ins load/.out/summary-second.json second || status=1
+          node scripts/d36-diag.mjs requests load/.out/requests-second.csv.gz second load/.out/summary-second.json || status=1
+          exit "$status"
         env:
           LOAD_BIG_USERS: "60"
           LOAD_SMALL_USERS: "5"
@@ -464,8 +470,10 @@ jobs:
       # D54: an explicit list, never the whole load/.out: accounts.json there
       # holds the load accounts' emails and their shared password. load/.out is
       # a hidden folder, which upload-artifact skips unless told otherwise.
+      # Like the other diagnostics, a failed upload never fails the job.
       - name: D36 diagnostics artifact (D54)
         if: always() && hashFiles('load/.out/requests-first.csv.gz') != ''
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: d36-diag-attempt-${{ github.run_attempt }}
@@ -479,6 +487,21 @@ jobs:
             load/.out/second-pass.txt
             load/.out/standalone-files.txt
           retention-days: 14
+
+      # D54: the one result of the second pass that fails the job. A page that
+      # showed another tenant's employees is a tenant-isolation failure, not a
+      # diagnostic. Skipped when the second pass gave no result (its own step
+      # then carries the error).
+      - name: Tenant isolation held in the second k6 pass (D54)
+        if: ${{ !cancelled() && steps.second_pass.outputs.tenant_isolation_failed != '' }}
+        env:
+          FAILED: ${{ steps.second_pass.outputs.tenant_isolation_failed }}
+        run: |
+          if [ "$FAILED" != "0" ]; then
+            echo "::error::D36-diag: $FAILED page(s) of the second k6 pass showed another tenant's employees"
+            exit 1
+          fi
+          echo "No page of the second k6 pass showed another tenant's employees."
 
       - name: Per-tenant export through the running worker (D23)
         run: |

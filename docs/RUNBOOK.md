@@ -206,18 +206,18 @@ Por eso la corrida completa de esta sección (1,150 usuarios) se hace en local a
 
 ### Diagnóstico del primer intento (D54)
 
-En CI, el job `docker` imprime líneas `D36-diag:` en el log y en el resumen del job, y sube el artifact `d36-diag-attempt-<n>` (14 días). Sirven para explicar por qué el intento 1 de k6 tiende a salir más alto que la repetición; no cambian la comparación de D36. Los pasos de diagnóstico nunca hacen fallar el job: si uno no puede dar su línea, deja una anotación `::error::`.
+En CI, el job `docker` imprime líneas `D36-diag:` en el log y en el resumen del job, y sube el artifact `d36-diag-attempt-<n>` (14 días). Sirven para explicar por qué el intento 1 de k6 tiende a salir más alto que la repetición; no cambian la comparación de D36. Los pasos de diagnóstico, el del artifact incluido, nunca hacen fallar el job: si uno no puede dar su línea, deja una anotación `::error::`. La única excepción es el aislamiento entre tenants de la segunda pasada, que se revisa en su propio paso.
 
 - `runner`: modelo de CPU, `nproc`, `MemTotal` y número de intento.
 - `healthy to k6`: segundos entre que el contenedor web queda sano y la primera petición de k6. Dice `exact=no` si las 5 pruebas que guarda Docker ya estaban sanas.
 - `sign-ins`: inicios de sesión y reintentos por fase, de cada pasada.
 - `standalone`: hash de `.next/standalone` de la imagen web con el BUILD_ID reemplazado. Para comparar el código de dos builds sirve `sha256_without_manifests`: en la medición de D54, entre dos builds del mismo commit solo cambiaron los manifiestos.
 - `requests`: filas del CSV de cada pasada y su p95 de páginas en estado estable, que tiene que coincidir con el resumen (`matches_summary=yes`).
-- `second pass`: la segunda corrida de k6, en el mismo runner y con la misma configuración, solo informativa. Trae también los checks fallidos y las páginas que mostraron empleados de otro tenant; una sola de esas hace fallar el paso.
+- `second pass`: la segunda corrida de k6, en el mismo runner y con la misma configuración, solo informativa. Trae también los checks fallidos y las páginas que mostraron empleados de otro tenant. Una sola página con empleados de otro tenant hace fallar el paso «Tenant isolation held in the second k6 pass (D54)», y con él el job.
 
 La segunda pasada no cuenta para D36: ni como corrida del PR, ni como repetición, ni en la línea base de `main`, ni para el límite. El p95 que se compara sigue siendo la línea `{ kind:page,phase:steady }` del paso «k6 load test, short run (D36)», que desde D54 es la única en el log del job.
 
-Para recalcular el p95 con otra ventana, `requests-first.csv.gz` tiene una fila por métrica y petición: `metric_name`, `timestamp` (ms), `metric_value` (ms en `http_req_duration`), `status` y `extra_tags` (`kind`, `page`, `phase`). El percentil de k6 es interpolación lineal entre los rangos vecinos. Para comparar dos imágenes, se hace `diff` de los `standalone-files.txt` de los dos artifacts.
+Para recalcular el p95 con otra ventana, `requests-first.csv.gz` tiene una fila por muestra de cada métrica: `metric_name`, `timestamp` (ms), `metric_value` (ms en `http_req_duration`), `status` y `extra_tags` (`kind`, `page`, `phase`). El percentil de k6 es interpolación lineal entre los rangos vecinos. Para comparar dos imágenes, se hace `diff` de los `standalone-files.txt` de los dos artifacts.
 
 El artifact nunca lleva `accounts.json`: tiene los correos de las cuentas de carga y su contraseña.
 

@@ -3868,10 +3868,12 @@ and build are at zero in the web app, the worker and the email package.
 the log and in the job summary, uploads an artifact per attempt and runs a
 second, informational k6 pass. The goal is to explain why a pull request's
 first attempt tends to be slower than its rerun (#76 111.3 → 63.11 ms, #77
-120.28 → 69.37 ms, #78 123.28 → 51.95 ms), and why `main`, which only has
-first attempts, gave 91.5, 108.81 and 72.57 ms. This is part A of the D36
-investigation: instrumentation only. Part B (warm-up, window, `HOLD`,
-baseline) is a later decision. Phase 9c, before PR 6d.
+120.28 → 69.37 ms, #78 123.28 → 51.95 ms, from the verification tables of
+those pull requests), and why `main`, which only has first attempts, gave
+91.5, 108.81 and 72.57 ms (28ab653, 839eb08 and 6a33b6a). This is part A of
+the D36 investigation: instrumentation only. Part B (warm-up, window, `HOLD`,
+baseline) is a later decision. Phase 9c, before its PR 6d (`motion/react`,
+ROADMAP).
 
 **What does not change:** the window, `RAMP`, `HOLD`, the phase rule, the
 thresholds, the noise band and its limits, and the number D36 reads: the
@@ -3888,11 +3890,17 @@ as before.
     summary. The submetric D36 reads selects `kind:page` samples only, so it
     holds the same samples as before.
 
-**The diagnostics never fail the job:** their steps have
-`continue-on-error`. A diagnostic that cannot produce its line prints an
-`::error::` annotation instead of a guessed value, and the step shows as
-failed. The steps after the D36 run also run when that run failed, as long
-as it left its summary: the slow attempts are the ones to explain.
+**The diagnostics never fail the job:** their steps, the artifact's
+included, have `continue-on-error`. A diagnostic that cannot produce its
+line prints an `::error::` annotation instead of a guessed value, and the
+step shows as failed. The diagnostic steps after the D36 run also run when
+that run failed, as long as it left its summary: the slow attempts are the
+ones to explain. (The job's other later steps, such as the per-tenant export
+and the rollback drill, still skip after a failure.)
+- One exception: a page of the second pass that showed another tenant's
+  employees fails the job, in its own step ("Tenant isolation held in the
+  second k6 pass (D54)"), because that is a tenant-isolation failure, not a
+  diagnostic.
 
 **The lines** (`scripts/d36-diag.mjs`), each one for one possible cause.
 `diagLine` refuses any line off the grammar (a closed list of topics,
@@ -3922,7 +3930,7 @@ lower-case keys, only strings and finite numbers as values):
      `<BUILD_ID>` in paths and contents, sorted by the replaced path's
      bytes. Symlinks are hashed by their target.
    - `sha256` covers every file. `sha256_without_manifests` leaves out the
-     Next.js manifests: files under `.next/` whose name ends in
+     Next.js manifests: files under a `.next/` folder whose name ends in
      `manifest.json` or `manifest.js`.
 5. `requests`: per pass, the CSV's rows and its steady-state page p95. The
    CSV can recompute the p95 with other windows without new runs.
@@ -3939,10 +3947,12 @@ lower-case keys, only strings and finite numbers as values):
      `counts_for_d36=no`. Its k6 summary goes to `second-pass.txt` in the
      artifact, not to the log.
    - A crossed threshold (exit 99) is reported. Any other exit, or any page
-     with another tenant's employees, fails the step. A failed run prints
-     the tail of its output, indented and without k6's steady-state lines.
+     with another tenant's employees, fails the step; the isolation count
+     then fails the job in the step that follows the artifact. A failed run
+     prints the tail of its output, indented and without any p95 line.
 
-**Why two hashes (measured locally, four builds of the web app):**
+**Why two hashes (measured locally by this pull request's author, four builds
+of the web app; the measurement is not stored in the repo):**
 - Two `next build`s of the same commit, with BUILD_ID replaced, differed in
   24 of 2,091 files. All were manifests of the same size whose JSON keys came
   out in another order: `app-path-routes-manifest.json`,
@@ -3965,14 +3975,17 @@ lower-case keys, only strings and finite numbers as values):
 - An explicit list, never `load/.out` whole: `accounts.json` there holds the
   load accounts' emails and their shared password.
 - `load/.out` is a hidden folder, which `upload-artifact` skips by default,
-  so the step sets `include-hidden-files` and fails if it finds no file.
+  so the step sets `include-hidden-files`, and it fails (without failing the
+  job) if it finds no file.
 - The CSV holds metric rows, URLs and tags; no bodies, headers or cookies.
 
-**Cost:** about 95–115 s more per run of the `docker` job. The second pass
-takes about as long as the D36 step (92 s on 6a33b6a: about 3 s of seed, 3 s
-to start k6 and 86 s of k6), plus a few seconds for the hash and the upload.
-That is under 120 s, so it runs on every pull request and on `main`, with no
-variable to switch it on.
+**Cost:** estimated at about 100–115 s more per run of the `docker` job:
+the second pass takes about as long as the D36 step, and the hash, the other
+lines and the upload add about 10–20 s. The D36 step took 92 s on 6a33b6a
+(run 44591133282: about 3 s of seed, 3 s to start k6 and 86 s of k6, from
+the log's timestamps). The second pass is under 120 s, so it runs on every
+pull request and on `main`, with no variable to switch it on. This pull
+request's CI measures the real cost.
 
 **Limits:**
 - Diagnostics only: they show what differs between attempts, not what to
@@ -4001,10 +4014,11 @@ variable to switch it on.
   the second pass's steady line never reaches the log or the job summary,
   exit 0 and 99 pass and any other exit fails, and one failing diagnostic
   does not stop the others.
-- Locally: k6 v1.8.2 (checksum of the release) against a stub server, with
-  `pages.js` before and after (the steady line is unchanged, the CSV
-  reproduces the summary's percentiles, and a submetric with no sample is
-  exported at 0), and the builds above.
+- Locally, not stored in the repo: k6 v1.8.2 (checked against the release's
+  checksum) against a stub server, with `pages.js` before and after (the
+  steady line is unchanged, the CSV reproduces the summary's percentiles, a
+  submetric with no sample is exported at 0, and `root_group.checks` holds
+  each check), and the builds above.
 - CI: the lines of this pull request's attempts and of `main`.
 
 ---

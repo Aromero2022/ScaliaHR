@@ -44,6 +44,7 @@ const SECOND_STEP = "Second k6 pass, informational, not part of D36 (D54)";
 const DIAG_STEP = "D36 diagnostics of the first pass (D54)";
 const HEALTHY_STEP = "First healthy probe of the web container (D54)";
 const ARTIFACT_STEP = "D36 diagnostics artifact (D54)";
+const ISOLATION_STEP = "Tenant isolation held in the second k6 pass (D54)";
 const BUILD_A = "Jrodzi43SsfnNQNcKwNQC";
 const BUILD_B = "I3hwmMoHfS0juqENfgULN";
 
@@ -86,6 +87,9 @@ describe('the "D36-diag:" line format (D54)', () => {
     expect(DIAG_LINE.source.startsWith("^D36-diag: (?:runner|healthy to k6|sign-ins|standalone|requests|second pass)")).toBe(true);
     expect('D36-diag: runner cpu="AMD EPYC" nproc=4').toMatch(byHand);
     expect('D36-diag: runner cpu="AMD EPYC" nproc=4').toMatch(DIAG_LINE);
+    // The hand-written grammar takes any topic; the module's takes only its own.
+    expect("D36-diag: other pass a=1").toMatch(byHand);
+    expect("D36-diag: other pass a=1").not.toMatch(DIAG_LINE);
   });
 
   it.each([
@@ -370,6 +374,7 @@ describe("4. the content hash of .next/standalone (D54)", () => {
     ["node_modules/some-lib/manifest.js", false],
     ["apps/web/.next/server/chunks/manifest-utils.js", false],
     ["apps/web/.next/server/manifest-free/page.js", false],
+    ["node_modules/x.next/build-manifest.json", false],
   ])("counts %s as a manifest: %s", (file, expected) => {
     expect(isManifest(file)).toBe(expected);
   });
@@ -546,12 +551,13 @@ describe("6. the second k6 pass is never part of D36 (D54)", () => {
     expect(names.indexOf(DIAG_STEP)).toBe(names.indexOf(D36_STEP) + 1);
     expect(names.indexOf(SECOND_STEP)).toBe(names.indexOf(DIAG_STEP) + 1);
     expect(names.indexOf(ARTIFACT_STEP)).toBe(names.indexOf(SECOND_STEP) + 1);
+    expect(names.indexOf(ISOLATION_STEP)).toBe(names.indexOf(ARTIFACT_STEP) + 1);
     const run = runBlock(stepNamed(SECOND_STEP));
     expect(run).toContain(
       'LOAD_SUMMARY=summary-second.json npm run load:test -- --out "csv=fileName=/out/requests-second.csv.gz,timeFormat=unix_milli" > load/.out/second-pass.txt 2>&1 || code=$?',
     );
     expect(run).toContain(
-      'node scripts/d36-diag.mjs second-pass load/.out/summary-second.json "$code" "$(( $(date +%s) - start ))" load/.out/second-pass.txt',
+      'node scripts/d36-diag.mjs second-pass load/.out/summary-second.json "$code" "$(( $(date +%s) - start ))" load/.out/second-pass.txt || status=1',
     );
     expect(run).toContain("requests load/.out/requests-second.csv.gz second load/.out/summary-second.json");
   });
@@ -579,7 +585,8 @@ describe("6. the second k6 pass is never part of D36 (D54)", () => {
   });
 
   it("is estimated under 120 s from its settings (the D36 step took 92 s on main 6a33b6a); CI measures it", () => {
-    // RAMP 20 s + HOLD 40 s + 20 s ramp-down + up to 10 s graceful stop, before the seed and k6's start.
+    // k6's own time: RAMP 20 s + HOLD 40 s + 20 s ramp-down + up to 10 s graceful stop.
+    // The seed and k6's start add about 6 s on top; only CI measures the real cost.
     const env = envBlock(stepNamed(SECOND_STEP));
     const seconds = (value: string) => Number(value.replace(/s$/, ""));
     expect(seconds(env.RAMP) + seconds(env.HOLD) + 20 + 10).toBeLessThan(120);
@@ -591,8 +598,22 @@ describe("the diagnostic steps never fail the job, and run when the D36 run fail
     expect(stepNamed(D36_STEP)).not.toMatch(/^\s+(if|continue-on-error):/m);
   });
 
-  it.each([HEALTHY_STEP, DIAG_STEP, SECOND_STEP])("%s continues on error", (name) => {
+  it.each([HEALTHY_STEP, DIAG_STEP, SECOND_STEP, ARTIFACT_STEP])("%s continues on error", (name) => {
     expect(stepNamed(name)).toMatch(/^ {8}continue-on-error: true$/m);
+  });
+
+  it("fails the job, in a step of its own, only on a page of the second pass that showed another tenant's employees", () => {
+    const step = stepNamed(ISOLATION_STEP);
+    expect(step).not.toContain("continue-on-error");
+    expect(step).toContain("if: ${{ !cancelled() && steps.second_pass.outputs.tenant_isolation_failed != '' }}");
+    expect(step).toContain("FAILED: ${{ steps.second_pass.outputs.tenant_isolation_failed }}");
+    expect(stepNamed(SECOND_STEP)).toMatch(/^ {8}id: second_pass$/m);
+    const ok = runStep(ISOLATION_STEP, {}, { FAILED: "0" });
+    expect(ok.status).toBe(0);
+    expect(ok.stdout).toBe("No page of the second k6 pass showed another tenant's employees.\n");
+    const leak = runStep(ISOLATION_STEP, {}, { FAILED: "2" });
+    expect(leak.status).toBe(1);
+    expect(leak.stdout).toContain("::error::D36-diag: 2 page(s) of the second k6 pass showed another tenant's employees");
   });
 
   it.each([DIAG_STEP, SECOND_STEP])("%s runs whenever the D36 run left its summary", (name) => {
@@ -615,12 +636,20 @@ function runStep(name: string, fakes: Record<string, string>, env: Record<string
   for (const [command, body] of Object.entries(fakes)) writeFileSync(path.join(bin, command), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
   const stepSummary = path.join(work, "step-summary.md");
   const githubEnv = path.join(work, "github-env");
+  const githubOutput = path.join(work, "github-output");
   const step = stepNamed(name);
   writeFileSync(path.join(work, "step.sh"), step.includes("run: |") ? runBlock(step) : runLine(step).slice("run: ".length));
   const result = spawnSync("bash", ["-e", "step.sh"], {
     cwd: work,
     encoding: "utf-8",
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_STEP_SUMMARY: stepSummary, GITHUB_ENV: githubEnv, ...env },
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      GITHUB_STEP_SUMMARY: stepSummary,
+      GITHUB_ENV: githubEnv,
+      GITHUB_OUTPUT: githubOutput,
+      ...env,
+    },
   });
   const read = (file: string) => {
     try {
@@ -629,7 +658,7 @@ function runStep(name: string, fakes: Record<string, string>, env: Record<string
       return "";
     }
   };
-  return { ...result, work, stepSummary: read(stepSummary), githubEnv: read(githubEnv) };
+  return { ...result, work, stepSummary: read(stepSummary), githubEnv: read(githubEnv), githubOutput: read(githubOutput) };
 }
 
 const DOCKER_RUN =
@@ -692,11 +721,14 @@ describe("the new steps, run as ci.yml writes them (D54)", () => {
     expect(result.stdout).toContain("D36-diag: standalone ");
   });
 
-  it("fails loudly when the image cannot be listed, and still prints the other lines", () => {
-    const result = runStep(DIAG_STEP, { docker: "exit 9" }, healthyEnv, firstPassFiles());
-    expect(result.status).toBe(1);
-    expect(result.stdout).toContain("::error::D36-diag: could not list the web image's standalone files");
-    expect(result.stdout.match(/^D36-diag: /gm)).toHaveLength(4);
+  it("fails loudly when the image cannot be listed, still prints the other lines, and leaves no partial list", () => {
+    for (const docker of ["exit 9", 'case "$1" in inspect) echo sha256:1234 ;; run) echo "${"0".repeat(64)}  partial"; exit 1 ;; esac']) {
+      const result = runStep(DIAG_STEP, { docker }, healthyEnv, firstPassFiles());
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("::error::D36-diag: could not list the web image's standalone files");
+      expect(result.stdout.match(/^D36-diag: /gm)).toHaveLength(4);
+      expect(() => readFileSync(path.join(result.work, "load/.out/standalone-files.txt"))).toThrow("ENOENT");
+    }
   });
 
   it.each([
@@ -724,14 +756,31 @@ describe("the new steps, run as ci.yml writes them (D54)", () => {
     expect(readFileSync(path.join(result.work, "load/.out/second-pass.txt"), "utf-8")).toContain("kind:page,phase:steady");
     for (const text of [result.stdout, result.stderr, result.stepSummary]) expect(text).not.toMatch(/kind:page,phase:steady|p\(95\)=999/);
     if (stepExit === 0) {
+      expect(result.githubOutput).toBe("tenant_isolation_failed=0\n");
       expect(result.stdout).toContain(`D36-diag: second pass p95_steady_ms=11.80 failed=0/1230 checks_failed=0/2385 tenant_isolation_failed=0 k6_exit=${k6Exit} seconds=`);
       expect(result.stdout).toContain("counts_for_d36=no");
       expect(result.stdout).toContain("D36-diag: sign-ins pass=second ramp=71 steady=4");
       expect(result.stdout).toContain("D36-diag: requests pass=second artifact=requests-second.csv.gz");
     } else {
+      expect(result.githubOutput).toBe("");
       expect(result.stderr).toContain(`the second k6 pass failed with exit code ${k6Exit}`);
       expect(result.stderr).toContain("  ERRO[0001] something broke");
     }
+  });
+
+  it("second pass: a tenant-isolation failure is passed on to the gate step, and the other lines still print", () => {
+    const fixture = tempDir("d36-fixture-");
+    const leaking = summary({ ramp: 71, steady: 4, isolationFails: 2, checkFails: 2 });
+    writeFileSync(path.join(fixture, "summary-second.json"), JSON.stringify({ ...leaking, metrics: { ...leaking.metrics, ...CSV_SUMMARY.metrics } }));
+    writeFileSync(path.join(fixture, "requests-second.csv.gz"), csv(CSV_ROWS));
+    const npm = `cp "${fixture}"/summary-second.json "${fixture}"/requests-second.csv.gz load/.out/`;
+    const result = runStep(SECOND_STEP, { npm }, envBlock(stepNamed(SECOND_STEP)));
+    expect(result.status).toBe(1);
+    expect(result.githubOutput).toBe("tenant_isolation_failed=2\n");
+    expect(result.stderr).toContain("2 page(s) of the second pass showed another tenant's employees");
+    expect(result.stdout).toContain("tenant_isolation_failed=2");
+    expect(result.stdout).toContain("D36-diag: sign-ins pass=second ramp=71 steady=4");
+    expect(result.stdout).toContain("D36-diag: requests pass=second ");
   });
 });
 

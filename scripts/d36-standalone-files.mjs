@@ -11,7 +11,7 @@
 import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const MARKER = "<BUILD_ID>";
 export const BUILD_ID_FILE = "apps/web/.next/BUILD_ID";
@@ -90,11 +90,14 @@ function main() {
 
 /** True when this file is the script node was asked to run, through a symlink too. */
 const isMain = () => {
+  if (!process.argv[1]) return false;
+  let given = process.argv[1];
   try {
-    return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+    given = realpathSync(given);
   } catch {
-    return false;
+    // Compare the path as given: a path node ran cannot fail to resolve, but never skip main() silently over it.
   }
+  return pathToFileURL(given).href === import.meta.url || given === fileURLToPath(import.meta.url);
 };
 
 if (isMain()) main();
