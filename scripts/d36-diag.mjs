@@ -1,87 +1,130 @@
 // D36 diagnostics (D54): why the first CI attempt of k6 tends to be slower
-// than its rerun. Every command prints one line that starts with "D36-diag: "
-// in the log and in the job summary. Nothing here reads or changes the number
-// D36 compares: that is still the `{ kind:page,phase:steady }` line of the
-// first k6 pass, in the log of the step "k6 load test, short run (D36)".
+// than its rerun. Each diagnostic prints one line that starts with
+// "D36-diag: " in the log and in the job summary. Nothing here reads or
+// changes the number D36 compares: that is still the
+// `{ kind:page,phase:steady }` line of the first k6 pass, in the log of the
+// step "k6 load test, short run (D36)".
 //   node scripts/d36-diag.mjs runner
-//   node scripts/d36-diag.mjs healthy-at <container>         (writes D36_WEB_HEALTHY_AT to $GITHUB_ENV)
+//   node scripts/d36-diag.mjs healthy-at <container>   (no D36-diag line: it prints the time and writes
+//                                                       D36_WEB_HEALTHY_AT and D36_WEB_HEALTHY_EXACT to $GITHUB_ENV)
 //   node scripts/d36-diag.mjs healthy-gap <requests.csv.gz>
 //   node scripts/d36-diag.mjs sign-ins <summary.json> <pass>
-//   node scripts/d36-diag.mjs requests <requests.csv.gz> <pass> <summary.json>
 //   node scripts/d36-diag.mjs standalone <standalone-files.txt>
+//   node scripts/d36-diag.mjs requests <requests.csv.gz> <pass> <summary.json>
 //   node scripts/d36-diag.mjs second-pass <summary.json> <k6 exit code> <seconds> [<its output>]
+// A command that cannot produce its line exits 1 with a "::error::" annotation;
+// it never prints a guessed value.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 export const PREFIX = "D36-diag: ";
+/** The topics, one per diagnostic. A line with any other topic is a bug. */
+export const TOPICS = Object.freeze(["runner", "healthy to k6", "sign-ins", "standalone", "requests", "second pass"]);
 /** k6 exits 99 when a threshold is crossed: for the second pass that is a result, not a failure. */
 export const K6_THRESHOLDS_CROSSED = 99;
-export const PASSES = ["first", "second"];
-export const PHASES = ["ramp", "steady"];
+export const PASSES = Object.freeze(["first", "second"]);
+export const PHASES = Object.freeze(["ramp", "steady"]);
+/** Docker keeps this many health probes in State.Health.Log. */
+export const HEALTH_LOG_SIZE = 5;
+/** The check in load/pages.js that a page shows no other tenant's employees. */
+export const ISOLATION_CHECK = "no other tenant's employees";
 
-/** A value as it goes on a line: bare when it is a plain token, JSON-quoted otherwise. */
+const PLAIN = /^[\w.:+\-/<>]+$/;
+const KEY = /^[a-z][a-z0-9_]*$/;
+/** The whole grammar of a line: prefix, topic, then key=value pairs, a value bare or JSON-quoted. */
+export const DIAG_LINE = new RegExp(
+  `^${PREFIX}(?:${TOPICS.join("|")})(?: [a-z][a-z0-9_]*=(?:[\\w.:+\\-/<>]+|"(?:[^"\\\\]|\\\\.)*"))+$`,
+);
+
+/** A value as it goes on a line: bare when it is a plain token, JSON-quoted otherwise. Only strings and finite numbers. */
 export function formatValue(value) {
+  if (typeof value === "number" ? !Number.isFinite(value) : typeof value !== "string") {
+    throw new Error(`not a string or a finite number: ${String(value)}`);
+  }
   const text = String(value);
-  return /^[\w.:+\-/<>]+$/.test(text) ? text : JSON.stringify(text);
+  return PLAIN.test(text) ? text : JSON.stringify(text);
 }
 
-/** "D36-diag: <topic> key=value …", with the fields in the given order. */
+/** "D36-diag: <topic> key=value …", with the fields in the given order; it throws on anything off the grammar. */
 export function diagLine(topic, fields) {
-  const pairs = Object.entries(fields).map(([key, value]) => `${key}=${formatValue(value)}`);
-  return `${PREFIX}${[topic, ...pairs].join(" ")}`;
+  if (!TOPICS.includes(topic)) throw new Error(`unknown topic "${topic}"`);
+  const entries = Object.entries(fields);
+  if (entries.length === 0) throw new Error(`no fields for "${topic}"`);
+  const bad = entries.find(([key]) => !KEY.test(key));
+  if (bad) throw new Error(`bad key "${bad[0]}"`);
+  const line = `${PREFIX}${[topic, ...entries.map(([key, value]) => `${key}=${formatValue(value)}`)].join(" ")}`;
+  if (!DIAG_LINE.test(line)) throw new Error(`not a D36-diag line: ${line}`);
+  return line;
 }
 
 /** Prints the line, and adds it to the job summary as code, so Markdown never reads its values. */
 export function emit(line) {
   console.log(line);
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\`${line}\`\n\n`);
+  const fence = line.includes("`") ? "``" : "`";
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${fence} ${line} ${fence}\n\n`);
 }
+
+/** A message escaped for a workflow command, so a newline in it cannot start another command. */
+export const escapeCommand = (text) => String(text).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
 
 // 1. Runner
 
-/** The CPU model from `lscpu`, or "unavailable". */
+/** The CPU model from `lscpu`, or null. */
 export function cpuModel(lscpuText) {
   const match = /^Model name:\s*(.+?)\s*$/m.exec(lscpuText);
-  return match ? match[1] : "unavailable";
+  return match ? match[1] : null;
 }
 
-/** MemTotal in kB from /proc/meminfo, or "unavailable". */
+/** MemTotal in kB from /proc/meminfo, or null. */
 export function memTotalKb(meminfoText) {
   const match = /^MemTotal:\s+(\d+)\s+kB$/m.exec(meminfoText);
-  return match ? Number(match[1]) : "unavailable";
+  return match ? Number(match[1]) : null;
 }
 
+/**
+ * The runner line. A field that cannot be read says "unavailable" and is
+ * listed in `missing`, so the caller can warn with the reason.
+ */
 export function runnerLine({ lscpu, nproc, meminfo, runAttempt }) {
-  return diagLine("runner", {
+  const fields = {
     cpu: cpuModel(lscpu),
-    nproc: /^\d+$/.test(nproc.trim()) ? Number(nproc.trim()) : "unavailable",
+    nproc: /^\d+$/.test(nproc.trim()) ? Number(nproc.trim()) : null,
     mem_total_kb: memTotalKb(meminfo),
-    run_attempt: runAttempt || "unavailable",
-  });
+    run_attempt: /^\d+$/.test(runAttempt ?? "") ? Number(runAttempt) : null,
+  };
+  const missing = Object.keys(fields).filter((key) => fields[key] === null);
+  for (const key of missing) fields[key] = "unavailable";
+  return { line: diagLine("runner", fields), missing };
 }
 
 // 2. Seconds from the web container's first healthy probe to k6's first request
 
 /**
  * When the container turned healthy, from `docker inspect -f '{{json .State.Health}}'`:
- * the end of the oldest passing probe in its log. Docker keeps only the last
- * five probes, so when all five passed the change may be older: `exact` is false.
+ * the end of the first passing probe after the last failing one. When the
+ * log holds no failure and is full, older probes rolled out and the change may
+ * be older: `exact` is false.
  */
 export function firstHealthy(health) {
-  const log = Array.isArray(health?.Log) ? health.Log : [];
-  const passing = log.filter((probe) => probe.ExitCode === 0 && !Number.isNaN(Date.parse(probe.End)));
-  if (passing.length === 0) throw new Error(`no passing probe in State.Health.Log (status ${health?.Status ?? "none"})`);
-  const oldest = passing.reduce((a, b) => (Date.parse(a.End) <= Date.parse(b.End) ? a : b));
-  const exact = !(log.length >= 5 && passing.length === log.length);
-  return { at: new Date(Date.parse(oldest.End)).toISOString(), exact };
+  if (health?.Status !== "healthy") throw new Error(`the container is not healthy (status ${health?.Status ?? "none"})`);
+  const log = Array.isArray(health.Log) ? health.Log : [];
+  for (const probe of log) {
+    if (Number.isNaN(Date.parse(probe?.End))) throw new Error(`a probe in State.Health.Log has no valid End: ${JSON.stringify(probe?.End)}`);
+  }
+  const sorted = [...log].sort((a, b) => Date.parse(a.End) - Date.parse(b.End));
+  const lastFailure = sorted.map((probe) => probe.ExitCode !== 0).lastIndexOf(true);
+  const first = sorted[lastFailure + 1];
+  if (first === undefined) throw new Error("no passing probe after the last failing one in State.Health.Log");
+  const exact = lastFailure >= 0 || sorted.length < HEALTH_LOG_SIZE;
+  return { at: new Date(Date.parse(first.End)).toISOString(), exact };
 }
 
-/** The k6 CSV output (`--out csv=…gz`), as rows of named columns. */
+/** The k6 CSV output (`--out csv=…gz`, `timeFormat=unix_milli`), as rows of named columns. */
 export function readCsvRows(gzBytes) {
-  const lines = gunzipSync(gzBytes).toString("utf-8").split("\n").filter((line) => line !== "");
+  const lines = gunzipSync(gzBytes).toString("utf-8").split(/\r?\n/).filter((line) => line !== "");
   if (lines.length === 0) throw new Error("the k6 CSV is empty");
   const header = lines[0].split(",");
   const col = (name) => {
@@ -90,28 +133,36 @@ export function readCsvRows(gzBytes) {
     return index;
   };
   const [metric, time, value, tags] = ["metric_name", "timestamp", "metric_value", "extra_tags"].map(col);
-  // Only the first columns are read by position, and URLs, the one field that
-  // could hold a comma, come after them; extra_tags is the next to last column.
-  return lines.slice(1).map((line) => {
+  return lines.slice(1).map((line, i) => {
+    // k6 percent-encodes tag values, and no column it writes here holds a comma:
+    // a row with another cell count is a format this reader does not know.
     const cells = line.split(",");
+    if (cells.length !== header.length) throw new Error(`k6 CSV row ${i + 2} has ${cells.length} cells, the header ${header.length}`);
+    const number = (cell, name) => {
+      const parsed = cell === "" ? NaN : Number(cell);
+      if (!Number.isFinite(parsed)) throw new Error(`k6 CSV row ${i + 2}: ${name} "${cell}" is not a number`);
+      return parsed;
+    };
     return {
       metric: cells[metric],
-      time: Number(cells[time]),
-      value: Number(cells[value]),
-      tags: Object.fromEntries(new URLSearchParams(cells[cells.length - (header.length - tags)] ?? "")),
+      time: number(cells[time], "timestamp"),
+      value: number(cells[value], "metric_value"),
+      tags: Object.fromEntries(new URLSearchParams(cells[tags])),
     };
   });
 }
 
-/** The earliest request of the run, in ms since the epoch (the CSV is written with timeFormat=unix_milli). */
+/** The earliest request of the run, in ms since the epoch. */
 export function firstRequestMs(rows) {
-  const times = rows.filter((row) => row.metric === "http_reqs").map((row) => row.time);
-  if (times.length === 0) throw new Error("the k6 CSV has no http_reqs rows");
-  return Math.min(...times);
+  let first = Infinity;
+  for (const row of rows) if (row.metric === "http_reqs" && row.time < first) first = row.time;
+  if (first === Infinity) throw new Error("the k6 CSV has no http_reqs rows");
+  return first;
 }
 
 export function healthyGapLine({ healthyAt, exact, firstRequest }) {
   const seconds = (firstRequest - Date.parse(healthyAt)) / 1000;
+  if (!(seconds >= 0)) throw new Error(`k6's first request (${new Date(firstRequest).toISOString()}) is before the web turned healthy (${healthyAt})`);
   return diagLine("healthy to k6", {
     seconds: seconds.toFixed(1),
     web_healthy_at: healthyAt,
@@ -122,9 +173,10 @@ export function healthyGapLine({ healthyAt, exact, firstRequest }) {
 
 // 3. Sign-ins and retries per phase, from k6's --summary-export
 
+/** A submetric's count. load/pages.js gives each one a listing threshold, so k6 always exports it, even at 0. */
 const count = (metrics, name) => {
   const metric = metrics[name];
-  if (metric === undefined) return 0; // k6 leaves out a submetric that saw no sample
+  if (metric === undefined) throw new Error(`the k6 summary has no ${name} (is its threshold still in load/pages.js?)`);
   if (typeof metric.count !== "number") throw new Error(`${name} has no count in the summary`);
   return metric.count;
 };
@@ -137,6 +189,35 @@ export function signInsLine(summary, pass) {
   for (const phase of PHASES) fields[phase] = count(metrics, `http_reqs{kind:auth,phase:${phase}}`);
   for (const phase of PHASES) fields[`retries_${phase}`] = count(metrics, `sign_in_retries{phase:${phase}}`);
   return diagLine("sign-ins", fields);
+}
+
+// 4. Content hash of the web image's .next/standalone
+
+/**
+ * True for a Next.js build manifest under .next/ (`…manifest.json`, `…manifest.js`):
+ * their JSON keys come out in a different order from one build to the next.
+ */
+export function isManifest(file) {
+  return file.includes(".next/") && /manifest\.(?:json|js)$/.test(file.slice(file.lastIndexOf("/") + 1));
+}
+
+export const MANIFEST_LINE = /^[0-9a-f]{64} {2}\S/;
+const PATH_START = 66; // 64 hex digits and two spaces
+
+export function standaloneLine(filesText) {
+  const lines = filesText.split("\n").filter((line) => line !== "");
+  if (lines.length === 0) throw new Error("the standalone file list is empty");
+  const bad = lines.find((line) => !MANIFEST_LINE.test(line));
+  if (bad !== undefined) throw new Error(`not a "<sha256>  <path>" line: ${JSON.stringify(bad)}`);
+  const sha = (subset) => createHash("sha256").update(`${subset.join("\n")}\n`).digest("hex");
+  const code = lines.filter((line) => !isManifest(line.slice(PATH_START)));
+  return diagLine("standalone", {
+    sha256: sha(lines),
+    sha256_without_manifests: sha(code),
+    files: lines.length,
+    manifests: lines.length - code.length,
+    build_id: "replaced",
+  });
 }
 
 // 5. Per-request durations, uploaded as the job's artifact
@@ -160,13 +241,13 @@ export function pageSteadyStats(rows) {
   return { count: values.length, p95: percentile(values, 0.95), avg: values.reduce((a, b) => a + b, 0) / values.length, max: values[values.length - 1] };
 }
 
-/** The CSV holds values to the microsecond; the summary's are exact. */
+/** The CSV writes milliseconds with six decimals; the summary's values are exact. */
 const SAME_MS = 0.001;
 
 /**
  * The CSV line of a pass. Its steady-state page p95, avg and max must equal
  * the ones of the same pass's summary export: otherwise the artifact is not the
- * sample k6 measured, and the step fails.
+ * sample k6 measured.
  */
 export function requestsLine(rows, pass, file, summary) {
   if (!PASSES.includes(pass)) throw new Error(`unknown pass "${pass}"`);
@@ -193,36 +274,20 @@ export function requestsLine(rows, pass, file, summary) {
   });
 }
 
-// 4. Content hash of the web image's .next/standalone
-
-/** True for a Next.js manifest: its JSON keys come out in a different order from one build to the next. */
-export const isManifest = (file) => /manifest/i.test(file.slice(file.lastIndexOf("/") + 1));
-
-export function standaloneLine(filesText) {
-  const lines = filesText.split("\n").filter((line) => line !== "");
-  if (lines.length === 0) throw new Error("the standalone file list is empty");
-  const bad = lines.find((line) => !/^[0-9a-f]{64} {2}\S/.test(line));
-  if (bad !== undefined) throw new Error(`not a "<sha256>  <path>" line: ${JSON.stringify(bad)}`);
-  const sha = (subset) => createHash("sha256").update(`${subset.join("\n")}\n`).digest("hex");
-  const code = lines.filter((line) => !isManifest(line.slice(66)));
-  return diagLine("standalone", {
-    sha256: sha(lines),
-    sha256_without_manifests: sha(code),
-    files: lines.length,
-    manifests: lines.length - code.length,
-    build_id: "replaced",
-  });
-}
-
 // 6. The second k6 pass: informational, never part of D36
 
-/** The last lines of the second pass's output, without k6's steady-state page line: that line belongs to the D36 run alone. */
+/**
+ * The last lines of the second pass's output, indented so none can start a
+ * workflow command, and without k6's steady-state page lines (the header and
+ * its p(95) line): those belong to the D36 run alone.
+ */
 export function outputTail(text, lines = 20) {
   return text
     .trimEnd()
     .split("\n")
-    .filter((line) => !line.includes("kind:page,phase:steady"))
+    .filter((line) => !line.includes("kind:page,phase:steady") && !line.includes("p(95)"))
     .slice(-lines)
+    .map((line) => `  ${line}`)
     .join("\n");
 }
 
@@ -236,90 +301,133 @@ export function secondPassExit(exitCode) {
   return code;
 }
 
+/**
+ * The second pass's line. A threshold crossed is reported; a page that showed
+ * another tenant's employees is a failure, whatever the 99 % checks threshold says.
+ */
 export function secondPassLine(summary, exitCode, seconds) {
   const code = secondPassExit(exitCode);
   if (!/^\d+$/.test(String(seconds))) throw new Error(`"${seconds}" is not a number of seconds`);
   const metrics = summary?.metrics ?? {};
   const steady = metrics["http_req_duration{kind:page,phase:steady}"];
   const failed = metrics.http_req_failed;
+  const checks = metrics.checks;
+  const isolation = summary?.root_group?.checks?.[ISOLATION_CHECK];
   if (typeof steady?.["p(95)"] !== "number") throw new Error("the second pass's summary has no steady-state page p95");
   if (typeof failed?.passes !== "number" || typeof failed?.fails !== "number") throw new Error("the second pass's summary has no http_req_failed");
-  return diagLine("second pass", {
+  // For a Rate, "passes" counts the true values: failed requests, but succeeded checks.
+  if (typeof checks?.passes !== "number" || typeof checks?.fails !== "number") throw new Error("the second pass's summary has no checks");
+  if (typeof isolation?.fails !== "number") throw new Error(`the second pass's summary has no "${ISOLATION_CHECK}" check`);
+  const line = diagLine("second pass", {
     p95_steady_ms: steady["p(95)"].toFixed(2),
     failed: `${failed.passes}/${failed.passes + failed.fails}`,
+    checks_failed: `${checks.fails}/${checks.passes + checks.fails}`,
+    tenant_isolation_failed: isolation.fails,
     k6_exit: code,
     seconds: Number(seconds),
     counts_for_d36: "no",
   });
+  return { line, isolationFailures: isolation.fails };
 }
 
 const readJson = (file) => JSON.parse(readFileSync(file, "utf-8"));
 const fileName = (file) => file.slice(file.lastIndexOf("/") + 1);
-/** Output of a command, or "" when it is missing or fails: the runner line then says "unavailable". */
+/** Output of a command, or the reason it gave none: the runner line then says "unavailable". */
 const run = (command, args) => {
   try {
-    return execFileSync(command, args, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] });
-  } catch {
-    return "";
+    return { text: execFileSync(command, args, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, LC_ALL: "C" } }) };
+  } catch (error) {
+    return { text: "", reason: String(error.stderr || error.message).trim().split("\n")[0] };
   }
 };
 const readOrEmpty = (file) => {
   try {
-    return readFileSync(file, "utf-8");
-  } catch {
-    return "";
+    return { text: readFileSync(file, "utf-8") };
+  } catch (error) {
+    return { text: "", reason: error.code ?? error.message };
   }
 };
 
+/** The command's arguments, or a usage error. */
+function argsOf(args, names) {
+  if (args.length < names.length || args.slice(0, names.length).some((arg) => !arg)) {
+    throw new Error(`usage: node scripts/d36-diag.mjs ${names.join(" ")}`);
+  }
+  return args;
+}
+
 function main() {
-  const [command, ...args] = process.argv.slice(2);
+  const [command, ...rest] = process.argv.slice(2);
   switch (command) {
-    case "runner":
-      return emit(
-        runnerLine({
-          lscpu: run("lscpu", []),
-          nproc: run("nproc", []),
-          meminfo: readOrEmpty("/proc/meminfo"),
-          runAttempt: process.env.GITHUB_RUN_ATTEMPT,
-        }),
-      );
+    case "runner": {
+      const lscpu = run("lscpu", []);
+      const nproc = run("nproc", []);
+      const meminfo = readOrEmpty("/proc/meminfo");
+      const { line, missing } = runnerLine({ lscpu: lscpu.text, nproc: nproc.text, meminfo: meminfo.text, runAttempt: process.env.GITHUB_RUN_ATTEMPT });
+      const reasons = { cpu: lscpu.reason, nproc: nproc.reason, mem_total_kb: meminfo.reason, run_attempt: "GITHUB_RUN_ATTEMPT is not set" };
+      for (const key of missing) console.log(`::warning::${escapeCommand(`D36-diag: runner ${key} unavailable: ${reasons[key] ?? "not in the output"}`)}`);
+      return emit(line);
+    }
     case "healthy-at": {
-      const health = JSON.parse(execFileSync("docker", ["inspect", "-f", "{{json .State.Health}}", args[0]], { encoding: "utf-8" }));
+      const [container] = argsOf(rest, ["<container>"]);
+      const health = JSON.parse(execFileSync("docker", ["inspect", "-f", "{{json .State.Health}}", container], { encoding: "utf-8" }));
       const { at, exact } = firstHealthy(health);
-      console.log(`${args[0]} turned healthy at ${at}${exact ? "" : " or earlier (all five probes in its log passed)"}`);
+      console.log(`${container} turned healthy at ${at}${exact ? "" : ` or earlier (all ${HEALTH_LOG_SIZE} probes in its log passed)`}`);
       if (process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `D36_WEB_HEALTHY_AT=${at}\nD36_WEB_HEALTHY_EXACT=${exact}\n`);
       return;
     }
     case "healthy-gap": {
+      const [csvFile] = argsOf(rest, ["<requests.csv.gz>"]);
       const healthyAt = process.env.D36_WEB_HEALTHY_AT;
       if (!healthyAt || Number.isNaN(Date.parse(healthyAt))) throw new Error("D36_WEB_HEALTHY_AT is not set");
-      const firstRequest = firstRequestMs(readCsvRows(readFileSync(args[0])));
-      return emit(healthyGapLine({ healthyAt, exact: process.env.D36_WEB_HEALTHY_EXACT === "true", firstRequest }));
+      const exactValue = process.env.D36_WEB_HEALTHY_EXACT;
+      if (exactValue !== "true" && exactValue !== "false") throw new Error("D36_WEB_HEALTHY_EXACT is not set");
+      return emit(healthyGapLine({ healthyAt, exact: exactValue === "true", firstRequest: firstRequestMs(readCsvRows(readFileSync(csvFile))) }));
     }
-    case "sign-ins":
-      return emit(signInsLine(readJson(args[0]), args[1]));
-    case "requests":
-      return emit(requestsLine(readCsvRows(readFileSync(args[0])), args[1], fileName(args[0]), readJson(args[2])));
-    case "standalone":
-      return emit(standaloneLine(readFileSync(args[0], "utf-8")));
-    case "second-pass":
+    case "sign-ins": {
+      const [summaryFile, pass] = argsOf(rest, ["<summary.json>", "<pass>"]);
+      return emit(signInsLine(readJson(summaryFile), pass));
+    }
+    case "standalone": {
+      const [filesFile] = argsOf(rest, ["<standalone-files.txt>"]);
+      return emit(standaloneLine(readFileSync(filesFile, "utf-8")));
+    }
+    case "requests": {
+      const [csvFile, pass, summaryFile] = argsOf(rest, ["<requests.csv.gz>", "<pass>", "<summary.json>"]);
+      return emit(requestsLine(readCsvRows(readFileSync(csvFile)), pass, fileName(csvFile), readJson(summaryFile)));
+    }
+    case "second-pass": {
+      const [summaryFile, exitCode, seconds, outputFile] = argsOf(rest, ["<summary.json>", "<k6 exit code>", "<seconds>"]);
       try {
-        secondPassExit(args[1]); // a broken run fails on its exit code, not on a missing summary
+        secondPassExit(exitCode); // a broken run fails on its exit code, not on a missing summary
       } catch (error) {
-        if (args[3]) console.error(outputTail(readOrEmpty(args[3])));
+        if (outputFile) console.error(outputTail(readOrEmpty(outputFile).text));
         throw error;
       }
-      return emit(secondPassLine(readJson(args[0]), args[1], args[2]));
+      const { line, isolationFailures } = secondPassLine(readJson(summaryFile), exitCode, seconds);
+      emit(line);
+      if (isolationFailures > 0) throw new Error(`${isolationFailures} page(s) of the second pass showed another tenant's employees`);
+      return;
+    }
     default:
       throw new Error(`unknown command "${command ?? ""}"`);
   }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+/** True when this file is the script node was asked to run, through a symlink too. */
+const isMain = () => {
+  try {
+    return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+};
+
+if (isMain()) {
   try {
     main();
   } catch (error) {
-    console.error(`::error::D36-diag: ${error.message}`);
+    console.error(`::error::${escapeCommand(`D36-diag: ${error.message}`)}`);
     process.exit(1);
   }
 }

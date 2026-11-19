@@ -319,8 +319,10 @@ jobs:
 
       # D54: when the web container turned healthy, for the D36 diagnostics.
       # Read now: Docker keeps only the last five probes in State.Health.Log
-      # (50 s at the image's 10 s interval), and e2e runs about 4 min before k6.
+      # (50 s at the image's 10 s interval), and the e2e runs before k6.
+      # Diagnostics never fail the job: a failure shows as an ::error:: annotation.
       - name: First healthy probe of the web container (D54)
+        continue-on-error: true
         run: node scripts/d36-diag.mjs healthy-at scaliahr-web-1
 
       - name: Images run as non-root and carry no secrets
@@ -407,27 +409,41 @@ jobs:
       # D54: diagnostics of why a first attempt tends to be slower than its
       # rerun, one "D36-diag:" line each, in the log and in the job summary.
       # None of them touches the number D36 compares: the
-      # `{ kind:page,phase:steady }` line of the step above.
+      # `{ kind:page,phase:steady }` line of the step above. They also run when
+      # that step failed, as long as it left its summary, and they never fail
+      # the job: each command runs even if another failed, and a failure shows
+      # as an ::error:: annotation.
       - name: D36 diagnostics of the first pass (D54)
+        if: ${{ !cancelled() && hashFiles('load/.out/summary.json') != '' }}
+        continue-on-error: true
         run: |
-          node scripts/d36-diag.mjs runner
-          node scripts/d36-diag.mjs healthy-gap load/.out/requests-first.csv.gz
-          node scripts/d36-diag.mjs sign-ins load/.out/summary.json first
-          node scripts/d36-diag.mjs requests load/.out/requests-first.csv.gz first load/.out/summary.json
-          # The image the measured container runs, offline and read-only.
-          image="$(docker inspect -f '{{.Image}}' scaliahr-web-1)"
-          docker run --rm --network none --read-only --entrypoint node \
-            -v "$PWD/scripts/d36-standalone-files.mjs:/d36/standalone-files.mjs:ro" \
-            "$image" /d36/standalone-files.mjs /app > load/.out/standalone-files.txt
-          node scripts/d36-diag.mjs standalone load/.out/standalone-files.txt
+          status=0
+          node scripts/d36-diag.mjs runner || status=1
+          node scripts/d36-diag.mjs healthy-gap load/.out/requests-first.csv.gz || status=1
+          node scripts/d36-diag.mjs sign-ins load/.out/summary.json first || status=1
+          node scripts/d36-diag.mjs requests load/.out/requests-first.csv.gz first load/.out/summary.json || status=1
+          # The image the measured container runs, offline, read-only and without privileges.
+          if image="$(docker inspect -f '{{.Image}}' scaliahr-web-1)" &&
+            docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+              --entrypoint node -v "$PWD/scripts/d36-standalone-files.mjs:/d36/standalone-files.mjs:ro" \
+              "$image" /d36/standalone-files.mjs /app > load/.out/standalone-files.txt; then
+            node scripts/d36-diag.mjs standalone load/.out/standalone-files.txt || status=1
+          else
+            echo "::error::D36-diag: could not list the web image's standalone files"
+            status=1
+          fi
+          exit "$status"
 
       # D54: the same k6 run again, on the same runner and stack, to test the
       # cold-start hypothesis. Informational only: never part of D36, neither its
       # baseline nor its limit. Its k6 summary goes to second-pass.txt in the
       # artifact, not to this log, so the job's only `{ kind:page,phase:steady }`
-      # line is the first pass's. A crossed threshold (k6 exit 99) is reported,
-      # not failed; any other failure fails the step.
+      # line is the first pass's. A crossed threshold (k6 exit 99) is reported;
+      # any other exit, or a page that showed another tenant's employees, fails
+      # the step with an ::error:: annotation, but never the job.
       - name: Second k6 pass, informational, not part of D36 (D54)
+        if: ${{ !cancelled() && hashFiles('load/.out/summary.json') != '' }}
+        continue-on-error: true
         run: |
           start="$(date +%s)"
           code=0
@@ -446,12 +462,15 @@ jobs:
           THINK_MAX: "6"
 
       # D54: an explicit list, never the whole load/.out: accounts.json there
-      # holds the load accounts' emails and their shared password.
+      # holds the load accounts' emails and their shared password. load/.out is
+      # a hidden folder, which upload-artifact skips unless told otherwise.
       - name: D36 diagnostics artifact (D54)
         if: always() && hashFiles('load/.out/requests-first.csv.gz') != ''
         uses: actions/upload-artifact@v7
         with:
           name: d36-diag-attempt-${{ github.run_attempt }}
+          include-hidden-files: true
+          if-no-files-found: error
           path: |
             load/.out/summary.json
             load/.out/summary-second.json

@@ -206,14 +206,14 @@ Por eso la corrida completa de esta sección (1,150 usuarios) se hace en local a
 
 ### Diagnóstico del primer intento (D54)
 
-En CI, el job `docker` imprime líneas `D36-diag:` en el log y en el resumen del job, y sube el artifact `d36-diag-attempt-<n>` (14 días). Sirven para explicar por qué el intento 1 de k6 sale más alto que la repetición; no cambian la comparación de D36.
+En CI, el job `docker` imprime líneas `D36-diag:` en el log y en el resumen del job, y sube el artifact `d36-diag-attempt-<n>` (14 días). Sirven para explicar por qué el intento 1 de k6 tiende a salir más alto que la repetición; no cambian la comparación de D36. Los pasos de diagnóstico nunca hacen fallar el job: si uno no puede dar su línea, deja una anotación `::error::`.
 
 - `runner`: modelo de CPU, `nproc`, `MemTotal` y número de intento.
-- `healthy to k6`: segundos entre la primera prueba sana del contenedor web y la primera petición de k6. Dice `exact=no` si las 5 pruebas que guarda Docker ya estaban sanas.
+- `healthy to k6`: segundos entre que el contenedor web queda sano y la primera petición de k6. Dice `exact=no` si las 5 pruebas que guarda Docker ya estaban sanas.
 - `sign-ins`: inicios de sesión y reintentos por fase, de cada pasada.
-- `standalone`: hash de `.next/standalone` de la imagen web con el BUILD_ID reemplazado. Para comparar el código de dos builds sirve `sha256_without_manifests`: entre dos builds del mismo commit solo cambian los manifiestos.
+- `standalone`: hash de `.next/standalone` de la imagen web con el BUILD_ID reemplazado. Para comparar el código de dos builds sirve `sha256_without_manifests`: en la medición de D54, entre dos builds del mismo commit solo cambiaron los manifiestos.
 - `requests`: filas del CSV de cada pasada y su p95 de páginas en estado estable, que tiene que coincidir con el resumen (`matches_summary=yes`).
-- `second pass`: la segunda corrida de k6, en el mismo runner y con la misma configuración, solo informativa.
+- `second pass`: la segunda corrida de k6, en el mismo runner y con la misma configuración, solo informativa. Trae también los checks fallidos y las páginas que mostraron empleados de otro tenant; una sola de esas hace fallar el paso.
 
 La segunda pasada no cuenta para D36: ni como corrida del PR, ni como repetición, ni en la línea base de `main`, ni para el límite. El p95 que se compara sigue siendo la línea `{ kind:page,phase:steady }` del paso «k6 load test, short run (D36)», que desde D54 es la única en el log del job.
 
