@@ -317,6 +317,12 @@ jobs:
       - name: Build images and start the local stack (npm run local:up)
         run: npm run local:up
 
+      # D54: when the web container turned healthy, for the D36 diagnostics.
+      # Read now: Docker keeps only the last five probes in State.Health.Log
+      # (50 s at the image's 10 s interval), and e2e runs about 4 min before k6.
+      - name: First healthy probe of the web container (D54)
+        run: node scripts/d36-diag.mjs healthy-at scaliahr-web-1
+
       - name: Images run as non-root and carry no secrets
         run: |
           for image in scaliahr-web:local scaliahr-worker:local; do
@@ -383,8 +389,10 @@ jobs:
 
       # D36: a short run of the load test, so the tooling keeps working and a
       # large regression shows up. The full 1,000-user run is local (RUNBOOK).
+      # D54: k6 also writes every sample to requests-first.csv.gz (the artifact
+      # below), to recompute the p95 with other windows without new runs.
       - name: k6 load test, short run (D36)
-        run: npm run load:test
+        run: npm run load:test -- --out "csv=fileName=/out/requests-first.csv.gz,timeFormat=unix_milli"
         env:
           LOAD_BIG_USERS: "60"
           LOAD_SMALL_USERS: "5"
@@ -395,6 +403,63 @@ jobs:
           # Short pauses, so 75 users send real traffic (about 18 pages/s at full load).
           THINK_MIN: "2"
           THINK_MAX: "6"
+
+      # D54: diagnostics of why a first attempt tends to be slower than its
+      # rerun, one "D36-diag:" line each, in the log and in the job summary.
+      # None of them touches the number D36 compares: the
+      # `{ kind:page,phase:steady }` line of the step above.
+      - name: D36 diagnostics of the first pass (D54)
+        run: |
+          node scripts/d36-diag.mjs runner
+          node scripts/d36-diag.mjs healthy-gap load/.out/requests-first.csv.gz
+          node scripts/d36-diag.mjs sign-ins load/.out/summary.json first
+          node scripts/d36-diag.mjs requests load/.out/requests-first.csv.gz first load/.out/summary.json
+          # The image the measured container runs, offline and read-only.
+          image="$(docker inspect -f '{{.Image}}' scaliahr-web-1)"
+          docker run --rm --network none --read-only --entrypoint node \
+            -v "$PWD/scripts/d36-standalone-files.mjs:/d36/standalone-files.mjs:ro" \
+            "$image" /d36/standalone-files.mjs /app > load/.out/standalone-files.txt
+          node scripts/d36-diag.mjs standalone load/.out/standalone-files.txt
+
+      # D54: the same k6 run again, on the same runner and stack, to test the
+      # cold-start hypothesis. Informational only: never part of D36, neither its
+      # baseline nor its limit. Its k6 summary goes to second-pass.txt in the
+      # artifact, not to this log, so the job's only `{ kind:page,phase:steady }`
+      # line is the first pass's. A crossed threshold (k6 exit 99) is reported,
+      # not failed; any other failure fails the step.
+      - name: Second k6 pass, informational, not part of D36 (D54)
+        run: |
+          start="$(date +%s)"
+          code=0
+          LOAD_SUMMARY=summary-second.json npm run load:test -- --out "csv=fileName=/out/requests-second.csv.gz,timeFormat=unix_milli" > load/.out/second-pass.txt 2>&1 || code=$?
+          node scripts/d36-diag.mjs second-pass load/.out/summary-second.json "$code" "$(( $(date +%s) - start ))" load/.out/second-pass.txt
+          node scripts/d36-diag.mjs sign-ins load/.out/summary-second.json second
+          node scripts/d36-diag.mjs requests load/.out/requests-second.csv.gz second load/.out/summary-second.json
+        env:
+          LOAD_BIG_USERS: "60"
+          LOAD_SMALL_USERS: "5"
+          LOAD_VUS: "60"
+          SMALL_VUS: "5"
+          RAMP: "20s"
+          HOLD: "40s"
+          THINK_MIN: "2"
+          THINK_MAX: "6"
+
+      # D54: an explicit list, never the whole load/.out: accounts.json there
+      # holds the load accounts' emails and their shared password.
+      - name: D36 diagnostics artifact (D54)
+        if: always() && hashFiles('load/.out/requests-first.csv.gz') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: d36-diag-attempt-${{ github.run_attempt }}
+          path: |
+            load/.out/summary.json
+            load/.out/summary-second.json
+            load/.out/requests-first.csv.gz
+            load/.out/requests-second.csv.gz
+            load/.out/second-pass.txt
+            load/.out/standalone-files.txt
+          retention-days: 14
 
       - name: Per-tenant export through the running worker (D23)
         run: |

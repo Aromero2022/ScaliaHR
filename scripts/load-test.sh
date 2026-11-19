@@ -4,12 +4,15 @@
 # pinned grafana/k6 image on the host network. Extra arguments go to k6, e.g.
 #   npm run load:test                       # 1,000 + 3×50 users, 4 min at full load, 20–40 s pauses
 #   THINK_MIN=2 THINK_MAX=6 LOAD_VUS=150 SMALL_VUS=10 npm run load:test   # capacity of one web process
-# Results: load/.out/summary.json (git-ignored).
+# Results: load/.out/summary.json (git-ignored). LOAD_SUMMARY names another file
+# in load/.out, so a second run does not overwrite the first's (CI's second pass, D54).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 K6_IMAGE="grafana/k6@sha256:00fdcebafbc86cb0137d429529b1caa401a02e09025f02fc74866fa6e2b004d8" # v1.8.2
+SUMMARY="${LOAD_SUMMARY:-summary.json}"
+[[ "$SUMMARY" =~ ^[A-Za-z0-9_-]+\.json$ ]] || { echo "::error::LOAD_SUMMARY must be a file name like summary.json, got: $SUMMARY"; exit 1; }
 
 # Not supabase-test-env.sh: it resets role passwords the running containers use.
 status="$(supabase status --output env)" || { echo "::error::supabase status failed — is the local stack running?"; exit 1; }
@@ -27,4 +30,4 @@ docker run --rm --network host --user "$(id -u):$(id -g)" \
   -e BASE_URL=http://localhost:3000 -e SUPABASE_URL="$API_URL" -e ANON_KEY="$(value ANON_KEY)" \
   -e ACCOUNTS=/out/accounts.json \
   -e LOAD_VUS -e SMALL_VUS -e HOLD -e RAMP -e THINK_MIN -e THINK_MAX \
-  "$K6_IMAGE" run --summary-export /out/summary.json "$@" /load/pages.js
+  "$K6_IMAGE" run --summary-export "/out/$SUMMARY" "$@" /load/pages.js
