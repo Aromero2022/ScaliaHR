@@ -204,7 +204,7 @@ Durante esas 5 corridas, «sin línea base», el control de deriva y «main sobr
 - Los últimos 10 commits se cuentan cuando se llena la tabla de verificación del PR, es decir, cuando termina el CI de su head.
 
 El CI ya no detecta regresiones menores a unos +50 %. Con esa banda, el bloqueo falso estimado es 5 %; una regresión de +50 % se bloquea 31 % de las veces, una de +100 % el 60 % y una de +150 % siempre. La muestra es de 9 corridas, así que estos números son un orden de magnitud.
-Con la razón de D56 las cifras son otras: una regresión de +20 % se bloquea el 25 % de las veces con la repetición, una de +30 % el 76 % y una de +50 % casi siempre. El bloqueo falso estimado es del orden de 0.003 % con la repetición, y entre 0.02 % y 6 % en un solo intento. Salen de 13 pares A/A y son una cota inferior del ruido (D56, «The limit»).
+Con la razón de D56 las cifras son otras: una regresión de +20 % se bloquea el 25 % de las veces con la repetición, una de +30 % el 76 % y una de +50 % casi siempre. El bloqueo falso estimado es del orden de 0.003 % con la repetición, y entre 0.02 % y 6 % en un solo intento. Salen de 13 pares A/A: si el ruido real es mayor, el bloqueo falso es mayor y la detección por encima de +20 % es menor (D56, «The limit»).
 
 Por eso la corrida completa de esta sección (1,150 usuarios) se hace en local al cerrar cada fase.
 

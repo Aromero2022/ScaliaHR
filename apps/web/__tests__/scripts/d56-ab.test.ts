@@ -70,9 +70,11 @@ const tempDir = (prefix: string) => {
  * or outputs) and without the user's git config (signing, hooks).
  */
 function cleanEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(process.env)) if (!key.startsWith("GITHUB_") && !key.startsWith("RUNNER_")) env[key] = value;
-  return { ...env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", ...extra };
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", ...extra };
+  for (const key of Object.keys(env)) {
+    if ((key.startsWith("GITHUB_") || key.startsWith("RUNNER_")) && !(key in extra)) delete env[key];
+  }
+  return env;
 }
 
 // ci.yml, split as the other docker-job tests split it.

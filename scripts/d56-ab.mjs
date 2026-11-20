@@ -10,8 +10,9 @@
 //   node scripts/d56-ab.mjs record <pass> <k6 exit code>
 //   node scripts/d56-ab.mjs images <main|pr>
 //   node scripts/d56-ab.mjs ratio
-// A command that cannot do its job exits 1 with a "::error::" annotation that
-// names the verdict; it never prints a guessed value and never passes open.
+// A command that cannot do its job exits 1 with a "::error::" annotation, which
+// names the verdict for every failure it checks for; it never prints a guessed
+// value and never passes open.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";

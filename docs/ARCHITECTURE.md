@@ -2143,12 +2143,18 @@ machine):**
       not open until the investigation is open. The reference changes only
       by the user's
       explicit decision, noted here.
+      - Since D56, during its transition, this control is informational:
+        it no longer holds back the next pull request (D56,
+        **Transition**).
     - `main` above the limit: every pull request's verification table also
       checks the latest `main` run against the band of the five valid runs
       before it. If it is above, the table notes "main sobre el límite" with
       the commit. Two `main` runs in a row above their limits count as
       "deriva (main ×2)", and the phase's next pull request does not open
       until the investigation is open.
+      - Since D56, during its transition, "main sobre el límite" and
+        "deriva (main ×2)" are informational: they no longer hold back the
+        next pull request (D56, **Transition**).
       - The band of a `main` run comes from the five valid runs before it,
         all inside the same ten-commit window. With fewer than five valid
         runs before it, the table says "main sin revisar": informational,
@@ -4457,11 +4463,11 @@ choose its runner. D54 measured 46.34–61.61 ms on Intel Xeon 6975P-C and
 - The 0.1005 comes from two passes of one build on one stack. D56 compares
   two builds on two stacks, and `pr-1` and `pr-2` share their build, so the
   noise D56 meets is at least that: the false-block figures are a lower
-  bound.
+  bound, and the detection figures above +20 % an upper bound.
 - A push to `main` that changes only docs outside the images is a real A/A
   with the ABBA order: on a push `main`'s passes always run, and both sides
-  are the same code built twice. Its r is reported, and a bias measured
-  there reopens the 1.20 with the user.
+  are the same code built twice. Its r is reported, and the user decides
+  what bias measured there reopens the 1.20.
 
 **Verdicts** (the label in quotes is the one the verification table uses; a
 failure prints `::error::D56: … ("<label>")`):
@@ -4482,8 +4488,8 @@ failure prints `::error::D56: … ("<label>")`):
   - The next pull request's verification table reports it.
   - What follows is D36's: the red push opens an investigation, and the
     phase's next pull request does not open until it is open. Attempt 1 is
-    the one that counts: a re-run of the push measures again, but does not
-    clear attempt 1's `::error::`.
+    the one that counts: if the push is re-run anyway, the re-run measures
+    again, but does not clear attempt 1's `::error::`.
   - HEAD^1 is the commit before the pushed head. With squash merges that is
     the previous `main`; a push of several commits compares only with the
     commit before its last one.
@@ -4643,7 +4649,8 @@ Supabase starts.
   too, as they do for the band.
 - Dropping the band is a pull request of its own, approved by the user. It
   decides what else of D36 goes with it: the drift control, "main ×2", the
-  rule of the last three runs without k6, and the CSV transition (D54).
+  rule of the last three runs without k6, and the CSV transition (D54). The
+  band stays informational until that pull request merges.
 - Since D56 the pass the band reads (`pr-1`) runs after `main-1` on the same
   runner, so it no longer measures exactly what the band's runs before D56
   measured. One more reason the band is only informational.

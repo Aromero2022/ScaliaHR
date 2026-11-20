@@ -282,8 +282,8 @@ jobs:
 
       # D36: on a pull request, HEAD is GitHub's merge commit: HEAD^1 is main and
       # HEAD^2 the pull request. If the diff only touches **/*.md, docs/** or
-      # .claude/**, the images are main's and k6 is not compared with main's
-      # median. A failure here fails the job: it never falls back to either answer.
+      # .claude/**, this step says the comparison with main does not apply. A
+      # failure here fails the job: it never falls back to either answer.
       # D56: this verdict also skips main's k6 passes when it is "false"; the
       # ratio step then checks it against the images, and a changed file that is
       # in an image (a README under apps/, say) fails the job.
