@@ -7,6 +7,7 @@
 //   other_tenants   50 users in each of load-a, load-b and load-c
 // Thresholds: page p95 < 500 ms, < 1 % failed requests, > 99 % checks; every
 // page is also checked to show no other tenant's employees.
+// That check also has a threshold of its own (rate==1): one such page fails the run.
 // D54 (diagnostics only): sign-ins carry the phase too, and the retries after a
 // failed sign-in are counted per phase. Both are listed in the summary; neither
 // is a page request, so the page p95 that D36 reads is the same set of samples.
@@ -65,6 +66,9 @@ export const options = {
     "http_req_duration{kind:page,phase:ramp}": ["max>=0"], // listed in the summary only
     "http_req_failed{kind:page}": ["rate<0.01"],
     checks: ["rate>0.99"],
+    // Tenant isolation has no tolerance: a single page that shows another
+    // tenant's employees fails the run (the line above lets 1 % of checks fail).
+    "checks{check:no other tenant's employees}": ["rate==1"],
     // D54: listed in the summary only, like the ramp line above.
     "http_reqs{kind:auth,phase:ramp}": ["count>=0"],
     "http_reqs{kind:auth,phase:steady}": ["count>=0"],
