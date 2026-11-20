@@ -261,6 +261,21 @@ const validTree = treeOf(["apps/web/src/app/page.tsx"]).tree;
 const validate = (name: string, opts: PassOptions = {}, record: Record<string, unknown> = {}, tree = validTree) =>
   validatePass(name, recordOf(name, record), summaryOf(opts), readCsvRows(csvOf(opts)), tree);
 
+// The ratio step as CI runs it: the files of the test's world in load/.out, the script run with the step's env.
+function runRatio(w: World, env: Record<string, string> = {}) {
+  const work = tempDir("d56-ratio-");
+  const out = path.join(work, "load/.out");
+  mkdirSync(out, { recursive: true });
+  for (const [file, bytes] of w.files) writeFileSync(path.join(out, file), bytes);
+  const result = spawnSync(process.execPath, [path.join(REPO, "scripts/d56-ab.mjs"), "ratio"], {
+    cwd: work,
+    encoding: "utf-8",
+    env: cleanEnv({ GITHUB_EVENT_NAME: "pull_request", SCOPE_APPLIES: "true", GITHUB_RUN_ATTEMPT: "1", ...env }),
+  });
+  const ratioFile = path.join(out, "d56-ratio.json");
+  return { result, ratio: existsSync(ratioFile) ? JSON.parse(readFileSync(ratioFile, "utf-8")) : null };
+}
+
 describe("1. the ratio step runs unconditionally and fails the job when it cannot compute r (D56)", () => {
   it("has no if: and no continue-on-error, and runs the ratio script with the scope step's verdict", () => {
     const step = stepNamed(RATIO_STEP);
@@ -291,21 +306,6 @@ describe("1. the ratio step runs unconditionally and fails the job when it canno
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/^::error::D56: d56-tree\.json is missing.*\("sin referencia"\)$/m);
   });
-
-  // The ratio step as CI runs it: the four passes' files in load/.out, the script run with the step's env.
-  const runRatio = (w: World, env: Record<string, string> = {}) => {
-    const work = tempDir("d56-ratio-");
-    const out = path.join(work, "load/.out");
-    mkdirSync(out, { recursive: true });
-    for (const [file, bytes] of w.files) writeFileSync(path.join(out, file), bytes);
-    const result = spawnSync(process.execPath, [path.join(REPO, "scripts/d56-ab.mjs"), "ratio"], {
-      cwd: work,
-      encoding: "utf-8",
-      env: cleanEnv({ GITHUB_EVENT_NAME: "pull_request", SCOPE_APPLIES: "true", GITHUB_RUN_ATTEMPT: "1", ...env }),
-    });
-    const ratioFile = path.join(out, "d56-ratio.json");
-    return { result, ratio: existsSync(ratioFile) ? JSON.parse(readFileSync(ratioFile, "utf-8")) : null };
-  };
 
   it("prints the ratio line and writes d56-ratio.json from four valid passes, on a pull request and on a push", () => {
     const pr = runRatio(world());
@@ -858,6 +858,14 @@ function mainUpWorld() {
   return { clone, base, mainUp };
 }
 
+/** scripts/d56-ab.mjs run in `cwd` as CI runs it, with fake commands first on the PATH. */
+function runNode(cwd: string, args: string[], fakes: Record<string, string> = {}, env: Record<string, string> = {}) {
+  const bin = path.join(tempDir("d56-bin-"), "bin");
+  mkdirSync(bin);
+  for (const [command, body] of Object.entries(fakes)) writeFileSync(path.join(bin, command), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
+  return spawnSync(process.execPath, ["scripts/d56-ab.mjs", ...args], { cwd, encoding: "utf-8", env: cleanEnv({ PATH: `${bin}:${process.env.PATH}`, ...env }) });
+}
+
 describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () => {
   it("tree: checks out HEAD^1 in a folder named like the checkout, records the diff and prints both SHAs", () => {
     const { clone, prHead, mainSha } = mergeClone((dir) => writeFileSync(path.join(dir, "docs.md"), "# x\n"));
@@ -1026,6 +1034,117 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
       expect(listing.status, what).toBe(1);
       expect(listing.stderr).toContain(`${what} failed after the stack was stopped ("sin referencia")`);
     }
+  });
+
+  it("images: lists each image offline and read-only, and the ratio step reads that listing on a docs-only pull request", () => {
+    const { clone } = mergeClone(() => {});
+    mkdirSync(path.join(clone, "load/.out"), { recursive: true });
+    const calls = path.join(tempDir("d56-calls-"), "calls");
+    const inImage = "c".repeat(64);
+    const docker = [
+      `printf '%s\\n' "$*" >> ${calls}`,
+      'case "$*" in',
+      `  *scaliahr-web:local*) printf '%s\\n' ${SENTINELS.web} /app/apps/web/package.json --d56-md-- ;;`,
+      `  *scaliahr-worker:local*) printf '%s\\n' ${SENTINELS.worker} /app/apps/worker/dist/index.js --d56-md-- "${inImage}  /app/apps/worker/README.md" ;;`,
+      "  *) exit 9 ;;",
+      "esac",
+    ].join("\n");
+    const result = runNode(clone, ["images", "pr"], { docker });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("D56-ab: images role=pr web_files=2 worker_files=2 markdown=1");
+    const runs = readFileSync(calls, "utf-8").trim().split("\n");
+    expect(runs).toHaveLength(2);
+    for (const run of runs) {
+      expect(run).toMatch(/^run --rm --user 0 --network none --read-only --cap-drop ALL --cap-add DAC_READ_SEARCH --security-opt no-new-privileges --entrypoint sh scaliahr-(web|worker):local -c set -e; find \/app -xdev /);
+    }
+    // The listing as the images step wrote it, read by the ratio step without main's passes.
+    const listing = readFileSync(path.join(clone, "load/.out/d56-images-pr.json"));
+    const docsOnly = (head: string) => {
+      const w = world({ passes: ["pr-1", "pr-2"], diffFiles: ["docs/a.md"], markdown: { "docs/a.md": { head, base: null } }, images: null });
+      w.files.set("d56-images-pr.json", listing);
+      return runRatio(w, { SCOPE_APPLIES: "false" }).result;
+    };
+    const passes = docsOnly("d".repeat(64));
+    expect(passes.status).toBe(0);
+    expect(passes.stdout).toContain("scope=not-applicable event=pull_request");
+    const fails = docsOnly(inImage);
+    expect(fails.status).toBe(1);
+    expect(fails.stderr).toContain(`docs/a.md is in an image, and main's passes were skipped ("${VERDICTS.docsOnlyWrong}")`);
+    // A listing without the file every image has is not a full one.
+    const partial = runNode(clone, ["images", "pr"], { docker: "printf '%s\\n' /app/x --d56-md--" });
+    expect(partial.status).toBe(1);
+    expect(partial.stderr).toContain(`the image listing lacks ${SENTINELS.web}: it is not a full listing`);
+  });
+
+  // record as the PR's step and d56-ab.sh call it: the tree recorded, the pass's own files in load/.out.
+  const recordWorld = (changePr: (dir: string) => void = () => {}) => {
+    const { clone, prHead } = mergeClone(changePr);
+    expect(runAb(clone, ["tree"], {}, { PR_HEAD: prHead, D56_BASE_DIR: path.join(tempDir("d56-base-"), "ScaliaHR") }).status).toBe(0);
+    const out = path.join(clone, "load/.out");
+    const put = (name: string, opts: PassOptions = {}) => {
+      const spec = PASSES[name as keyof typeof PASSES];
+      writeFileSync(path.join(out, spec.summary), JSON.stringify(summaryOf({ start: START[name], ...opts })));
+      writeFileSync(path.join(out, spec.csv), csvOf({ start: START[name], ...opts }));
+    };
+    const imagesOf = (image: { web: string; worker: string }, tag: string) =>
+      [
+        'case "$*" in',
+        `  "inspect -f {{.Image}} scaliahr-web-1"|"image inspect -f {{.Id}} scaliahr-web:${tag}") echo ${image.web} ;;`,
+        `  "inspect -f {{.Image}} scaliahr-worker-1"|"image inspect -f {{.Id}} scaliahr-worker:${tag}") echo ${image.worker} ;;`,
+        '  "image inspect -f {{index .Config.Labels "*) git describe --always --dirty --abbrev=12 ;;',
+        '  *) echo "unexpected docker $*" >&2; exit 9 ;;',
+        "esac",
+      ].join("\n");
+    const record = (name: string, exit: string, docker: string) => runNode(clone, ["record", name, exit], { docker }, { ...PARAMS, GITHUB_RUN_ATTEMPT: "1" });
+    return { out, put, imagesOf, record };
+  };
+
+  it("record: records the PR's passes from their own files and the :local images, and a broken one as the PR's", () => {
+    const { out, put, imagesOf, record } = recordWorld();
+    put("pr-1");
+    put("pr-2");
+    const docker = imagesOf(PR_IMAGE, "local");
+    const first = record("pr-1", "0", docker);
+    expect(first.stderr).toBe("");
+    expect(first.status).toBe(0);
+    expect(first.stdout).toMatch(/^D56-ab: pass pass=pr-1 role=pr stack=after_e2e p95_steady_ms=60\.00 samples=600 k6_exit=0 /m);
+    expect(JSON.parse(readFileSync(path.join(out, "d56-pass-pr-1.json"), "utf-8"))).toMatchObject({
+      pass: "pr-1",
+      summary: "summary.json",
+      csv: "requests-first.csv.gz",
+      web_image: PR_IMAGE.web,
+      expected_web: PR_IMAGE.web,
+      worker_image: PR_IMAGE.worker,
+      params: PARAMS,
+    });
+    const second = record("pr-2", "99", docker);
+    expect(second.status).toBe(0);
+    expect(second.stdout).toMatch(/^D56-ab: pass pass=pr-2 role=pr stack=after_pass .* k6_exit=99 /m);
+    const broken = record("pr-1", "d36-step-failure", docker);
+    expect(broken.status).toBe(1);
+    expect(broken.stderr).toContain(`pr-1: k6 exited "d36-step-failure"; its output is in the D56 artifact ("${VERDICTS.prInvalid}")`);
+  });
+
+  it("record: a main pass without its files, with a summary that is not JSON, or whose images cannot be read is \"sin referencia\", and the harness's when the PR changed it", () => {
+    const { out, put, imagesOf, record } = recordWorld();
+    const docker = imagesOf(MAIN_IMAGE, "base");
+    const noSummary = record("main-1", "0", docker);
+    expect(noSummary.status).toBe(1);
+    expect(noSummary.stderr).toContain(`main-1: k6 left no summary-main-1.json ("${VERDICTS.noReference}")`);
+    put("main-1");
+    writeFileSync(path.join(out, "summary-main-1.json"), "{ not json");
+    expect(record("main-1", "0", docker).stderr).toContain(`main-1: summary-main-1.json is not JSON ("${VERDICTS.noReference}")`);
+    put("main-1");
+    const blind = record("main-1", "0", 'echo "Cannot connect to the Docker daemon" >&2; exit 1');
+    expect(blind.status).toBe(1);
+    expect(blind.stderr).toContain(`main-1: cannot read the measured images: Cannot connect to the Docker daemon ("${VERDICTS.noReference}")`);
+    expect(record("main-1", "0", docker).status).toBe(0);
+
+    const harness = recordWorld((dir) => writeFileSync(path.join(dir, "load/pages.js"), "// changed harness\n"));
+    const changed = harness.record("main-1", "0", harness.imagesOf(MAIN_IMAGE, "base"));
+    expect(changed.status).toBe(1);
+    expect(changed.stderr).toContain(`main-1: k6 left no summary-main-1.json ("${VERDICTS.harness}")`);
   });
 
   it("main-up: a failing Supabase start is \"sin referencia\"", () => {
