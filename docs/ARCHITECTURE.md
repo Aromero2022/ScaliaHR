@@ -2083,6 +2083,9 @@ machine):**
       three `main` runs has no k6 result, an investigation of why is due,
       and the phase's next pull request does not open until the
       investigation is open.
+      - Since D56, during its transition, "sin línea base" is informational:
+        it no longer holds back a merge, since the gate is D56's ratio (D56,
+        **Transition**).
     - Limit: the larger of median × 1.2 and median + 2 × MAD of those five
       runs. MAD is the median of the absolute deviations from the median,
       unscaled.
@@ -4012,6 +4015,12 @@ and the rollback drill, still skip after a failure.)
       what the check sees (D36).
     - Since D56 the ratio step fails the job when any of the four passes,
       this one included, has no isolation count (D56, condition 3).
+- Since D56 the first pass and this second pass are also `pr-1` and `pr-2`
+  of D56's ratio. The step "The PR's k6 passes for D56 (pr-1, pr-2)" checks
+  them as D56 checks every pass (k6's exit code, the steady samples, the CSV
+  against the summary, the run's thresholds) and fails the job when one is
+  broken, as "pasada del PR inválida". The diagnostic steps themselves still
+  never fail it.
 
 **The lines** (`scripts/d36-diag.mjs`), each one for one possible cause.
 `diagLine` refuses any line off the grammar (a closed list of topics,
@@ -4121,6 +4130,8 @@ request's CI measures the real cost.
   from a cold one, not fresh data from old.
 - The CSV reader expects k6 v1.8.2's columns; a k6 upgrade that changes them
   makes the `requests` and `healthy to k6` lines fail loudly, not misread.
+  Since D56 such an upgrade also fails the job: D56 reads every pass's CSV
+  with the same reader.
 
 **Checks:**
 - Unit tests (`apps/web/__tests__/scripts/d36-diag.test.ts`): the line
@@ -4443,6 +4454,14 @@ choose its runner. D54 measured 46.34–61.61 ms on Intel Xeon 6975P-C and
 - With 13 pairs, the 95 % interval of the standard deviation is 0.072–0.166.
   The false block on a single attempt is then somewhere between 0.02 % and
   6 %, so these figures are an order of magnitude.
+- The 0.1005 comes from two passes of one build on one stack. D56 compares
+  two builds on two stacks, and `pr-1` and `pr-2` share their build, so the
+  noise D56 meets is at least that: the false-block figures are a lower
+  bound.
+- A push to `main` that changes only docs outside the images is a real A/A
+  with the ABBA order: on a push `main`'s passes always run, and both sides
+  are the same code built twice. Its r is reported, and a bias measured
+  there reopens the 1.20 with the user.
 
 **Verdicts** (the label in quotes is the one the verification table uses; a
 failure prints `::error::D56: … ("<label>")`):
@@ -4461,6 +4480,13 @@ failure prints `::error::D56: … ("<label>")`):
     mergeada", a warning that a regression was already merged.
   - It is not re-run.
   - The next pull request's verification table reports it.
+  - What follows is D36's: the red push opens an investigation, and the
+    phase's next pull request does not open until it is open. Attempt 1 is
+    the one that counts: a re-run of the push measures again, but does not
+    clear attempt 1's `::error::`.
+  - HEAD^1 is the commit before the pushed head. With squash merges that is
+    the previous `main`; a push of several commits compares only with the
+    commit before its last one.
 - **"sin referencia"** (fails closed): a `main` pass that could not be run or
   read. Examples: the worktree is not at HEAD^1; Supabase, the migrations, the
   images or a smoke test failed; k6 exited other than 0 or 99; a file is
@@ -4470,6 +4496,12 @@ failure prints `::error::D56: … ("<label>")`):
   exited other than 0 or 99).
   - It is not "sin referencia". It fails the job.
   - It is resolved only by a user exception documented in the pull request.
+  - Once the harness changed, any failed check of a `main` pass gives this
+    verdict, not only the seed and k6's exit code: a crossed threshold, fewer
+    than 500 steady samples, a CSV that does not match its summary,
+    `vus_max`, or a missing isolation count (`brokenRunVerdict()`). A
+    transient failure is labeled the same way; the error names the check
+    that failed, and the verification table repeats it.
 - **"main falla aislamiento"**: a `main` pass showed another tenant's
   employees. It fails with no ratio.
 - **"el PR falla aislamiento"**: a PR pass showed another tenant's employees.
@@ -4479,6 +4511,20 @@ failure prints `::error::D56: … ("<label>")`):
   attempt, revision, image, order or summaries.
 - **"solo docs mal clasificado"**: a docs-only pull request with a changed
   file that is in an image.
+
+**What the cap counts:**
+- The cap counts the `docker` job's attempts (`GITHUB_RUN_ATTEMPT`), not the
+  r values measured. The one re-run is shared by whatever made attempt 1
+  fail: r above the limit, "sin referencia", or another step of the job (an
+  e2e flake is also fixed by re-running the job, D44).
+- When attempt 1 left no r, attempt 2 is the only measurement. r above 1.20
+  there blocks on one measurement, not two, so the 0.003 % of **The limit**
+  does not hold for it. The verification table says so, and merging always
+  waits for the user's «aprobado».
+- A new head of the pull request is a new run, with its own attempt 1. The
+  verification table lists every r measured for the pull request, with its
+  head and attempt, so a new commit never hides an earlier r above the
+  limit.
 
 **What each pass must hold** (checked in `record`, when the pass is recorded,
 and again in `ratio`):
@@ -4550,6 +4596,10 @@ each test fails when its condition is broken):
   - `scripts/d56-ab.sh` run as CI runs it, against a real merge clone with fake
     `supabase`, `docker`, `npm` and `curl`;
   - the artifact list.
+  - the order of the D56 steps in the `docker` job and the lines each one
+    runs;
+  - `main-up build` and `main-up reuse` end to end, and each command's
+    failures.
 - The mutations that break each condition are checked by the pull request
   that adds D56 and listed in its verification table.
 
@@ -4588,6 +4638,35 @@ Supabase starts.
   límite" are informational too.
 - The pull request that adds D56 is still gated by the old rule, reported as
   before, and also by its own ratio step.
+- The five runs are the first five push runs of `main` from D56's merge on
+  (D56's own included) whose D36 step produced a p95. Docs-only pushes count
+  too, as they do for the band.
+- Dropping the band is a pull request of its own, approved by the user. It
+  decides what else of D36 goes with it: the drift control, "main ×2", the
+  rule of the last three runs without k6, and the CSV transition (D54).
+- Since D56 the pass the band reads (`pr-1`) runs after `main-1` on the same
+  runner, so it no longer measures exactly what the band's runs before D56
+  measured. One more reason the band is only informational.
+
+**The six adjustments of the approval, and where each lives:**
+1. `main`'s stack is built with `main`'s files, and from the PR only the
+   harness and the load settings, printed on each pass's line: "`main`'s
+   stack is built with `main`'s files" above, `scripts/d56-ab.sh`,
+   `passLine()`.
+2. "arnés del PR incompatible con main": **Verdicts**, `brokenRunVerdict()`
+   and `treeRecord()`.
+3. The same load data before every pass, and why the e2e residue does not
+   reach k6: "The same load data before every pass" above.
+4. A push compares with HEAD^1 and fails once above the limit, without a
+   re-run, as a regression already merged: **Verdicts**, "Push to `main`",
+   and `verdict()`.
+5. Docs only: `main`'s passes are skipped only when the scope said "no
+   aplica", and the ratio step, with no `if:`, fails when the scope applies
+   and `main`'s passes are missing: **Docs only** and `decide()`.
+6. One draft pull request, a test with its mutation for each condition, no
+   pushes while CI runs, and no ready or merge without a new «aprobado»:
+   **Closing conditions and their tests**, and the pull request's
+   verification table.
 
 **Limits:**
 - **Stack history.** `main`'s passes run on a fresh stack, `pr-1` after the
@@ -4612,6 +4691,27 @@ Supabase starts.
 - **New failures.** The job now also fails when `main`'s stack cannot be
   built or run ("sin referencia"), which did not exist before. That is the
   cost of failing closed.
+- **A change in how the stack starts.** `main-up` is the PR's
+  `scripts/d56-ab.sh` run on HEAD^1's files, and it mirrors the PR's
+  `scripts/local-up.sh`.
+  - A pull request that changes how the stack starts must keep `d56-ab.sh`
+    working with `main`'s files, as a migration keeps the old code working
+    (expand, then contract). Such changes include a step of `local-up.sh`,
+    the ports or a `project_id` in `supabase/config.toml`, a service of
+    `docker-compose.yml`, or a variable of `.env.docker.example`.
+  - When it cannot, `main`'s passes fail as "sin referencia" on every
+    attempt. As for the harness, that is resolved only by a user exception
+    documented in the pull request. The next pull request compares with the
+    new `main` again.
+  - `down` uses the PR's `docker-compose.yml` on `main`'s containers. It
+    works because both use the project `scaliahr` and `--remove-orphans`.
+- **Only for CI.** `scripts/d56-ab.sh` needs `RUNNER_TEMP` (or
+  `D56_BASE_DIR`) and refuses a worktree that already exists.
+  - It never removes the worktree and leaves the `:base` images behind: the
+    runner is thrown away after the job. Run locally, both are cleaned by
+    hand.
+  - Its disk use is not measured: two builds, the worktree's `npm ci` and
+    three sets of images. A run that fails for lack of disk points here.
 
 ---
 
