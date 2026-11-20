@@ -619,7 +619,7 @@ describe("the diagnostic steps never fail the job, and run when the D36 run fail
     const unknown = runStep(ISOLATION_STEP, {}, { FAILED: "" });
     expect(unknown.status).toBe(0);
     expect(unknown.stdout).toContain(
-      "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step), so its tenant isolation is unverified; in this job only the first pass could fail on isolation (its own threshold, rate==1)",
+      "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step), so this step cannot check it; the D56 ratio step fails the job without it",
     );
     // The first pass has its own isolation threshold now: ci.yml no longer says it tolerates 1 %.
     expect(CI).not.toContain("tolerates up to 1 %");
