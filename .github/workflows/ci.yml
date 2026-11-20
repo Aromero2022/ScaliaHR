@@ -284,6 +284,9 @@ jobs:
       # HEAD^2 the pull request. If the diff only touches **/*.md, docs/** or
       # .claude/**, the images are main's and k6 is not compared with main's
       # median. A failure here fails the job: it never falls back to either answer.
+      # D56: this verdict also skips main's k6 passes when it is "false"; the
+      # ratio step then checks it against the images, and a changed file that is
+      # in an image (a README under apps/, say) fails the job.
       - name: Does the diff change the images? (D36)
         id: scope
         if: github.event_name == 'pull_request'
@@ -330,7 +333,8 @@ jobs:
       # D56: main's first pass, on a fresh stack, then its data deleted so the
       # PR's stack below starts as it did before D56. Skipped only when the scope
       # step said the diff cannot change the images; the ratio step then checks
-      # that claim against the images.
+      # that claim against the images. On a push there is no scope step, so this
+      # step always runs.
       - name: Main's first k6 pass (D56 main-1)
         if: steps.scope.outputs.applies != 'false'
         run: |
@@ -585,7 +589,8 @@ jobs:
 
       # D56: main's second pass, after the PR's stack is stopped and its data
       # deleted: main's images (:base, not rebuilt) on a fresh stack again. Then
-      # main's images are listed too, for the docs-only rule on a push.
+      # main's images are listed too, for the docs-only rule on a push (a pull
+      # request lists them as well, and the ratio step reads only the PR's).
       - name: Main's second k6 pass (D56 main-2)
         if: steps.scope.outputs.applies != 'false'
         run: |

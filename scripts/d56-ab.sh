@@ -11,7 +11,8 @@
 #   bash scripts/d56-ab.sh main-up build|reuse   start Supabase and main's images from the worktree
 #   bash scripts/d56-ab.sh k6 main-1|main-2      one k6 pass on main's stack, its output to a file
 #   bash scripts/d56-ab.sh down                  stop the running stack, delete its data, check nothing is left
-# Every failure prints "::error::D56: … ("<verdict>")" and exits 1.
+# Every failure it checks for prints "::error::D56: … ("<verdict>")" and exits 1;
+# anything else stops it through set -e, with a non-zero exit all the same.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -146,8 +147,10 @@ cmd_main_up() {
   smoke_to="smoke-d56-$(date +%s)@scaliahr.localhost"
   log "Checking that main's worker delivers email to Mailpit (${smoke_to})"
   "${compose[@]}" exec -T worker node dist/smoke.js email "$smoke_to" || die "$NO_REFERENCE" "main's worker did not send the smoke email"
-  curl -fsS "${mailpit_url}/api/v1/search?query=to:${smoke_to}" | grep -q '"messages_count":1' \
-    || die "$NO_REFERENCE" "main's smoke email did not reach Mailpit"
+  # To a variable first: with pipefail, grep -q closing the pipe early could fail curl.
+  local search
+  search="$(curl -fsS "${mailpit_url}/api/v1/search?query=to:${smoke_to}")" || die "$NO_REFERENCE" "main's Mailpit search failed"
+  grep -q '"messages_count":1' <<<"$search" || die "$NO_REFERENCE" "main's smoke email did not reach Mailpit"
   echo "Main's stack is up: ${GIT_REVISION}."
 }
 
@@ -171,11 +174,15 @@ cmd_down() {
   supabase_cli stop --no-backup || die "$NO_REFERENCE" "supabase stop --no-backup failed"
   # The next stack must start from nothing: no container, volume or network of
   # either stack, and nothing answering on port 3000.
-  local left
+  # Each listing on its own, so a failing docker fails here instead of reading as empty.
+  local containers volumes networks left
+  containers="$(docker ps -a --format '{{.Names}}')" || die "$NO_REFERENCE" "docker ps failed after the stack was stopped"
+  volumes="$(docker volume ls --format '{{.Name}}')" || die "$NO_REFERENCE" "docker volume ls failed after the stack was stopped"
+  networks="$(docker network ls --format '{{.Name}}')" || die "$NO_REFERENCE" "docker network ls failed after the stack was stopped"
   left="$(
-    docker ps -a --format '{{.Names}}' | grep -E '^(supabase_|scaliahr-)' || true
-    docker volume ls --format '{{.Name}}' | grep -E '^supabase_' || true
-    docker network ls --format '{{.Name}}' | grep -E '^supabase_network_' || true
+    printf '%s\n' "$containers" | grep -E '^(supabase_|scaliahr-)' || true
+    printf '%s\n' "$volumes" | grep -E '^supabase_' || true
+    printf '%s\n' "$networks" | grep -E '^supabase_network_' || true
   )"
   [ -z "$left" ] || die "$NO_REFERENCE" "the stack was not cleaned up: $(printf '%s' "$left" | tr '\n' ' ')"
   if curl -fsS --max-time 2 -o /dev/null http://localhost:3000/api/health 2>/dev/null; then

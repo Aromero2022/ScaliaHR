@@ -20,7 +20,7 @@ import { ISOLATION_CHECK, K6_THRESHOLDS_CROSSED, cpuModel, escapeCommand, firstR
 import { comparisonScope, parsePaths } from "./k6-comparison-scope.mjs";
 
 export const PREFIX = "D56-ab: ";
-/** r above this blocks: once on the first attempt, and again on the one re-run. */
+/** r above this fails the first attempt, which allows one re-run; the pull request is blocked when the re-run is above it too. */
 export const LIMIT = 1.2;
 /** About 940 steady-state page samples per pass in CI; fewer than this is a broken run, not a measurement. */
 export const MIN_STEADY_PAGES = 500;
@@ -164,6 +164,9 @@ export function validatePass(name, record, summary, rows, tree) {
   if (record.summary !== spec.summary || record.csv !== spec.csv) throw broken(`its summary or CSV is not its own (${spec.summary}, ${spec.csv})`);
   if (passExit(record.k6_exit) === null) throw broken(`k6 exited ${JSON.stringify(record.k6_exit)}`);
   if (name === "pr-1" && Number(record.k6_exit) !== 0) throw broken("the D36 step did not pass");
+  for (const key of ["web_image", "worker_image", "expected_web", "expected_worker"]) {
+    if (!/^sha256:[0-9a-f]{64}$/.test(record[key] ?? "")) throw broken(`its ${key} ${JSON.stringify(record[key] ?? null)} is not an image id`);
+  }
 
   const metrics = summary?.metrics ?? {};
   const isolation = summary?.root_group?.checks?.[ISOLATION_CHECK];
@@ -263,22 +266,26 @@ export function ratio(mainP95s, prP95s) {
   return Math.exp(meanLn(prP95s) - meanLn(mainP95s));
 }
 
+/** r as the verdicts print it: four decimals, or what it is when it is not a number. */
+const shownR = (r) => (Number.isFinite(r) ? r.toFixed(4) : String(r));
+
 /**
- * The verdict. A pull request blocks when r is above LIMIT on the first
- * attempt and on the one re-run; a third attempt never passes. A push to main
- * does not re-run: r above LIMIT fails it as a regression already merged.
- * Without a change in the images (docs only) nothing blocks.
+ * The verdict. On a pull request, r above LIMIT fails the first attempt and
+ * allows one re-run; the pull request is blocked when the re-run is above LIMIT
+ * too, and a third attempt never passes. A push to main does not re-run: r
+ * above LIMIT fails it as a regression already merged. Without a change in the
+ * images (docs only) nothing blocks.
  */
 export function verdict({ event, applies, r, attempt }) {
   if (!applies) return { pass: true, verdict: "not applicable (no changes in the images)" };
   if (event === "push") {
     if (Number.isFinite(r) && r <= LIMIT) return { pass: true, verdict: "within the limit" };
-    return { pass: false, label: VERDICTS.mergedRegression, verdict: `r ${r} is above ${LIMIT} on main: a regression already merged` };
+    return { pass: false, label: VERDICTS.mergedRegression, verdict: `r ${shownR(r)} is above ${LIMIT} on main: a regression already merged` };
   }
   if (attempt >= 3) return { pass: false, label: VERDICTS.cap, verdict: `attempt ${attempt}: only one re-run counts` };
   if (Number.isFinite(r) && r <= LIMIT) return { pass: true, verdict: "within the limit" };
-  if (attempt === 1) return { pass: false, label: VERDICTS.overFirst, verdict: `r ${r} is above ${LIMIT} on the first attempt: one re-run of the docker job is allowed` };
-  return { pass: false, label: VERDICTS.overSecond, verdict: `r ${r} is above ${LIMIT} on the re-run as well: the pull request is blocked` };
+  if (attempt === 1) return { pass: false, label: VERDICTS.overFirst, verdict: `r ${shownR(r)} is above ${LIMIT} on the first attempt: one re-run of the docker job is allowed` };
+  return { pass: false, label: VERDICTS.overSecond, verdict: `r ${shownR(r)} is above ${LIMIT} on the re-run as well: the pull request is blocked` };
 }
 
 /** GITHUB_RUN_ATTEMPT as a number, or an error: an unset attempt must not skip the cap. */
@@ -415,7 +422,8 @@ export function ratioLine({ event, applies, r, attempt, verdict: text, passes })
 const outPath = (file) => `${OUT}/${file}`;
 const readOut = (file) => (existsSync(outPath(file)) ? readFileSync(outPath(file)) : null);
 const git = (args) => execFileSync("git", args, { encoding: "utf-8" }).trim();
-const docker = (args) => execFileSync("docker", args, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+// An image listing can pass the 1 MiB default; a larger buffer keeps that from failing the step.
+const docker = (args) => execFileSync("docker", args, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 }).trim();
 
 function harnessHash() {
   const files = git(["ls-files", "-z", "--", "load", "scripts/load-test.sh"]).split("\0").filter(Boolean).sort();

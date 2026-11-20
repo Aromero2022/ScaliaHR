@@ -3,6 +3,8 @@
 // pull request's merge commit to this script on stdin. When every path is Markdown,
 // under docs/ or under .claude/, the images are main's, so the comparison does
 // not apply; k6 still runs and its own p95 < 500 ms threshold still gates.
+// D56: the same verdict skips main's k6 passes of the A/B ratio when it is
+// false, and scripts/d56-ab.mjs checks it against the images' files.
 import { appendFileSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 

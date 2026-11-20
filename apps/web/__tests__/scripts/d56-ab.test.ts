@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -51,6 +52,10 @@ const MAIN2_STEP = "Main's second k6 pass (D56 main-2)";
 const RATIO_STEP = "D56 A/B ratio of the four k6 passes";
 const ARTIFACT_STEP = "D56 artifact";
 const SCOPE_STEP = "Does the diff change the images? (D36)";
+const LOCAL_UP_STEP = "Build images and start the local stack (npm run local:up)";
+const ISOLATION_STEP = "Tenant isolation held in the second k6 pass (D54)";
+const EXPORT_STEP = "Per-tenant export through the running worker (D23)";
+const ROLLBACK_STEP = "Rollback drill (D24)";
 
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -59,6 +64,16 @@ const tempDir = (prefix: string) => {
   dirs.push(dir);
   return dir;
 };
+/**
+ * The environment for a spawned script: this process's, without GitHub's step
+ * files and run settings (so a test run in CI never writes to the job's summary
+ * or outputs) and without the user's git config (signing, hooks).
+ */
+function cleanEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) if (!key.startsWith("GITHUB_") && !key.startsWith("RUNNER_")) env[key] = value;
+  return { ...env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", ...extra };
+}
 
 // ci.yml, split as the other docker-job tests split it.
 function dockerSteps(): string[] {
@@ -93,6 +108,18 @@ function envBlock(step: string): Record<string, string> {
     env[match[1]] = match[2];
   }
   return env;
+}
+/** The lines of the step's `run: |` block, without their indentation. */
+function runLines(step: string): string[] {
+  const lines = step.split("\n");
+  const start = lines.indexOf("        run: |");
+  if (start === -1) throw new Error("the step has no run: | block");
+  const block: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (!line.startsWith("          ")) break;
+    block.push(line.slice(10));
+  }
+  return block;
 }
 const loadSettings = (step: string) => Object.fromEntries(LOAD_PARAMS.map((key) => [key, envBlock(step)[key]]));
 
@@ -173,7 +200,7 @@ function treeOf(files: string[], markdown: Record<string, { head: string | null;
       head_sha: HEAD_SHA,
       base_revision: BASE_REV,
       head_revision: HEAD_REV,
-      diff_sha256: execFileSync("sha256sum", { input: diff }).toString().slice(0, 64),
+      diff_sha256: createHash("sha256").update(diff).digest("hex"),
       diff_files: files.length,
       harness_changed: harnessChanged,
       markdown,
@@ -253,10 +280,10 @@ describe("1. the ratio step runs unconditionally and fails the job when it canno
   it("fails, with an annotation, when the earlier steps left nothing to compare", () => {
     const work = tempDir("d56-empty-");
     mkdirSync(path.join(work, "load/.out"), { recursive: true });
-    const result = spawnSync("node", [path.join(REPO, "scripts/d56-ab.mjs"), "ratio"], {
+    const result = spawnSync(process.execPath, [path.join(REPO, "scripts/d56-ab.mjs"), "ratio"], {
       cwd: work,
       encoding: "utf-8",
-      env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", SCOPE_APPLIES: "true", GITHUB_RUN_ATTEMPT: "1" },
+      env: cleanEnv({ GITHUB_EVENT_NAME: "pull_request", SCOPE_APPLIES: "true", GITHUB_RUN_ATTEMPT: "1" }),
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/^::error::D56: d56-tree\.json is missing.*\("sin referencia"\)$/m);
@@ -359,6 +386,13 @@ describe("3. a missing tenant-isolation count fails, in every pass (D56)", () =>
 });
 
 describe("4. the image each pass measured (D56)", () => {
+  it("refuses a pass whose recorded image ids are not image ids", () => {
+    for (const key of ["web_image", "worker_image", "expected_web", "expected_worker"]) {
+      expect(gateError(() => validate("main-1", {}, { [key]: "" })).message).toContain(`its ${key} "" is not an image id`);
+    }
+    expect(gateError(() => validate("pr-1", {}, { web_image: undefined, expected_web: undefined })).message).toContain("its web_image null is not an image id");
+  });
+
   it("accepts main's :base images and the PR's :local images, different and each as expected", () => {
     const decision = decideIn(world());
     expect(decision.pass).toBe(true);
@@ -466,12 +500,12 @@ describe("6. a broken main pass fails closed; one re-run, enforced in the script
     expect(ratio([100, 100], [120, 120])).toBeCloseTo(1.2, 12);
   });
 
-  it("blocks on the first attempt above the limit and tells how to confirm it, then blocks on the re-run", () => {
+  it("fails the first attempt above the limit and allows one re-run, then blocks on the re-run", () => {
     const slow = { "pr-1": { p95: 80 }, "pr-2": { p95: 80 } };
     const first = decideIn(world({ options: slow }));
     expect(first.pass).toBe(false);
     expect(first.r).toBeCloseTo(80 / 60, 12);
-    expect(first.verdict).toContain("one re-run of the docker job is allowed");
+    expect(first.verdict).toContain("r 1.3333 is above 1.2 on the first attempt: one re-run of the docker job is allowed");
     const records = Object.fromEntries(ORDER.map((name) => [name, { run_attempt: "2" }]));
     expect(decideIn(world({ options: slow, records }), { attempt: "2" }).label).toBe(VERDICTS.overSecond);
   });
@@ -608,6 +642,43 @@ describe("pull requests and pushes (D56)", () => {
   });
 });
 
+describe("the docker job runs the passes in the order main, PR, PR, main (D56)", () => {
+  it("places every D56 step where its pass belongs", () => {
+    const names = dockerSteps().map(stepName);
+    const order = [SCOPE_STEP, TREE_STEP, MAIN1_STEP, LOCAL_UP_STEP, D36_STEP, SECOND_STEP, ISOLATION_STEP, PR_STEP, EXPORT_STEP, ROLLBACK_STEP, MAIN2_STEP, RATIO_STEP, ARTIFACT_STEP];
+    const at = order.map((name) => names.indexOf(name));
+    expect(at).not.toContain(-1);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    // main-1 deletes its stack right before the PR's local:up.
+    expect(names.indexOf(LOCAL_UP_STEP)).toBe(names.indexOf(MAIN1_STEP) + 1);
+  });
+
+  it("runs main-1 as main-up, k6 and down, and main-2 from the PR's stack stopped, on main's images as built", () => {
+    expect(runLines(stepNamed(MAIN1_STEP))).toEqual(["bash scripts/d56-ab.sh main-up build", "bash scripts/d56-ab.sh k6 main-1", "bash scripts/d56-ab.sh down"]);
+    expect(runLines(stepNamed(MAIN2_STEP))).toEqual([
+      "bash scripts/d56-ab.sh down",
+      "bash scripts/d56-ab.sh main-up reuse",
+      "bash scripts/d56-ab.sh k6 main-2",
+      "node scripts/d56-ab.mjs images main",
+    ]);
+  });
+
+  it("records pr-1 from the D36 step's outcome and pr-2 from the exit code the D54 pass wrote", () => {
+    expect(stepNamed(D36_STEP)).toMatch(/^ {8}id: d36_first$/m);
+    expect(envBlock(stepNamed(PR_STEP)).PR_FIRST_OUTCOME).toBe("${{ steps.d36_first.outcome }}");
+    expect(runLines(stepNamed(PR_STEP))).toEqual([
+      'case "$PR_FIRST_OUTCOME" in success) first=0 ;; *) first="d36-step-${PR_FIRST_OUTCOME:-unknown}" ;; esac',
+      'node scripts/d56-ab.mjs record pr-1 "$first"',
+      'node scripts/d56-ab.mjs record pr-2 "$(cat load/.out/k6-exit-second.txt)"',
+      "node scripts/d56-ab.mjs images pr",
+    ]);
+    const second = runLines(stepNamed(SECOND_STEP));
+    const k6 = second.findIndex((line) => line.includes("npm run load:test"));
+    expect(k6).toBeGreaterThan(-1);
+    expect(second[k6 + 1]).toBe(`printf '%s\\n' "$code" > load/.out/k6-exit-second.txt # D56: this pass is also pr-2 of the A/B ratio`);
+  });
+});
+
 describe("main's stack is built with main's own files (D56)", () => {
   it("starts Supabase, migrates and sets the role passwords from main's worktree", () => {
     for (const piece of [
@@ -655,7 +726,7 @@ describe("main's stack is built with main's own files (D56)", () => {
 
 // The script run as CI runs it, against fake commands: git is real, the rest is faked.
 function git(cwd: string, ...args: string[]) {
-  return execFileSync("git", args, { cwd, encoding: "utf-8", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } }).trim();
+  return execFileSync("git", args, { cwd, encoding: "utf-8", env: cleanEnv({ GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" }) }).trim();
 }
 /** A clone of a merge commit like GitHub's: HEAD^1 is main, HEAD^2 the pull request. */
 function mergeClone(changePr: (dir: string) => void) {
@@ -668,6 +739,13 @@ function mergeClone(changePr: (dir: string) => void) {
   }
   writeFileSync(path.join(origin, "load/pages.js"), "// harness\n");
   writeFileSync(path.join(origin, ".gitignore"), "load/.out/\n");
+  // Main's own files that main-up uses from the worktree; this script records how it was run.
+  writeFileSync(path.join(origin, ".env.docker.example"), "EXAMPLE=1\n");
+  writeFileSync(path.join(origin, "docker-compose.yml"), "services: {}\n");
+  writeFileSync(
+    path.join(origin, "scripts/set-local-role-passwords.mjs"),
+    'import { appendFileSync } from "node:fs";\nappendFileSync(process.env.CALLS, `passwords ${process.cwd()} ${process.argv.slice(2).join(" ")}\\n`);\n',
+  );
   git(origin, "add", "-A");
   git(origin, "commit", "-q", "-m", "base");
   git(origin, "checkout", "-q", "-b", "pr");
@@ -686,7 +764,60 @@ function runAb(cwd: string, args: string[], fakes: Record<string, string> = {}, 
   mkdirSync(bin);
   for (const [command, body] of Object.entries(fakes)) writeFileSync(path.join(bin, command), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
   const runnerTemp = tempDir("d56-runner-");
-  return spawnSync("bash", ["scripts/d56-ab.sh", ...args], { cwd, encoding: "utf-8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: runnerTemp, ...env } });
+  return spawnSync("bash", ["scripts/d56-ab.sh", ...args], { cwd, encoding: "utf-8", env: cleanEnv({ PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: runnerTemp, ...env }) });
+}
+
+// Fakes for main-up's whole run: Supabase, Docker, npm and curl as main's stack answers them.
+const MAIN_UP_FAKES = {
+  supabase: [
+    'echo "supabase $*" >> "$CALLS"',
+    'case "$1" in',
+    "  status)",
+    "    cat <<EOF",
+    'DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"',
+    'API_URL="http://127.0.0.1:54321"',
+    'ANON_KEY="${ANON:-anon-key}"',
+    'MAILPIT_URL="http://127.0.0.1:54324"',
+    "EOF",
+    "    ;;",
+    "esac",
+  ].join("\n"),
+  docker: [
+    'echo "docker $*" >> "$CALLS"',
+    'case "$*" in',
+    '  "ps --filter publish=54322 --format {{.Names}}") echo supabase_db_ScaliaHR ;;',
+    '  "ps --filter publish=54324 --format {{.Names}}") echo supabase_inbucket_ScaliaHR ;;',
+    '  "inspect -f {{range"*) printf "bridge\\nsupabase_network_ScaliaHR\\n" ;;',
+    '  "image inspect scaliahr-"*) [ -z "${NO_BASE:-}" ] ;;',
+    '  "image inspect -f "*) echo 0123456789ab ;;',
+    '  *" up "*) echo "env SUPABASE_NETWORK=$SUPABASE_NETWORK MAILPIT_HOST=$MAILPIT_HOST ANON=$NEXT_PUBLIC_SUPABASE_ANON_KEY" >> "$CALLS" ;;',
+    '  *" port web 3000") echo "${WEB_ADDRESS:-127.0.0.1:3000}" ;;',
+    '  *" exec -T worker "*) ;;',
+    '  *) echo "unexpected docker $*" >&2; exit 9 ;;',
+    "esac",
+  ].join("\n"),
+  npm: 'echo "npm $* in $(pwd)" >> "$CALLS"',
+  curl: [
+    'echo "curl $*" >> "$CALLS"',
+    'case "$*" in',
+    '  *"/api/health") echo "{}" ;;',
+    '  *"/api/v1/search"*) [ -z "${SEARCH_FAILS:-}" ] || exit 22; echo "{\\"messages_count\\":${MAILPIT_COUNT:-1}}" ;;',
+    "  *) exit 7 ;;",
+    "esac",
+  ].join("\n"),
+};
+/** A merge clone with main's tree checked out, and main-up run in it against MAIN_UP_FAKES, each run with its own call log. */
+function mainUpWorld() {
+  const { clone, prHead } = mergeClone(() => {});
+  const base = path.join(tempDir("d56-base-"), "ScaliaHR");
+  expect(runAb(clone, ["tree"], {}, { PR_HEAD: prHead, D56_BASE_DIR: base }).status).toBe(0);
+  const mainUp = (mode: string, env: Record<string, string> = {}) => {
+    const calls = path.join(tempDir("d56-calls-"), "calls");
+    writeFileSync(calls, "");
+    const result = runAb(clone, ["main-up", mode], MAIN_UP_FAKES, { D56_BASE_DIR: base, CALLS: calls, SUPABASE_EXCLUDE: "realtime,storage-api", ...env });
+    return { result, calls: readFileSync(calls, "utf-8").split("\n").filter(Boolean) };
+  };
+  return { clone, base, mainUp };
 }
 
 describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () => {
@@ -765,6 +896,98 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
     expect(log).toContain("supabase status --output env\n");
     expect(log).not.toContain("migration");
     expect(log).not.toContain("docker");
+  });
+
+  it("main-up build: migrates and sets main's passwords from its worktree, then builds main's images as :base and checks them", () => {
+    const { clone, base, mainUp } = mainUpWorld();
+    const { result, calls } = mainUp("build");
+    expect(result.status).toBe(0);
+    const compose = `docker compose -p scaliahr -f ${base}/docker-compose.yml -f ${clone}/scripts/d56-main-images.compose.yml --env-file ${base}/.env.docker`;
+    const expected = [
+      `supabase start --workdir ${base} -x realtime,storage-api`,
+      `supabase migration up --local --workdir ${base}`,
+      `npm ci --ignore-scripts --no-audit --no-fund in ${base}`,
+      `passwords ${base} postgresql://postgres:postgres@127.0.0.1:54322/postgres`,
+      `${compose} up --build --detach --wait --wait-timeout 300`,
+      "env SUPABASE_NETWORK=supabase_network_ScaliaHR MAILPIT_HOST=supabase_inbucket_ScaliaHR ANON=anon-key",
+      "curl -fsS http://127.0.0.1:3000/api/health",
+      `${compose} exec -T worker node dist/smoke.js`,
+    ];
+    let at = -1;
+    for (const line of expected) {
+      const next = calls.indexOf(line, at + 1);
+      expect(next, line).toBeGreaterThan(at);
+      at = next;
+    }
+    expect(calls.slice(at + 1).some((line) => line.startsWith(`${compose} exec -T worker node dist/smoke.js email smoke-d56-`))).toBe(true);
+    expect(calls.at(-1)).toMatch(/^curl -fsS http:\/\/127\.0\.0\.1:54324\/api\/v1\/search\?query=to:smoke-d56-\d+@scaliahr\.localhost$/);
+    expect(readFileSync(path.join(clone, "load/.out/d56-main-anon-key.sha256"), "utf-8")).toBe(`${createHash("sha256").update("anon-key").digest("hex")}\n`);
+    expect(result.stdout).toContain(`Main's stack is up: ${git(base, "describe", "--always", "--abbrev=12")}.`);
+  });
+
+  it("main-up reuse: starts the :base images built before without rebuilding them, and only with the same anon key", () => {
+    const { clone, base, mainUp } = mainUpWorld();
+    expect(mainUp("build").result.status).toBe(0);
+    const compose = `docker compose -p scaliahr -f ${base}/docker-compose.yml -f ${clone}/scripts/d56-main-images.compose.yml --env-file ${base}/.env.docker`;
+    const composeUp = (calls: string[]) => calls.filter((line) => line.startsWith(`${compose} up `));
+    const reuse = mainUp("reuse");
+    expect(reuse.result.status).toBe(0);
+    expect(composeUp(reuse.calls)).toEqual([`${compose} up --no-build --force-recreate --detach --wait --wait-timeout 300`]);
+    for (const [env, message] of [
+      [{ ANON: "another-key" }, "main's web image was built with another anon key"],
+      [{ NO_BASE: "1" }, "there is no scaliahr-web:base to reuse"],
+    ] as const) {
+      const run = mainUp("reuse", env);
+      expect(run.result.status).toBe(1);
+      expect(run.result.stderr).toContain(`::error::D56: ${message} ("sin referencia")`);
+      expect(composeUp(run.calls)).toEqual([]);
+    }
+  });
+
+  it.each([
+    ["answers on another address", { WEB_ADDRESS: "127.0.0.1:3001" }, "main's web answers on 127.0.0.1:3001, not 127.0.0.1:3000"],
+    ["cannot search Mailpit", { SEARCH_FAILS: "1" }, "main's Mailpit search failed"],
+    ["finds no smoke email in Mailpit", { MAILPIT_COUNT: "0" }, "main's smoke email did not reach Mailpit"],
+  ])('main-up: a stack that %s is "sin referencia"', (_what, env, message) => {
+    const { result } = mainUpWorld().mainUp("build", env);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`::error::D56: ${message} ("sin referencia")`);
+  });
+
+  it("refuses a main-up mode and a k6 pass it does not run, and a tree that already exists; a push needs no pull request head", () => {
+    const { clone, mainSha } = mergeClone(() => {});
+    const base = path.join(tempDir("d56-base-"), "ScaliaHR");
+    expect(runAb(clone, ["main-up", "fast"], {}, { D56_BASE_DIR: base }).stderr).toContain('main-up needs build or reuse ("sin referencia")');
+    const pr = runAb(clone, ["k6", "pr-1"], {}, { D56_BASE_DIR: base });
+    expect(pr.status).toBe(1);
+    expect(pr.stderr).toContain('k6 runs main-1 or main-2 only ("sin referencia")');
+    expect(runAb(clone, ["tree"], {}, { D56_BASE_DIR: base }).status).toBe(0);
+    expect(git(base, "rev-parse", "HEAD")).toBe(mainSha);
+    const again = runAb(clone, ["tree"], {}, { D56_BASE_DIR: base });
+    expect(again.status).toBe(1);
+    expect(again.stderr).toContain(`${base} already exists`);
+  });
+
+  it("down: stops at the first command that fails, and fails when docker cannot list what is left", () => {
+    const { clone } = mergeClone(() => {});
+    const calls = path.join(tempDir("d56-calls-"), "calls");
+    const record = (name: string) => `echo "${name} $*" >> ${calls}`;
+    const composeFails = runAb(clone, ["down"], { supabase: record("supabase"), docker: `${record("docker")}\ncase "$1" in compose) exit 1 ;; esac`, curl: "exit 7" });
+    expect(composeFails.status).toBe(1);
+    expect(composeFails.stderr).toContain('docker compose down failed ("sin referencia")');
+    expect(readFileSync(calls, "utf-8")).not.toContain("supabase stop");
+    const stopFails = runAb(clone, ["down"], { supabase: "exit 1", docker: "true", curl: "exit 7" });
+    expect(stopFails.status).toBe(1);
+    expect(stopFails.stderr).toContain('supabase stop --no-backup failed ("sin referencia")');
+    for (const [command, what] of [
+      ["ps", "docker ps"],
+      ["volume", "docker volume ls"],
+      ["network", "docker network ls"],
+    ]) {
+      const listing = runAb(clone, ["down"], { supabase: "true", docker: `case "$1" in ${command}) exit 1 ;; esac`, curl: "exit 7" });
+      expect(listing.status, what).toBe(1);
+      expect(listing.stderr).toContain(`${what} failed after the stack was stopped ("sin referencia")`);
+    }
   });
 
   it("main-up: a failing Supabase start is \"sin referencia\"", () => {
@@ -854,6 +1077,13 @@ describe("the D56 artifact and the scope step's output (D56)", () => {
     expect(step).toContain("name: d56-ab-attempt-${{ github.run_attempt }}");
     expect(step).not.toContain("accounts");
     expect(step).not.toContain("*");
+    // Every path is one of D56's own files: a new entry must be added here, on purpose.
+    const paths = step.split("\n").filter((line) => /^ {12}load\//.test(line)).map((line) => line.trim());
+    expect(paths).toHaveLength(16);
+    for (const file of paths) {
+      expect(file).toMatch(/^load\/\.out\/(d56-(tree|ratio|pass-(main|pr)-[12]|images-(pr|main))\.json|d56-diff\.bin|summary-main-[12]\.json|requests-main-[12]\.csv\.gz|k6-main-[12]\.txt|k6-exit-second\.txt)$/);
+    }
+    expect(readFileSync(path.join(REPO, ".gitignore"), "utf-8")).toMatch(/^load\/\.out\/$/m);
   });
 
   it("the scope script writes its verdict for later steps", () => {
@@ -864,7 +1094,7 @@ describe("the D56 artifact and the scope step's output (D56)", () => {
       ["apps/web/src/a.ts\0", "true"],
     ]) {
       writeFileSync(output, "");
-      const result = spawnSync("node", [path.join(REPO, "scripts/k6-comparison-scope.mjs")], { input, encoding: "utf-8", env: { ...process.env, GITHUB_OUTPUT: output } });
+      const result = spawnSync(process.execPath, [path.join(REPO, "scripts/k6-comparison-scope.mjs")], { input, encoding: "utf-8", env: cleanEnv({ GITHUB_OUTPUT: output }) });
       expect(result.status).toBe(0);
       expect(readFileSync(output, "utf-8")).toBe(`applies=${applies}\n`);
     }
