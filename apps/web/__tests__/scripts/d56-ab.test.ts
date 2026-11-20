@@ -6,6 +6,7 @@ import path from "node:path";
 import { gzipSync } from "node:zlib";
 import {
   CEILING,
+  CORRECTNESS_THRESHOLDS,
   GateError,
   IMAGES,
   LIMIT,
@@ -297,9 +298,31 @@ describe("2. every pass is validated before it counts (D56)", () => {
   });
 
   it("refuses a crossed correctness threshold, and takes the 500 ms ceiling as a measurement", () => {
-    expect(gateError(() => validate("main-1", { failedFlag: true })).message).toContain("http_req_failed{kind:page} rate<0.01 was crossed");
+    expect(gateError(() => validate("main-1", { failedFlag: true })).message).toContain("the run's own threshold http_req_failed{kind:page} rate<0.01 was crossed");
     expect(gateError(() => validate("main-1", { failedFlag: null })).message).toContain("has no result");
     expect(validate("main-1", { p95: 650 }).p95).toBe(650);
+  });
+
+  it.each(CORRECTNESS_THRESHOLDS.map((key) => [key, key.includes(ISOLATION_CHECK) ? "a summary in an unknown format" : `the summary has no threshold on ${key}`]))(
+    "refuses a summary without the correctness threshold on %s",
+    (key, message) => {
+      const summary = summaryOf({});
+      delete (summary.metrics as Record<string, { thresholds?: unknown }>)[key].thresholds;
+      const error = gateError(() => validatePass("main-1", recordOf("main-1"), summary, readCsvRows(csvOf({})), validTree));
+      expect(error.verdict).toBe(VERDICTS.noReference);
+      expect(error.message).toContain(message);
+    },
+  );
+
+  it.each([
+    ["crossed", true],
+    ["without a result", null],
+  ])("refuses any other threshold of the run %s, outside the correctness list and the ceiling", (_what, flag) => {
+    const summary = summaryOf({});
+    (summary.metrics["http_reqs{kind:auth,phase:ramp}"] as { thresholds: Record<string, unknown> }).thresholds["count>=0"] = flag;
+    const error = gateError(() => validatePass("main-1", recordOf("main-1"), summary, readCsvRows(csvOf({})), validTree));
+    expect(error.verdict).toBe(VERDICTS.noReference);
+    expect(error.message).toContain("the threshold http_reqs{kind:auth,phase:ramp} count>=0 was crossed");
   });
 
   it("refuses an isolation threshold that contradicts the isolation count: a summary in an unknown format", () => {
@@ -715,6 +738,31 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("the database URL is not the local Supabase stack");
     const log = readFileSync(calls, "utf-8");
+    expect(log).not.toContain("migration");
+    expect(log).not.toContain("docker");
+  });
+
+  it.each([
+    ["database", 'DB_URL="postgresql://postgres:postgres@127.0.0.1:54422/postgres"\nAPI_URL="http://127.0.0.1:54321"'],
+    ["API", 'DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"\nAPI_URL="http://127.0.0.1:54421"'],
+  ])("main-up: fails before it migrates when the PR's checkout sees another Supabase %s", (_what, prStatus) => {
+    const { clone, prHead } = mergeClone(() => {});
+    const base = path.join(tempDir("d56-base-"), "ScaliaHR");
+    expect(runAb(clone, ["tree"], {}, { PR_HEAD: prHead, D56_BASE_DIR: base }).status).toBe(0);
+    const calls = path.join(tempDir("d56-calls-"), "calls");
+    const mainStatus = 'DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"\nAPI_URL="http://127.0.0.1:54321"';
+    const supabase = [
+      `echo "supabase $*" >> ${calls}`,
+      'case "$*" in',
+      `  "status --workdir "*) printf '%s\\n' '${mainStatus.replace("\n", "' '")}' ;;`,
+      `  "status --output env") printf '%s\\n' '${prStatus.replace("\n", "' '")}' ;;`,
+      "esac",
+    ].join("\n");
+    const result = runAb(clone, ["main-up", "build"], { supabase, docker: `echo "docker $*" >> ${calls}` }, { D56_BASE_DIR: base });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('::error::D56: the PR\'s checkout does not see main\'s Supabase stack ("sin referencia")');
+    const log = readFileSync(calls, "utf-8");
+    expect(log).toContain("supabase status --output env\n");
     expect(log).not.toContain("migration");
     expect(log).not.toContain("docker");
   });
