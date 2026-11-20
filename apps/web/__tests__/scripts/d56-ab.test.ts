@@ -25,6 +25,7 @@ import {
   parseListing,
   passLine,
   ratio,
+  ratioLine,
   runAttempt,
   treeRecord,
   validatePass,
@@ -289,6 +290,41 @@ describe("1. the ratio step runs unconditionally and fails the job when it canno
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/^::error::D56: d56-tree\.json is missing.*\("sin referencia"\)$/m);
+  });
+
+  // The ratio step as CI runs it: the four passes' files in load/.out, the script run with the step's env.
+  const runRatio = (w: World, env: Record<string, string> = {}) => {
+    const work = tempDir("d56-ratio-");
+    const out = path.join(work, "load/.out");
+    mkdirSync(out, { recursive: true });
+    for (const [file, bytes] of w.files) writeFileSync(path.join(out, file), bytes);
+    const result = spawnSync(process.execPath, [path.join(REPO, "scripts/d56-ab.mjs"), "ratio"], {
+      cwd: work,
+      encoding: "utf-8",
+      env: cleanEnv({ GITHUB_EVENT_NAME: "pull_request", SCOPE_APPLIES: "true", GITHUB_RUN_ATTEMPT: "1", ...env }),
+    });
+    const ratioFile = path.join(out, "d56-ratio.json");
+    return { result, ratio: existsSync(ratioFile) ? JSON.parse(readFileSync(ratioFile, "utf-8")) : null };
+  };
+
+  it("prints the ratio line and writes d56-ratio.json from four valid passes, on a pull request and on a push", () => {
+    const pr = runRatio(world());
+    expect(pr.result.stderr).toBe("");
+    expect(pr.result.status).toBe(0);
+    expect(pr.result.stdout).toContain('D56-ab: ratio r=1.0000 limit=1.20 main_ms="60.00,60.00" pr_ms="60.00,60.00" scope=applies event=pull_request attempt=1 verdict="within the limit"');
+    expect(pr.ratio).toMatchObject({ r: 1, applies: true, attempt: 1, pass: true, label: null });
+    const push = runRatio(world(), { GITHUB_EVENT_NAME: "push", SCOPE_APPLIES: "" });
+    expect(push.result.status).toBe(0);
+    expect(push.result.stdout).toContain("scope=applies event=push attempt=1");
+    expect(ratioLine(decideIn(world()))).toContain(" event=pull_request ");
+  });
+
+  it("fails the step above the limit, after printing the ratio line and writing d56-ratio.json", () => {
+    const { result, ratio: written } = runRatio(world({ options: { "pr-1": { p95: 80 }, "pr-2": { p95: 80 } } }));
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('D56-ab: ratio r=1.3333 limit=1.20 main_ms="60.00,60.00" pr_ms="80.00,80.00" scope=applies event=pull_request attempt=1');
+    expect(result.stderr).toContain(`::error::D56: r 1.3333 is above 1.2 on the first attempt: one re-run of the docker job is allowed ("${VERDICTS.overFirst}")`);
+    expect(written).toMatchObject({ pass: false, label: VERDICTS.overFirst });
   });
 
   it("fails on a result it cannot compare: an r that is not a number never passes", () => {

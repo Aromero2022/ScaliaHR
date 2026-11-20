@@ -401,7 +401,7 @@ export function decide({ event, scopeApplies, attemptValue, read }) {
 
   const r = mainPresent.length === 2 ? ratio([passes["main-1"].measured.p95, passes["main-2"].measured.p95], [passes["pr-1"].measured.p95, passes["pr-2"].measured.p95]) : NaN;
   const decision = verdict({ event, applies, r, attempt });
-  return { tree, passes, applies, r, attempt, ...decision };
+  return { tree, passes, applies, r, attempt, event, ...decision };
 }
 
 export function ratioLine({ event, applies, r, attempt, verdict: text, passes }) {
