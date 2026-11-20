@@ -417,8 +417,8 @@ Depende de: worker y lib/email (9a), Admin Center con "Ver dato sensible" y el r
 - Programación por reporte; el worker corre cada programación y avisa por el adaptador de correo (D20).
 - Requisito previo: al 2026-11-19 la programación de pg-boss está apagada (D17). Hace falta la migración que declare su cola interna y la decisión de cómo la inserta el worker.
 - Cada corrida revisa de nuevo los permisos y los flags de módulo (D12) de su dueño; sin ellos, no corre. Si se desactiva al usuario dueño, se detienen todas sus programaciones.
-- Propuesta, pendiente de confirmar por el usuario: la corrida no genera filas para los destinatarios; valida al dueño y manda el aviso. El correo solo lleva un enlace a la app (D20), con asunto genérico y sin el nombre del reporte, sus filtros ni sus datos; las filas se calculan al abrir el enlace, con la sesión y los permisos de quien lo abre, nunca con los del dueño ni con un archivo del dueño.
-- Propuesta, pendiente de confirmar por el usuario: destinatarios solo usuarios activos del mismo tenant, sin direcciones externas.
+- Confirmada por el usuario el 2026-11-19: la corrida no genera filas para los destinatarios; valida al dueño y manda el aviso. El correo solo lleva un enlace a la app (D20), con asunto genérico y sin el nombre del reporte, sus filtros ni sus datos; las filas se calculan al abrir el enlace, con la sesión y los permisos de quien lo abre, nunca con los del dueño ni con un archivo del dueño.
+- Confirmada por el usuario el 2026-11-19: destinatarios solo usuarios activos del mismo tenant, sin direcciones externas.
 
 ### Exportación
 
@@ -446,6 +446,7 @@ Depende de: worker y lib/email (9a), Admin Center con "Ver dato sensible" y el r
 - Dónde viven los archivos exportados y por cuánto tiempo (retención, Fase 20); se decide antes de construir la primera exportación.
 - El valor del límite de filas y del tope de la plataforma.
 - Si las columnas enmascaradas pueden usarse para filtrar, ordenar o agrupar, y un tamaño mínimo de grupo en los agregados, para que no se deduzca un dato enmascarado.
+- Destinatarios externos (direcciones fuera del tenant): si se permiten y en qué condiciones. Mientras no se decida, no se permiten.
 
 **Criterio de cierre:** un test contra la base local compara, por cuenta y con los módulos encendidos y apagados, las filas de cada reporte estándar, de su exportación en los tres formatos y de lo que abre el enlace de un reporte programado con lo que `can()` y RLS le dejan ver a esa cuenta. Un archivo pedido por otra cuenta se rechaza al descargarlo, sin "Ver dato sensible" los campos sensibles salen enmascarados y cada exportación deja una entrada en la bitácora sin los valores.
 

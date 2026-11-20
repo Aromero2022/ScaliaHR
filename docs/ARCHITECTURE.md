@@ -4121,18 +4121,18 @@ Neither the UI nor the public API (Phase 13) accepts SQL.
 - A scheduled run re-checks its owner's permissions and module flags every
   time; without them it does not run. Deactivating the owner stops all of the
   owner's schedules.
-- Proposal, pending the user's confirmation ("propuesta, pendiente de confirmar
-  por el usuario"): a scheduled run produces no rows for its recipients; it
-  checks the owner and sends the notice. The email carries only a link to the
+- Confirmed by the user on 2026-11-19 ("Confirmada por el usuario el
+  2026-11-19"): a scheduled run produces no rows for its recipients; it checks
+  the owner and sends the notice. The email carries only a link to the
   app's origin (D20), with a generic subject and no report name, filter values
   or data. The rows
   are computed when the link is opened, with the session and permissions of
   whoever opens it, never the owner's and never from a file made for the
   owner, so a recipient who sees fewer employees never receives the owner's
   rows.
-- Proposal, pending the user's confirmation ("propuesta, pendiente de confirmar
-  por el usuario"): recipients are active users of the same tenant; no
-  external addresses.
+- Confirmed by the user on 2026-11-19 ("Confirmada por el usuario el
+  2026-11-19"): recipients are active users of the same tenant; no external
+  addresses.
 - Prerequisite: cron scheduling is off in the worker today (D17). Scheduled
   reports need the migration that declares pg-boss's internal
   `__pgboss__send-it` queue and the decision on how the worker may insert it.
@@ -4187,6 +4187,8 @@ Mailpit (D20). No paid service is part of 22b.
 - Also open: the value of the row limit and of the platform cap, and whether
   masked columns may be used to filter, sort or group, with a minimum group
   size for aggregates, so a masked value cannot be inferred.
+- Also open: external recipients (addresses outside the tenant), whether they
+  are allowed and under what conditions. Until 22b decides, they are not.
 
 **Checks (in Phase 22b):** a test against the local database compares, per
 account and with the modules on and off, the rows of each standard report, of
