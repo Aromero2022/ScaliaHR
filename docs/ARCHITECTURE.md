@@ -2053,6 +2053,9 @@ machine):**
       verification table writes the second as "no aplica (sin cambios en la
       imagen)". If HEAD is not the pull request's merge commit, or `git diff`
       fails, the step fails the job instead of picking an answer.
+    - Since D56 the step also writes `applies=true` or `applies=false` to its
+      output. `main`'s k6 passes are skipped only on `false`, and D56's ratio
+      step checks that verdict against the diff and against the PR's images.
   - **Noise band (after 9c PR 6c, the user's choice among three variants):**
     it replaces the three-run baseline and the 20 % limit above. With them,
     #73 and #74, whose images had the same code as `main`'s, blocked in two
@@ -2060,6 +2063,10 @@ machine):**
     the main loop reads the steady-state p95 from the `docker` job's log of
     each run and fills the pull request's verification table. No script
     computes the band.
+    - Since D56 (2026-11-20) the gate is the A/B ratio with `main` on the
+      same runner, computed by `scripts/d56-ab.mjs`. This band stays for five
+      `main` runs as "banda global (informativa)", without blocking, and is
+      then dropped from the verification table (D56).
     - Baseline: the median of the steady-state p95 of the last five CI runs
       on `main`.
     - The last five runs: the latest completed CI runs on `main` whose
@@ -2172,6 +2179,9 @@ machine):**
       not for the limit. It is informational, and its numbers appear only in
       its "D36-diag:" lines (`second pass`, and `sign-ins` and `requests`
       with `pass=second`) and in the artifact.
+      - Since D56 the second pass is also `pr-2` of the A/B ratio, which
+        replaces the band as the gate. For the band, informational during
+        D56's transition, it still never counts.
     - CSV transition (pending the user's decision): since D54 the first pass
       writes a CSV. The baseline mixes `main` runs without and with the CSV
       until there are five `main` runs with it. During that transition D36
@@ -3960,6 +3970,9 @@ those pull requests), and why `main`, which only has first attempts, gave
 the D36 investigation: instrumentation only. Part B (warm-up, window, `HOLD`,
 baseline) is a later decision. Phase 9c, before its PR 6d (`motion/react`,
 ROADMAP).
+- Part B is D56 (2026-11-20): the gate is now the A/B ratio of four k6 passes
+  on the same runner, `main`, PR, PR, `main`, and this second pass is the PR's
+  second one (`pr-2`).
 
 **What does not change:** the window, `RAMP`, `HOLD`, the phase rule, the
 thresholds, the noise band and its limits, and the number D36 reads: the
@@ -3997,6 +4010,8 @@ and the rollback drill, still skip after a failure.)
       has a threshold of its own (`rate==1`, D36), so a single page with
       another tenant's employees fails the first pass, and the job, within
       what the check sees (D36).
+    - Since D56 the ratio step fails the job when any of the four passes,
+      this one included, has no isolation count (D56, condition 3).
 
 **The lines** (`scripts/d36-diag.mjs`), each one for one possible cause.
 `diagLine` refuses any line off the grammar (a closed list of topics,
@@ -4299,6 +4314,304 @@ its requester is refused, sensitive fields come out masked without "Ver dato
 sensible", each export leaves one audit entry without values, and the static
 rate-limit and zod coverage tests (D31, D39) include the new actions and
 routes.
+
+---
+
+## D56 — The k6 Gate as an A/B Ratio with `main` on the Same Runner
+
+**Decision:** the `docker` job compares the pull request with `main` on the
+same runner, in four k6 passes in the order `main`, PR, PR, `main` (ABBA), and
+computes `r = exp(mean(ln p95 of the PR's two passes) − mean(ln p95 of main's
+two passes))` from the steady-state page p95 of each pass. A pull request blocks when r is
+above 1.20 on the first attempt and on the one re-run of the `docker` job.
+`scripts/d56-ab.mjs` computes r and decides in the step "D56 A/B ratio of the
+four k6 passes"; nobody reads it off the log by hand. It replaces the noise
+band as D36's comparison with `main`. This is part B of the D36 investigation
+(D54), option C, approved by the user on 2026-11-20 in the ABBA order. Phase
+9c, before its PR 6d.
+
+**Why:** the p95 follows the runner's CPU model, and a pull request does not
+choose its runner. D54 measured 46.34–61.61 ms on Intel Xeon 6975P-C and
+94.92–130.79 ms on AMD EPYC 7763 and Intel Xeon Platinum 8573C.
+- A band built from `main` runs on other runners blocked #79 because of the
+  hardware.
+- It also lets through any regression smaller than the gap between CPU models.
+- On one runner and one image the passes are much closer. In the 13 attempts
+  with both D54 passes (#79, #80, #81 and `main`, through bdccf77),
+  ln(second/first) has a mean of +0.0046 and a standard deviation of 0.1005.
+  That is the A/A noise.
+
+**Unchanged:**
+- The 500 ms ceiling, which is the D36 step's own threshold and still fails
+  the job.
+- The isolation threshold `rate==1` (D36), now required in all four passes.
+- The docs-only exemption (D36, since 9c PR 6c).
+- The number the old rule reads: the `{ kind:page,phase:steady }` line of the
+  D36 step. It is still the only such line in the job's log.
+
+**The four passes:**
+
+| Pass | Images | Stack when k6 starts | Step | Summary, CSV, k6 output |
+|---|---|---|---|---|
+| `main-1` | `main`'s, `:base` | fresh | "Main's first k6 pass (D56 main-1)", before the PR's `local:up` | `summary-main-1.json`, `requests-main-1.csv.gz`, `k6-main-1.txt` |
+| `pr-1` | the PR's, `:local` | after the e2e | "k6 load test, short run (D36)" | `summary.json`, `requests-first.csv.gz`, the log |
+| `pr-2` | the PR's, `:local` | after `pr-1` | the D54 second pass | `summary-second.json`, `requests-second.csv.gz`, `second-pass.txt` |
+| `main-2` | `main`'s, `:base`, not rebuilt | fresh | "Main's second k6 pass (D56 main-2)", after the rollback drill | `summary-main-2.json`, `requests-main-2.csv.gz`, `k6-main-2.txt` |
+
+- "Main's tree at HEAD^1 (D56)" runs first, right after the Supabase images
+  are restored. It creates `main`'s worktree and records the tree.
+- "The PR's k6 passes for D56 (pr-1, pr-2)" runs after the D54 isolation step
+  and records the PR's passes while their containers still run. A broken PR
+  pass fails the job there, before `main-2` is spent.
+- HEAD^1 depends on the event:
+  - on a pull request it is `main`, the first parent of GitHub's merge commit.
+    The tree step checks that HEAD^2 is the pull request's head, as the D36
+    scope step does;
+  - on a push it is the previous commit of `main`.
+- Each stack starts from nothing:
+  - Before `main-2`, and after `main-1` (so the PR's `local:up` starts as it
+    did before D56), the running stack is taken down. That means
+    `docker compose down --remove-orphans`, then `supabase stop --no-backup`,
+    which deletes its volumes.
+  - A check then fails the step if anything is left: a `supabase_*` or
+    `scaliahr-*` container, a `supabase_*` volume, a `supabase_network_*`
+    network, or anything answering on port 3000.
+
+**`main`'s stack is built with `main`'s files** (`scripts/d56-ab.sh`):
+- The worktree of HEAD^1 lives under `$RUNNER_TEMP/d56/`, in a folder with the
+  checkout's name.
+  - The Supabase CLI names a local stack after its folder, because
+    `supabase/config.toml` has no `project_id`.
+  - The same name gives the same containers and ports, which
+    `scripts/load-test.sh` finds from the PR's checkout.
+  - `main-up` checks this: both `supabase status` calls must give the same
+    database URL and API URL.
+- These come from the worktree:
+  - the migrations and `seed.sql` (`supabase start` and `migration up --local`,
+    both with `--workdir`);
+  - `.env.docker.example` and `scripts/set-local-role-passwords.mjs`;
+  - `docker-compose.yml` and both Dockerfiles.
+- The local-database guard runs before any migration.
+- `main`'s images are tagged `scaliahr-web:base` and `scaliahr-worker:base`
+  (`scripts/d56-main-images.compose.yml`). They never take `:local` or
+  `:previous`, which the PR's `local:up` and the rollback drill use.
+- `main-2` reuses those images without rebuilding them. It first checks that
+  they exist and that they were built with the same anon key, which is a build
+  argument of the web image.
+- The steps mirror `scripts/local-up.sh`: network and Mailpit discovery, the
+  revision label, the port (127.0.0.1:3000), `/api/health`, and the worker's
+  `system.ping` and email smoke tests. A test maps each log line of
+  `local-up.sh` to its counterpart, so a new step there makes it fail.
+- From the PR, only two things are used:
+  - the k6 harness (`load/**`, `scripts/load-test.sh`);
+  - the step's load settings.
+
+  Each pass's "D56-ab: pass" line prints both: the harness as a hash of those
+  files, and the eight settings.
+
+**The same load data before every pass:**
+- Each pass runs `npm run load:test`. Its seed deletes the load tenants
+  (`load-*`), their rows and the `@load.scaliahr.test` Auth accounts, then
+  creates them again. So all four passes start with the same load data.
+- The seed copies the demo tenant's RBP template (groups, roles, permissions
+  and grants), which comes from `seed.sql` on both stacks.
+- The e2e leaves residue, and only on the PR's stack, before `pr-1`:
+  - It changes the demo tenant's job records and skills, user links and
+    memberships, then deletes its accounts and undoes what it saved.
+  - It does not touch the RBP template.
+- That residue does not reach what k6 measures:
+  - the load tenants are created again before every pass;
+  - k6 signs in only with load accounts;
+  - the pages read only the signed-in tenant's rows (RLS).
+- What the residue can change is the size of shared tables, such as
+  `auth.users`, sessions and the audit log. That is part of the difference in
+  stack history (see **Limits**).
+
+**The limit:**
+- r is above 1.20 when ln r is above 0.182.
+- The 0.1005 is the noise of a difference between two passes, so one pass has
+  about 0.1005/√2 = 0.071. With two passes on each side, ln r has the same
+  0.071.
+- Assuming independent passes with normal noise in ln, the estimates are:
+  - A false block on a single attempt about 0.5 % of the time, and on both
+    attempts about 0.003 %.
+  - A regression of +20 % blocks 50 % of the time on one attempt, and 25 %
+    with the confirming re-run.
+  - +30 % blocks 87 % and 76 % of the time; +50 % almost always.
+  - For comparison, the band blocked +50 % 31 % of the time and +100 % 60 % of
+    the time (D36).
+- With 13 pairs, the 95 % interval of the standard deviation is 0.072–0.166.
+  The false block on a single attempt is then somewhere between 0.02 % and
+  6 %, so these figures are an order of magnitude.
+
+**Verdicts** (the label in quotes is the one the verification table uses; a
+failure prints `::error::D56: … ("<label>")`):
+- **Pull request:**
+  - r ≤ 1.20 passes.
+  - r above 1.20 on attempt 1 fails as "sobre el límite en el intento 1", and
+    allows one re-run of the `docker` job.
+  - r above 1.20 on attempt 2 fails as "sobre el límite en el intento 2", and
+    the pull request is blocked.
+  - Attempt 3 or later fails as "tope de una repetición", whatever r is. The
+    cap lives in the script, which reads `GITHUB_RUN_ATTEMPT`; an empty or
+    non-numeric attempt fails.
+- **Push to `main`:**
+  - r is computed against HEAD^1 and reported.
+  - r above 1.20 fails the push CI with an `::error::` as "regresión ya
+    mergeada", a warning that a regression was already merged.
+  - It is not re-run.
+  - The next pull request's verification table reports it.
+- **"sin referencia"** (fails closed): a `main` pass that could not be run or
+  read. Examples: the worktree is not at HEAD^1; Supabase, the migrations, the
+  images or a smoke test failed; k6 exited other than 0 or 99; a file is
+  missing. One re-run of the job is allowed, under the same cap.
+- **"arnés del PR incompatible con main"**: the PR changes `load/**` or
+  `scripts/load-test.sh`, and a `main` pass broke (the seed failed, or k6
+  exited other than 0 or 99).
+  - It is not "sin referencia". It fails the job.
+  - It is resolved only by a user exception documented in the pull request.
+- **"main falla aislamiento"**: a `main` pass showed another tenant's
+  employees. It fails with no ratio.
+- **"el PR falla aislamiento"**: a PR pass showed another tenant's employees.
+- **"pasada del PR inválida"**: a PR pass that is missing or broken. `pr-1`
+  requires the D36 step to pass; `pr-2` requires k6 to exit 0 or 99.
+- **"pasadas no comparables"**: the passes differ in settings, harness,
+  attempt, revision, image, order or summaries.
+- **"solo docs mal clasificado"**: a docs-only pull request with a changed
+  file that is in an image.
+
+**What each pass must hold** (checked in `record`, when the pass is recorded,
+and again in `ratio`):
+- k6 exited 0 or 99. For `pr-1`, the D36 step passed.
+- The tenant-isolation count (`root_group.checks`) is present and 0, and the
+  `rate==1` threshold was not crossed. A missing count fails.
+- Each run's own correctness thresholds are present and not crossed: `checks`,
+  `checks{check:no other tenant's employees}` and
+  `http_req_failed{kind:page}`.
+- Every other threshold is not crossed either, except the 500 ms ceiling: that
+  one is the measurement.
+- The steady-state p95 is a number above 0.
+- `vus_max` equals `LOAD_VUS + 3 × SMALL_VUS`.
+- The CSV has at least 500 steady-state page samples (about 940 in CI), and
+  its p95 equals the summary's within 0.001 ms.
+
+**What the passes must share** (checked in `ratio`):
+- The same eight load settings, which are set in the step's `env` (identical
+  in the four steps) and printed.
+- The same harness hash and the same attempt.
+- Images:
+  - the image each pass measured is the id of its tag: `:base` for `main`,
+    `:local` for the PR, for web and for worker;
+  - its revision label is the `git describe` of HEAD^1 or of HEAD;
+  - `main-1` equals `main-2`, `pr-1` equals `pr-2`, and `main`'s differs from
+    the PR's.
+- The ABBA order, read from the first request in each CSV.
+- Four different summaries.
+
+**Docs only:**
+- On a pull request:
+  - `main`'s passes are skipped only when the D36 scope step wrote
+    `applies=false` to its output.
+  - The ratio step has no `if:`. It reads that verdict (`SCOPE_APPLIES`) and
+    checks it against the diff.
+  - It lists the PR's images: every file under `/app` outside `node_modules`
+    and `.next`, and the sha256 of every Markdown file.
+  - It fails as "solo docs mal clasificado" when a changed file is in an image:
+    by its path, or, for Markdown, by its content before or after the change.
+  - With the scope "aplica" and `main`'s passes missing, it fails as "sin
+    referencia".
+- On a push there is no scope step:
+  - `main`'s passes always run, and the scope comes from the diff.
+  - The listings of `main`'s and the PR's images decide. A changed file found
+    in an image makes the comparison apply.
+- Each listing runs offline, read-only and without capabilities except
+  `DAC_READ_SEARCH`. It must contain a file that every image has, so an empty
+  or failed listing never reads as "no Markdown".
+
+**Closing conditions and their tests** (`apps/web/__tests__/scripts/d56-ab.test.ts`;
+each test fails when its condition is broken):
+
+| # | Condition | Where | Tests |
+|---|---|---|---|
+| 1 | The ratio step has no `if:` and no `continue-on-error`, and fails when it cannot compute r | `ci.yml`, `decide()`, `verdict()` | "1. the ratio step runs unconditionally…" |
+| 2 | Each pass is validated: k6 0/99, enough steady samples, the CSV matching the summary, the run's own thresholds | `validatePass()` | "2. every pass is validated…" |
+| 3 | A missing isolation count fails, in every pass | `validatePass()` | "3. a missing tenant-isolation count fails…" |
+| 4 | Each pass's web and worker image is its tag's; `main` ≠ PR | `record`, `decide()`, `d56-main-images.compose.yml` | "4. the image each pass measured" |
+| 5 | The worktree is exactly at HEAD^1, and its SHA is printed | `d56-ab.sh tree`, `treeRecord()` | "5. main's worktree is exactly HEAD^1", "tree: …" |
+| 6 | A broken `main` pass is "sin referencia" and fails closed; one re-run, enforced in the script | `brokenRunVerdict()`, `verdict()`, `runAttempt()` | "6. a broken main pass fails closed…" |
+| 7 | Each pass reads its own files, named after the pass | `PASSES`, `validatePass()`, `decide()` | "7. each pass reads its own files" |
+| 8 | The same load settings in every pass, from the PR's `ci.yml`, printed | `loadParams()`, `passLine()`, `decide()` | "8. the same load settings in every pass, printed" |
+| 9 | `timeout-minutes` on the `docker` job | `ci.yml` | "9. the docker job has a time limit" |
+| 10 | Docs only never exempts a file that is in an image | `filesInImages()`, `decide()` | "10. a docs-only diff does not exempt a file that is in an image" |
+
+- More tests cover:
+  - pull requests and pushes, scope "aplica" without `main`'s passes included;
+  - `main`'s own files and the `local-up.sh` mirror;
+  - `scripts/d56-ab.sh` run as CI runs it, against a real merge clone with fake
+    `supabase`, `docker`, `npm` and `curl`;
+  - the artifact list.
+- The mutations that break each condition are checked by the pull request
+  that adds D56 and listed in its verification table.
+
+**Lines:**
+- Every command prints "D56-ab:" lines in the log and in the job summary:
+  - `tree`: both SHAs and revisions, the diff's file count, and whether the
+    harness changed;
+  - `pass`, one per pass: pass, role, stack, `p95_steady_ms`, samples, k6's
+    exit code, web image, revision, CPU, harness, the eight settings and the
+    attempt;
+  - `images`;
+  - `ratio`: r, the limit, both pairs of p95, the scope, the event, the attempt
+    and the verdict.
+- `abLine` refuses a line that carries `kind:page,phase:steady` or `p(95)`, so
+  the D36 step's line stays the only one in the job's log.
+
+**Artifact:** `d56-ab-attempt-<n>`, kept 14 days.
+- It holds the tree, the diff, the record of each pass, both image listings,
+  the ratio, and `main`'s summaries, CSVs and k6 output. The PR's pass files
+  are in D54's artifact.
+- It is an explicit list, never `load/.out` whole: `accounts.json` holds the
+  load accounts' emails and their shared password.
+- A failed upload never fails the job.
+
+**Cost:** two more k6 passes, one build of `main`'s images and two more
+Supabase starts.
+- Estimated at about +9 min per run of the `docker` job, which took
+  11–19 min. The pull request that adds D56 measures the real cost in its CI.
+- `timeout-minutes: 45` fails a hung job instead of letting it run for 6 h.
+- The repository is public, so Actions minutes cost nothing (Principle 8).
+
+**Transition:**
+- For the five `main` runs after D56's merge, the verification table keeps
+  the D36 band as "banda global (informativa)", and then drops it.
+- During those runs, "sin línea base", the drift control and "main sobre el
+  límite" are informational too.
+- The pull request that adds D56 is still gated by the old rule, reported as
+  before, and also by its own ratio step.
+
+**Limits:**
+- **Stack history.** `main`'s passes run on a fresh stack, `pr-1` after the
+  e2e, and `pr-2` after `pr-1`. If a stack's history changes the p95, r
+  carries that as a bias.
+  - The 13 A/A pairs (after the e2e, then after the first pass) show no
+    systematic difference: the second pass was faster in 7 of them.
+  - A fresh stack against one after the e2e has not been measured. The first
+    D56 runs measure it, `main`'s included.
+- **The PR's harness on `main`'s schema.** `main`'s passes run the PR's seed
+  and `load/pages.js` against `main`'s schema. A PR whose harness needs its
+  own migrations breaks the `main` passes, which gives "arnés del PR
+  incompatible con main".
+- **A change in the harness.** The harness is the same in all four passes, so
+  a harness change that slows both sides equally does not show in r.
+- **Slow creep.** Each pull request is compared with its own `main`, so a
+  creep of less than 20 % per pull request adds up without blocking. A push
+  compares only with the previous commit. The full local run (1,150 users,
+  `docs/RUNBOOK.md`) at the close of each phase remains the check for creep.
+- **Markdown not listed.** Markdown inside `node_modules` or `.next` is not
+  listed, so a changed Markdown file copied there would go unseen.
+- **New failures.** The job now also fails when `main`'s stack cannot be
+  built or run ("sin referencia"), which did not exist before. That is the
+  cost of failing closed.
 
 ---
 

@@ -187,6 +187,7 @@ La prueba deja los tenants `load-*` en la base local; la siguiente corrida o `su
 ### Qué detecta el CI y qué queda para esta corrida
 
 El job `docker` de CI corre una versión corta (75 usuarios, 40 s a carga completa) en cada PR a `main`. La comparación con `main` (D36) se hace a mano: el loop toma el p95 del log del job y la anota en la tabla de verificación del PR. Ningún script calcula la banda.
+Desde D56 el bloqueo es la razón A/B con `main` en el mismo runner: el job corre cuatro pasadas de k6 (`main`, PR, PR, `main`), la pila de `main` sale de un worktree de HEAD^1 con los archivos de `main` y del PR solo se toman el arnés de k6 y los parámetros de carga, y el paso «D56 A/B ratio of the four k6 passes» calcula r = exp(media de ln p95 del PR − media de ln p95 de `main`). Bloquea si r pasa de 1.20 en el intento 1 y en la única repetición; en un push a `main` falla una vez, sin repetición, como «regresión ya mergeada». Las líneas `D56-ab:` del log y el artifact `d56-ab-attempt-<n>` traen el p95, la imagen y la CPU de cada pasada. La banda de abajo queda como «banda global (informativa)» durante 5 corridas de `main` y después se retira.
 
 - Línea base: la mediana del p95 en estado estable de las últimas 5 corridas de `main`.
 - Límite: el mayor entre mediana × 1.2 y mediana + 2 × MAD de esas 5 corridas (MAD sin escalar).

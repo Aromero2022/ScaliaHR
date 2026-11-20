@@ -267,6 +267,9 @@ jobs:
     runs-on: ubuntu-24.04
     # Builds both images and runs them against Supabase local. Nothing is pushed:
     # there is no registry login and no push step (publishing is Phase 23).
+    # D56: the job took 11–19 min before main's stack and its two k6 passes
+    # (about +9 min); a job that hangs fails here instead of running for 6 h.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -282,6 +285,7 @@ jobs:
       # .claude/**, the images are main's and k6 is not compared with main's
       # median. A failure here fails the job: it never falls back to either answer.
       - name: Does the diff change the images? (D36)
+        id: scope
         if: github.event_name == 'pull_request'
         env:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
@@ -313,6 +317,35 @@ jobs:
           mode: restore
           cli-version: ${{ env.SUPABASE_CLI_VERSION }}
           services-excluded: ${{ env.SUPABASE_EXCLUDE }}
+
+      # D56: the k6 gate compares the PR with main on this same runner, in four
+      # passes: main, PR, PR, main. Main's stack comes from a worktree of HEAD^1
+      # (main on a pull request, the previous commit on a push), with main's own
+      # files; only the k6 harness and the load settings are the PR's.
+      - name: Main's tree at HEAD^1 (D56)
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/d56-ab.sh tree
+
+      # D56: main's first pass, on a fresh stack, then its data deleted so the
+      # PR's stack below starts as it did before D56. Skipped only when the scope
+      # step said the diff cannot change the images; the ratio step then checks
+      # that claim against the images.
+      - name: Main's first k6 pass (D56 main-1)
+        if: steps.scope.outputs.applies != 'false'
+        run: |
+          bash scripts/d56-ab.sh main-up build
+          bash scripts/d56-ab.sh k6 main-1
+          bash scripts/d56-ab.sh down
+        env:
+          LOAD_BIG_USERS: "60"
+          LOAD_SMALL_USERS: "5"
+          LOAD_VUS: "60"
+          SMALL_VUS: "5"
+          RAMP: "20s"
+          HOLD: "40s"
+          THINK_MIN: "2"
+          THINK_MAX: "6"
 
       - name: Build images and start the local stack (npm run local:up)
         run: npm run local:up
@@ -394,6 +427,7 @@ jobs:
       # D54: k6 also writes every sample to requests-first.csv.gz (the artifact
       # below), to recompute the p95 with other windows without new runs.
       - name: k6 load test, short run (D36)
+        id: d36_first
         run: npm run load:test -- --out "csv=fileName=/out/requests-first.csv.gz,timeFormat=unix_milli"
         env:
           LOAD_BIG_USERS: "60"
@@ -452,6 +486,7 @@ jobs:
           start="$(date +%s)"
           code=0
           LOAD_SUMMARY=summary-second.json npm run load:test -- --out "csv=fileName=/out/requests-second.csv.gz,timeFormat=unix_milli" > load/.out/second-pass.txt 2>&1 || code=$?
+          printf '%s\n' "$code" > load/.out/k6-exit-second.txt # D56: this pass is also pr-2 of the A/B ratio
           status=0
           node scripts/d36-diag.mjs second-pass load/.out/summary-second.json "$code" "$(( $(date +%s) - start ))" load/.out/second-pass.txt || status=1
           node scripts/d36-diag.mjs sign-ins load/.out/summary-second.json second || status=1
@@ -494,20 +529,43 @@ jobs:
       # code. If the second pass left no readable count, this step warns. The
       # first pass has its own isolation threshold (rate==1, load/pages.js),
       # which fails the D36 step on a single such page, but it is another run:
-      # it does not cover the second.
+      # it does not cover the second. D56: the ratio step needs the count of all
+      # four passes and fails the job when one is missing.
       - name: Tenant isolation held in the second k6 pass (D54)
         if: ${{ !cancelled() && steps.second_pass.outcome != '' && steps.second_pass.outcome != 'skipped' }}
         env:
           FAILED: ${{ steps.second_pass.outputs.tenant_isolation_failed }}
         run: |
           if [ -z "$FAILED" ]; then
-            echo "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step), so its tenant isolation is unverified; in this job only the first pass could fail on isolation (its own threshold, rate==1)"
+            echo "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step), so this step cannot check it; the D56 ratio step fails the job without it"
           elif [ "$FAILED" != "0" ]; then
             echo "::error::D36-diag: $FAILED page(s) of the second k6 pass showed another tenant's employees"
             exit 1
           else
             echo "No page of the second k6 pass showed another tenant's employees."
           fi
+
+      # D56: the PR's two passes, recorded while their containers still run (the
+      # export and the rollback drill come next): the D36 step's pass is pr-1, the
+      # D54 second pass is pr-2. Each is checked here, so a broken one fails the
+      # job before main's second pass is spent. The listing of the PR's images
+      # serves the docs-only rule: a changed file that is in an image counts.
+      - name: The PR's k6 passes for D56 (pr-1, pr-2)
+        env:
+          LOAD_BIG_USERS: "60"
+          LOAD_SMALL_USERS: "5"
+          LOAD_VUS: "60"
+          SMALL_VUS: "5"
+          RAMP: "20s"
+          HOLD: "40s"
+          THINK_MIN: "2"
+          THINK_MAX: "6"
+          PR_FIRST_OUTCOME: ${{ steps.d36_first.outcome }}
+        run: |
+          case "$PR_FIRST_OUTCOME" in success) first=0 ;; *) first="d36-step-${PR_FIRST_OUTCOME:-unknown}" ;; esac
+          node scripts/d56-ab.mjs record pr-1 "$first"
+          node scripts/d56-ab.mjs record pr-2 "$(cat load/.out/k6-exit-second.txt)"
+          node scripts/d56-ab.mjs images pr
 
       - name: Per-tenant export through the running worker (D23)
         run: |
@@ -524,6 +582,67 @@ jobs:
             previous="$(docker image inspect -f '{{.Id}}' "${image}:previous")"
             [ "$running" = "$previous" ] || { echo "::error::${image} is not running the :previous image"; exit 1; }
           done
+
+      # D56: main's second pass, after the PR's stack is stopped and its data
+      # deleted: main's images (:base, not rebuilt) on a fresh stack again. Then
+      # main's images are listed too, for the docs-only rule on a push.
+      - name: Main's second k6 pass (D56 main-2)
+        if: steps.scope.outputs.applies != 'false'
+        run: |
+          bash scripts/d56-ab.sh down
+          bash scripts/d56-ab.sh main-up reuse
+          bash scripts/d56-ab.sh k6 main-2
+          node scripts/d56-ab.mjs images main
+        env:
+          LOAD_BIG_USERS: "60"
+          LOAD_SMALL_USERS: "5"
+          LOAD_VUS: "60"
+          SMALL_VUS: "5"
+          RAMP: "20s"
+          HOLD: "40s"
+          THINK_MIN: "2"
+          THINK_MAX: "6"
+
+      # D56: the gate. r = exp(mean ln p95 of the PR's passes − mean ln p95 of
+      # main's), from the four passes' own files. On a pull request r above 1.20
+      # fails the job, and blocks when the one re-run of the job is above too; a
+      # third attempt never passes. On a push r above 1.20 fails the job once, as
+      # a regression already merged. It runs unconditionally, with no
+      # continue-on-error: when it cannot compute or check r, the job fails.
+      - name: D56 A/B ratio of the four k6 passes
+        env:
+          SCOPE_APPLIES: ${{ steps.scope.outputs.applies }}
+        run: node scripts/d56-ab.mjs ratio
+
+      # D56: an explicit list, never the whole load/.out (accounts.json there
+      # holds the load accounts' emails and their shared password). A failed
+      # upload never fails the job.
+      - name: D56 artifact
+        if: always() && hashFiles('load/.out/d56-tree.json') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: d56-ab-attempt-${{ github.run_attempt }}
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            load/.out/d56-tree.json
+            load/.out/d56-diff.bin
+            load/.out/d56-pass-main-1.json
+            load/.out/d56-pass-pr-1.json
+            load/.out/d56-pass-pr-2.json
+            load/.out/d56-pass-main-2.json
+            load/.out/d56-images-pr.json
+            load/.out/d56-images-main.json
+            load/.out/d56-ratio.json
+            load/.out/summary-main-1.json
+            load/.out/summary-main-2.json
+            load/.out/requests-main-1.csv.gz
+            load/.out/requests-main-2.csv.gz
+            load/.out/k6-main-1.txt
+            load/.out/k6-main-2.txt
+            load/.out/k6-exit-second.txt
+          retention-days: 14
 
       - name: Container logs (on failure)
         if: failure()

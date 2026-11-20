@@ -51,6 +51,8 @@ function main() {
   }
   console.log(verdict);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${verdict}\n`);
+  // D56: main's k6 passes are skipped only on "false", and the ratio step reads the verdict.
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `applies=${applies}\n`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
