@@ -6,6 +6,7 @@ import path from "node:path";
 import { gzipSync } from "node:zlib";
 import {
   DIAG_LINE,
+  ISOLATION_CHECK,
   TOPICS,
   diagLine,
   escapeCommand,
@@ -618,8 +619,10 @@ describe("the diagnostic steps never fail the job, and run when the D36 run fail
     const unknown = runStep(ISOLATION_STEP, {}, { FAILED: "" });
     expect(unknown.status).toBe(0);
     expect(unknown.stdout).toContain(
-      "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step); the first pass tolerates up to 1 % failed checks, so it does not fully cover isolation",
+      "::warning::D36-diag: the second k6 pass left no tenant-isolation count (see its step), so its tenant isolation is unverified; in this job only the first pass could fail on isolation (its own threshold, rate==1)",
     );
+    // The first pass has its own isolation threshold now: ci.yml no longer says it tolerates 1 %.
+    expect(CI).not.toContain("tolerates up to 1 %");
   });
 
   it.each([DIAG_STEP, SECOND_STEP])("%s runs whenever the D36 run left its summary", (name) => {
@@ -854,9 +857,13 @@ interface Recorded {
   requests: { method: string; url: string; params: Record<string, unknown>; tags: Record<string, string> }[];
   sleeps: number[];
   counters: { name: string; value: number; tags: Record<string, string> }[];
+  /** One sample of the `checks` metric per check, tagged with its name, as k6 does. */
+  checks: { passed: boolean; tags: Record<string, string> }[];
 }
-function loadPages({ authStatus = 200, ramp = "20s" } = {}) {
-  const recorded: Recorded = { requests: [], sleeps: [], counters: [] };
+/** `pageBodies`: the bodies of the first pages, in order; later pages get an empty page. */
+function loadPages({ authStatus = 200, ramp = "20s", pageBodies = [] }: { authStatus?: number; ramp?: string; pageBodies?: string[] } = {}) {
+  const recorded: Recorded = { requests: [], sleeps: [], counters: [], checks: [] };
+  const bodies = [...pageBodies];
   const clock = { ms: 0 };
   const stubs = {
     "k6/http": {
@@ -867,7 +874,7 @@ function loadPages({ authStatus = 200, ramp = "20s" } = {}) {
         },
         get: (url: string, params: { tags: Record<string, string> }) => {
           recorded.requests.push({ method: "GET", url, params, tags: params.tags });
-          return { status: 200, body: "<html></html>" };
+          return { status: 200, body: bodies.shift() ?? "<html></html>" };
         },
         cookieJar: () => ({ set: () => undefined }),
       },
@@ -884,7 +891,12 @@ function loadPages({ authStatus = 200, ramp = "20s" } = {}) {
       },
     },
     k6: {
-      check: (res: unknown, checks: Record<string, (r: unknown) => boolean>) => Object.values(checks).every((fn) => fn(res)),
+      // k6 runs every check of the call (no short-circuit) and records each one.
+      check: (res: unknown, checks: Record<string, (r: unknown) => boolean>) => {
+        const results = Object.entries(checks).map(([name, fn]) => ({ passed: fn(res), tags: { check: name } }));
+        recorded.checks.push(...results);
+        return results.every((result) => result.passed);
+      },
       sleep: (seconds: number) => recorded.sleeps.push(seconds),
     },
     "k6/data": { SharedArray: function SharedArray(_name: string, make: () => unknown[]) { return make(); } },
@@ -920,13 +932,14 @@ const inSubmetric = (selector: Record<string, string>, tags: Record<string, stri
 const PAGE_PATHS = ["/dashboard", "/employees", "/employees?page=2", "/employees?q=Empleado%201", "/org-chart", "/performance", "/skills-hub", "/profile"];
 
 describe("load/pages.js: the sign-in phase tag leaves the page p95 alone (D54)", () => {
-  it("keeps the page thresholds, and adds only listing thresholds on sign-ins and retries", () => {
+  it("keeps the page thresholds, and adds listing thresholds on sign-ins and retries and the isolation check's own threshold", () => {
     const { options } = loadPages();
     expect(options.thresholds).toEqual({
       "http_req_duration{kind:page,phase:steady}": ["p(95)<500"],
       "http_req_duration{kind:page,phase:ramp}": ["max>=0"],
       "http_req_failed{kind:page}": ["rate<0.01"],
       checks: ["rate>0.99"],
+      "checks{check:no other tenant's employees}": ["rate==1"],
       "http_reqs{kind:auth,phase:ramp}": ["count>=0"],
       "http_reqs{kind:auth,phase:steady}": ["count>=0"],
       "sign_in_retries{phase:ramp}": ["count>=0"],
@@ -990,6 +1003,92 @@ describe("load/pages.js: the sign-in phase tag leaves the page p95 alone (D54)",
     expect(selected).toHaveLength(3);
     expect(selected.every((request) => request.method === "GET")).toBe(true);
     expect(selected).toEqual(withoutAuthPhase);
+  });
+});
+
+/** A threshold key as k6 v1.8.2 reads it: `metric{key:value,…}`, each key and value trimmed of spaces and quotes. */
+function parseThresholdKey(key: string): { metric: string; selector: Record<string, string> } {
+  const open = key.indexOf("{");
+  if (open === -1) return { metric: key, selector: {} };
+  if (!key.endsWith("}")) throw new Error(`"${key}" opens a submetric it does not close`);
+  const trim = (text: string) => text.trim().replace(/^["']+|["']+$/g, "");
+  const pairs = key
+    .slice(open + 1, -1)
+    .split(",")
+    .filter(Boolean)
+    .map((pair) => {
+      const [name, ...value] = pair.split(":");
+      return [trim(name), trim(value.join(":"))] as const;
+    });
+  return { metric: key.slice(0, open), selector: Object.fromEntries(pairs) };
+}
+
+/**
+ * Whether these Rate samples hold `rate>N` or `rate==N`, the two forms load/pages.js uses
+ * on checks. `null` with no sample: k6 v1.8.2 does not evaluate a submetric without samples.
+ */
+function rateHolds(expression: string, passed: boolean[]): boolean | null {
+  const match = /^rate(>|==)(\d+(?:\.\d+)?)$/.exec(expression);
+  if (!match) throw new Error(`"${expression}" is not a rate threshold this test reads`);
+  if (passed.length === 0) return null;
+  const rate = passed.filter(Boolean).length / passed.length;
+  return match[1] === ">" ? rate > Number(match[2]) : rate === Number(match[2]);
+}
+
+describe("load/pages.js: the isolation check has a threshold of its own, with no tolerance", () => {
+  const ISOLATION_KEY = `checks{check:${ISOLATION_CHECK}}`;
+
+  /** One VU (tenant load-big) that runs `iterations` iterations in steady state; see loadPages for the options. */
+  function run(iterations: number, options: { authStatus?: number; pageBodies?: string[] } = {}) {
+    const loaded = loadPages(options);
+    loaded.clock.ms = 30_000;
+    for (let i = 0; i < iterations; i++) loaded.iteration();
+    const thresholds = Object.entries(loaded.options.thresholds)
+      .filter(([key]) => parseThresholdKey(key).metric === "checks")
+      .map(([key, expressions]) => {
+        const { selector } = parseThresholdKey(key);
+        const passed = loaded.recorded.checks.filter((sample) => inSubmetric(selector, sample.tags)).map((sample) => sample.passed);
+        const results = expressions.map((expression) => rateHolds(expression, passed));
+        return [key, { samples: passed.length, holds: results.includes(null) ? null : results.every(Boolean) }] as const;
+      });
+    return { ...loaded, thresholds: Object.fromEntries(thresholds) };
+  }
+
+  it("selects the isolation check's samples by the check's exact name", () => {
+    // A name that matched no check would leave the submetric without samples,
+    // and k6 v1.8.2 does not evaluate an empty submetric: it would pass unseen.
+    expect(parseThresholdKey(ISOLATION_KEY)).toEqual({ metric: "checks", selector: { check: ISOLATION_CHECK } });
+    const { thresholds } = run(10);
+    expect(Object.keys(thresholds).sort()).toEqual(["checks", ISOLATION_KEY].sort());
+    // One isolation sample per page; the general one also counts "page 200" and the sign-in.
+    expect(thresholds[ISOLATION_KEY]).toEqual({ samples: 10, holds: true });
+    expect(thresholds.checks).toEqual({ samples: 21, holds: true });
+  });
+
+  it.each(["LoadAlfa", "LoadBravo", "LoadCharlie"])(
+    "fails on a single page with %s's employees, which the general threshold alone lets through",
+    (tag) => {
+      const { thresholds, recorded } = run(150, { pageBodies: [`<html>${tag}</html>`] });
+      // 1 failed check of 301 is 99.67 % passed: over the general 99 %.
+      expect(thresholds.checks).toEqual({ samples: 301, holds: true });
+      expect(thresholds[ISOLATION_KEY]).toEqual({ samples: 150, holds: false });
+      // The page is still one more sample of the submetric D36 reads, like any other.
+      const steady = recorded.requests.filter((request) => inSubmetric({ kind: "page", phase: "steady" }, request.tags));
+      expect(steady).toHaveLength(150);
+    },
+  );
+
+  it("holds when no page shows another tenant's employees, the VU's own tenant included", () => {
+    const { thresholds } = run(150, { pageBodies: ["<html>LoadGrande</html>"] });
+    expect(thresholds.checks).toEqual({ samples: 301, holds: true });
+    expect(thresholds[ISOLATION_KEY]).toEqual({ samples: 150, holds: true });
+  });
+
+  it("leaves the isolation submetric empty, so not evaluated, when every sign-in fails; the general threshold fails then", () => {
+    const { thresholds, recorded } = run(5, { authStatus: 400 });
+    expect(recorded.requests.every((request) => request.method === "POST")).toBe(true);
+    expect(thresholds[ISOLATION_KEY]).toEqual({ samples: 0, holds: null });
+    expect(thresholds.checks).toEqual({ samples: 5, holds: false });
   });
 });
 

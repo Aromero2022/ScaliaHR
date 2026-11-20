@@ -1935,6 +1935,57 @@ digest, open source) against the local Docker stack and gates on page p95 <
 - **Thresholds:** page p95 < 500 ms in steady state, < 1 % failed requests,
   > 99 % checks. Ramp-up, with 1,150 bcrypt sign-ins in two minutes, is
   reported but not gated.
+  - **Isolation threshold of the first pass (#81, 2026-11-20, after D54):**
+    the isolation check also has a threshold of its own,
+    `checks{check:no other tenant's employees}` at `rate==1`. A single page
+    that shows another tenant's employees makes k6 exit 99, which fails the
+    step "k6 load test, short run (D36)" and the job. Before, only the
+    general `checks` threshold (> 99 %) covered it, and that one lets up to
+    1 % of failed checks through, isolation ones included.
+    - Unchanged: the general `checks` threshold and the number D36 reads,
+      the `{ kind:page,phase:steady }` line of that step's log. The new
+      threshold is on another metric, `checks`, so the `http_req_duration`
+      submetric D36 reads holds the same samples. In k6's summary (seen in
+      the local runs below) it adds, under `checks` in the THRESHOLDS
+      section, the submetric `{check:no other tenant's employees}` and its
+      `rate==1` line; the line D36 reads is in the HTTP section, as before.
+    - What the check sees: in the HTML of each page k6 opens (the 8 routes
+      of `load/pages.js`), the tags of the load tenants' employees
+      (`LoadGrande`, `LoadAlfa`, `LoadBravo`, `LoadCharlie`), except the
+      tag of the VU's own tenant. A page that
+      does not answer 200 (a redirect to the login, an error) passes it
+      unless its body has one of those tags; such a page fails the "page
+      200" check, which counts only in the general threshold's 1 %. It is a
+      check under load, not the tenant-isolation guarantee, which rests on
+      RLS and its tests against the local database.
+    - The second pass (D54) runs the same `load/pages.js`, so it has the
+      threshold too: a leaked page makes it exit 99, which it reports, and
+      its isolation count still fails the job in its own step.
+    - The check must keep its exact name: a threshold whose selector matches
+      no check gets no sample, and k6 v1.8.2 does not evaluate a submetric
+      without samples, so it would pass unseen. With no page at all (every
+      sign-in failed) the submetric is empty too; the general `checks`
+      threshold fails the run then, since its only samples are failed
+      sign-ins.
+    - Unit tests (`apps/web/__tests__/scripts/d36-diag.test.ts`) run
+      `load/pages.js` with stubbed k6 modules that record one sample per
+      check with its `check` tag, and read the selector from the threshold
+      itself: one sample per page; one leaked page in 150, with the tag of
+      each of the three other tenants in turn, leaves the general threshold
+      at 99.67 % (it holds) and fails the new one; both hold with no leak or
+      with the VU's own tenant's tag; with every sign-in failing the
+      submetric has no sample and the general threshold fails. With
+      `main`'s `load/pages.js` the tests of the new threshold fail.
+    - Checked locally, not stored in the repo: k6 v1.8.2 (checked against
+      the release's checksum) against a stub server whose first page
+      carries two other load tenants' tags. With `main`'s `load/pages.js`
+      k6 exits 0 (1 failed check of 1,906, so the general `checks` holds);
+      with this one it exits 99 (the submetric at 99.89 %, 1 failed of 948;
+      the general `checks` at 99.94 % as k6 prints it, 1 of 1,910); without
+      the leak it
+      exits 0. The submetric's passes and fails equal those of the check in
+      `root_group.checks`, and the log keeps the same two lines with
+      `kind:page,phase:steady` (the threshold and the HTTP one).
 
 **Results (4 vCPU and 15 GB, with the whole stack and k6 on the same
 machine):**
@@ -3942,6 +3993,10 @@ and the rollback drill, still skip after a failure.)
     its summary), that step only warns. The first pass does not fully cover
     isolation then: its checks threshold (> 99 %) tolerates up to 1 % failed
     checks, isolation ones included.
+    - Since #81 the first pass has no tolerance either: its isolation check
+      has a threshold of its own (`rate==1`, D36), so a single page with
+      another tenant's employees fails the first pass, and the job, within
+      what the check sees (D36).
 
 **The lines** (`scripts/d36-diag.mjs`), each one for one possible cause.
 `diagLine` refuses any line off the grammar (a closed list of topics,
@@ -4083,6 +4138,52 @@ cold start; more runs with D36-diag are needed to confirm it.
 - The p95 did not follow the seconds from healthy to k6 (392.8, 483.1, 273.9
   and 277.2 s): the two runs with the highest first-pass p95 (AMD, 98.13 and
   112.8 ms) had the fewest seconds (273.9 and 277.2 s).
+- Correction (#81, 2026-11-20) to the bullet above: its argument does not
+  hold.
+  - On the four attempts it quotes (dd61252 and 0342b31, before #79's
+    closing commit cb50dd3), that the two with the highest p95 had the
+    fewest seconds is what a cold start would predict, not evidence against
+    it. (Across the 12 attempts below it no longer holds: the first attempt
+    of f70d96e, in #80, had 130.79 ms at 283.8 s.)
+  - The seconds cannot separate a cold start from the hardware: on the 12
+    attempts with D36-diag so far (#79, #80 and `main`, table below) they
+    go with the runner's CPU model. 270.4–285.8 s on every attempt on AMD
+    EPYC 7763 and Intel Xeon Platinum 8573C, 373.9–692.2 s on Intel Xeon
+    6975P-C, and 220.7 s on the one attempt on AMD EPYC 9V45.
+  - The p95 goes with the CPU model. Fast: Intel Xeon 6975P-C (46.34–61.61
+    ms, six attempts) and AMD EPYC 9V45 (53.38 ms, one attempt, the one
+    with the fewest seconds of all). Slow: AMD EPYC 7763 (98.13–130.79 ms,
+    four attempts) and Intel Xeon Platinum 8573C (94.92 ms, one attempt).
+    Within Intel Xeon 6975P-C (six attempts) the p95 shows no clear trend
+    with the seconds: 46.34 ms at the fewest (373.9 s), 57.14 ms at the
+    most (692.2 s).
+  - The second pass, warm, on the same runner, never moved an attempt out
+    of its CPU group: 43.96–59.00 ms on the fast models and 93.29–133.77 ms
+    on the slow ones, against 46.34–61.61 and 94.92–130.79 ms in the first
+    pass. It was faster than the first pass in 5 of the 11 attempts with
+    both passes and slower in 6. That is consistent with no systematic
+    warm-up gain in these attempts and with the hardware as the cause; it
+    does not prove it.
+  - The cause is to be confirmed in part B.
+  - The first-pass p95 is the `{ kind:page,phase:steady }` line D36 reads;
+    the CPU, the seconds and the second-pass p95 come from the attempt's
+    "D36-diag:" lines. The first attempt of f70d96e was cancelled during its
+    second pass.
+
+  | Run (CI) | Head | Attempt | Runner CPU | Healthy to k6 | First pass p95 | Second pass p95 |
+  |---|---|---|---|---|---|---|
+  | 44602211249 | #79 dd61252 | 1 | Intel(R) Xeon(R) 6975P-C | 392.8 s | 54.73 ms | 55.41 ms |
+  | 44602211249 | #79 dd61252 | 2 | Intel(R) Xeon(R) 6975P-C | 483.1 s | 61.61 ms | 53.51 ms |
+  | 44608857876 | #79 0342b31 | 1 | AMD EPYC 7763 64-Core Processor | 273.9 s | 98.13 ms | 93.29 ms |
+  | 44608857876 | #79 0342b31 | 2 | AMD EPYC 7763 64-Core Processor | 277.2 s | 112.8 ms | 119.52 ms |
+  | 44617883823 | #79 cb50dd3 | 1 | INTEL(R) XEON(R) PLATINUM 8573C | 270.4 s | 94.92 ms | 94.53 ms |
+  | 44620919184 | `main` 4dd2a75 | 1 | Intel(R) Xeon(R) 6975P-C | 373.9 s | 46.34 ms | 53.57 ms |
+  | 44638464188 | #80 f70d96e | 1 | AMD EPYC 7763 64-Core Processor | 283.8 s | 130.79 ms | — (cancelled) |
+  | 44638464188 | #80 f70d96e | 2 | Intel(R) Xeon(R) 6975P-C | 692.2 s | 57.14 ms | 58.51 ms |
+  | 44638464188 | #80 f70d96e | 3 | Intel(R) Xeon(R) 6975P-C | 670.9 s | 51.45 ms | 43.96 ms |
+  | 44640025060 | #80 43ba305 | 1 | AMD EPYC 7763 64-Core Processor | 285.8 s | 111.27 ms | 133.77 ms |
+  | 44649927034 | #80 a647b85 | 1 | AMD EPYC 9V45 96-Core Processor | 220.7 s | 53.38 ms | 59.00 ms |
+  | 44651711154 | `main` 13005c9 | 1 | Intel(R) Xeon(R) 6975P-C | 676.4 s | 54.52 ms | 52.49 ms |
 
 ---
 

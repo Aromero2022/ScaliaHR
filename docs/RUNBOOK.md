@@ -164,6 +164,7 @@ Qué hace:
 3. Corre k6 en Docker (`load/pages.js`): cada usuario inicia sesión una vez y abre páginas con 20–40 s entre ellas. Sube a 1,150 usuarios en 2 min, los sostiene 4 min y baja.
 
 Pasa si en estado estable el p95 de las páginas es menor a 500 ms, fallan menos del 1 % y pasan más del 99 % de los checks (cada página responde 200 y no muestra empleados de otro tenant). El resumen queda en `load/.out/summary.json`; ese directorio está fuera de git.
+Desde #81 el check de aislamiento tiene además su propio umbral (`rate==1`, D36): una sola página con empleados de otro tenant hace fallar la corrida (k6 sale con 99).
 
 Variables para otras corridas:
 
@@ -207,6 +208,7 @@ Por eso la corrida completa de esta sección (1,150 usuarios) se hace en local a
 ### Diagnóstico del primer intento (D54)
 
 En CI, el job `docker` imprime líneas `D36-diag:` en el log y en el resumen del job, y sube el artifact `d36-diag-attempt-<n>` (14 días). Sirven para explicar por qué el intento 1 de k6 tiende a salir más alto que la repetición; no cambian la comparación de D36. Los pasos de diagnóstico, el del artifact incluido, nunca hacen fallar el job: si uno no puede dar su línea, deja una anotación `::error::`. La única excepción es el aislamiento entre tenants de la segunda pasada, que se revisa en su propio paso: falla si su resumen cuenta alguna página con empleados de otro tenant, sea cual sea el código de salida de k6, y si la segunda pasada no dejó ese conteo, solo advierte. La primera pasada no cubre del todo el aislamiento: su umbral de checks tolera hasta 1 % de checks fallidos.
+Desde #81 la primera pasada tampoco tolera fallos de aislamiento: su check de aislamiento tiene un umbral propio (`rate==1`, D36), así que una sola página con empleados de otro tenant hace fallar la primera pasada y el job, dentro de lo que el check revisa (D36).
 
 - `runner`: modelo de CPU, `nproc`, `MemTotal` y número de intento.
 - `healthy to k6`: segundos entre que el contenedor web queda sano y la primera petición de k6. Dice `exact=no` si las 5 pruebas que guarda Docker ya estaban sanas.
