@@ -4032,6 +4032,8 @@ and the rollback drill, still skip after a failure.)
   against the summary, the run's thresholds) and fails the job when one is
   broken, as "pasada del PR inválida". The diagnostic steps themselves still
   never fail it.
+  Since `warm-pr-1` (2026-11-22) that step also checks `pr-1`'s warm-up, so it
+  can fail as "calentamiento del PR roto" or "pasadas no comparables" too.
 
 **The lines** (`scripts/d36-diag.mjs`), each one for one possible cause.
 `diagLine` refuses any line off the grammar (a closed list of topics,
@@ -4719,6 +4721,8 @@ Supabase starts.
   - The first D56 runs measured it, and it is a bias: see **Warm-up of
     `main`'s stack (2026-11-21)** below. Since then `main`'s passes start
     on a warmed stack.
+  - Since 2026-11-22 `pr-1` runs after the e2e and then an unmeasured
+    pass, `warm-pr-1`: see **Warm-up of the PR's stack (2026-11-22)** below.
 - **The PR's harness on `main`'s schema.** `main`'s passes run the PR's seed
   and `load/pages.js` against `main`'s schema. A PR whose harness needs its
   own migrations breaks the `main` passes, which gives "arnés del PR
@@ -4738,6 +4742,10 @@ Supabase starts.
   missing or broken ("calentamiento del PR roto"), docs-only pull requests
   included, and a harness the PR broke shows first as that verdict, in the
   warm-up's step, not as "pasada del PR inválida" on `pr-1`.
+  That holds when the PR's own stack breaks the harness, or on a docs-only
+  pull request. When the PR changes the harness, `warm-main-1` runs it
+  first, in `main-1`'s step, and a break there is "arnés del PR
+  incompatible con main".
 - **A change in how the stack starts.** `main-up` is the PR's
   `scripts/d56-ab.sh` run on HEAD^1's files, and it mirrors the PR's
   `scripts/local-up.sh`.
@@ -4909,6 +4917,8 @@ Supabase starts.
   five `main` runs of the transition: ln(`main-2`/`main-1`) and
   ln(`pr-2`/`pr-1`) in each. If it does not, nothing else changes, and the
   next option is to calibrate the limit.
+  ln(`pr-2`/`pr-1`) has the opposite sign of the criterion's
+  ln(`pr-1`/`pr-2`).
 - **Cost:** one more k6 pass, about 1 min 25 s, on top of the 19 min 13 s to
   19 min 37 s of the job with `main`'s warm-ups; the timeout is 45 min.
 - **What the new criterion can tell** (added after this pull request's
@@ -4919,20 +4929,39 @@ Supabase starts.
     with no bias at all, structure holds about 52 % of the time, bias about
     80 %, and both about 42 %. The two are independent: structure reads the
     difference of the PR's two passes, bias their sum.
+  - These figures take σ = 0.071, which **The limit** calls a lower bound
+    of D56's noise. With 0.10 per pass, with no bias, structure holds about
+    38 %, bias about 58 % and both about 22 %.
   - Both hold about 17 % of the time with `pr-1` 0.089 slower than `pr-2`
     (the two A/A runs before the warm-ups), and about 4 % with the −0.140
     measured before the warm-ups.
+    The 4 % takes `pr-1` equal to `pr-2`; with `pr-1` also 0.089 slower, as
+    in those runs, it is about 2 %.
   - So, like the criterion it replaces, it tells a large bias from none,
     not a small one. With no bias it misses about 58 % of the time, so a
     miss alone is no evidence for calibrating the limit.
+    More exactly, it is weak evidence: a miss is at most about 1.7 times as
+    likely with a bias as without one (at most 96 % against 58 %). Whether
+    to calibrate after a miss is the user's choice, with these figures.
   - Read per run instead (each run's ln(`pr-1`/`pr-2`) within 0.05), it
     would hold about 12 % of the time with no bias.
   - The two runs of head 4cf2c03, without `warm-pr-1`, already meet it:
     mean ln(`pr-1`/`pr-2`) +0.022, mean ln r +0.057, and |ln r| 0.083 and
     0.032. So a pass on the new head would not show on its own that
     `warm-pr-1` helped; the five `main` runs of the transition measure it.
+  - More exactly, they measure whether `pr-1` stands apart from `pr-2`
+    with `warm-pr-1`, not whether `warm-pr-1` helped. The four D56 runs
+    before it gave ln(`pr-1`/`pr-2`) +0.104, +0.074, +0.104 and −0.061
+    (mean +0.055, σ of the mean 0.050), and five runs have a mean with σ
+    0.045: against those four, only an effect of about 0.13 or more would
+    show.
+  - Most of 4cf2c03's residual came from `main`'s side: ln r is half of
+    ln(`pr-1`/`pr-2`) plus ln(`pr-2`/`main`). Of its mean +0.057, about
+    +0.011 came from `pr-1` and about +0.046 from `main` being faster than
+    `pr-2`.
   - If those five runs show the bias again, nothing changes on its own: the
     figures go to the user, as when the criterion does not hold.
+    No bound is set for those runs: the user reads their figures.
 
 ---
 
