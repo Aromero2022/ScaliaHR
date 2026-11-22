@@ -30,21 +30,30 @@ export const ORDER = Object.freeze(["main-1", "pr-1", "pr-2", "main-2"]);
 /** Each pass's own files in load/.out, and the state of its stack when k6 starts. */
 export const PASSES = Object.freeze({
   "main-1": { role: "main", summary: "summary-main-1.json", csv: "requests-main-1.csv.gz", output: "k6-main-1.txt", stack: "warmed" },
-  "pr-1": { role: "pr", summary: "summary.json", csv: "requests-first.csv.gz", output: "", stack: "after_e2e" },
+  "pr-1": { role: "pr", summary: "summary.json", csv: "requests-first.csv.gz", output: "", stack: "warmed" },
   "pr-2": { role: "pr", summary: "summary-second.json", csv: "requests-second.csv.gz", output: "second-pass.txt", stack: "after_pass" },
   "main-2": { role: "main", summary: "summary-main-2.json", csv: "requests-main-2.csv.gz", output: "k6-main-2.txt", stack: "warmed" },
 });
 /**
- * The unmeasured k6 pass that warms main's stack right before each of main's
- * passes (2026-11-21), so each of main's passes, like the PR's, starts on a
- * stack that has served load. Its own files; its p95 is informational and
+ * The unmeasured k6 pass that warms a stack right before a measured pass:
+ * before each of main's passes (2026-11-21) and before pr-1, after the e2e
+ * (2026-11-22). So every measured pass starts on a stack that a k6 pass has
+ * just served (pr-2 follows pr-1). Its own files; its p95 is informational and
  * never reaches the log as a `kind:page,phase:steady` line.
  */
 export const WARMUPS = Object.freeze({
   "warm-main-1": { of: "main-1", summary: "summary-warm-main-1.json", csv: "requests-warm-main-1.csv.gz", output: "k6-warm-main-1.txt" },
+  "warm-pr-1": { of: "pr-1", summary: "summary-warm-pr-1.json", csv: "requests-warm-pr-1.csv.gz", output: "k6-warm-pr-1.txt" },
   "warm-main-2": { of: "main-2", summary: "summary-warm-main-2.json", csv: "requests-warm-main-2.csv.gz", output: "k6-warm-main-2.txt" },
 });
-export const WARMUP_OF = Object.freeze({ "main-1": "warm-main-1", "main-2": "warm-main-2" });
+export const WARMUP_OF = Object.freeze({ "main-1": "warm-main-1", "pr-1": "warm-pr-1", "main-2": "warm-main-2" });
+
+/** The verdict of a missing or broken warm-up: the PR's own, or that of a broken main pass. */
+export function brokenWarmupVerdict(role, harnessChanged) {
+  return role === "pr" ? VERDICTS.prWarmBroken : brokenRunVerdict("main", harnessChanged);
+}
+/** The verdict of a page with another tenant's employees, on the side the pass is on. */
+const isolationVerdict = (role) => (role === "main" ? VERDICTS.mainIsolation : VERDICTS.prIsolation);
 /** The load settings of the D36 step; every pass must run with the same ones. */
 export const LOAD_PARAMS = Object.freeze(["LOAD_BIG_USERS", "LOAD_SMALL_USERS", "LOAD_VUS", "SMALL_VUS", "RAMP", "HOLD", "THINK_MIN", "THINK_MAX"]);
 export const IMAGES = Object.freeze({
@@ -67,6 +76,7 @@ export const VERDICTS = Object.freeze({
   mainIsolation: "main falla aislamiento",
   prIsolation: "el PR falla aislamiento",
   prInvalid: "pasada del PR inválida",
+  prWarmBroken: "calentamiento del PR roto",
   mismatch: "pasadas no comparables",
   docsOnlyWrong: "solo docs mal clasificado",
   overFirst: "sobre el límite en el intento 1",
@@ -253,24 +263,27 @@ export function warmLine(name, record) {
 }
 
 /**
- * Checks the warm-up of one of main's passes against that pass: recorded, k6
+ * Checks the warm-up of a measured pass against that pass: recorded, k6
  * exited 0 or 99, a p95, a tenant-isolation count of 0, the same settings,
  * harness, attempt and images, and run right before the pass (after
  * `previousFirstRequest`, the pass before it, when there is one: `record`
- * passes null, and the ratio step checks that order). A missing or broken
- * warm-up leaves the pass without a reference, a leak is main's isolation
- * failure, and one that differs makes the passes not comparable.
+ * passes null, and the ratio step checks that order).
+ * - A missing or broken warm-up of main's leaves its pass without a reference;
+ *   the PR's is "calentamiento del PR roto".
+ * - A leak is the isolation failure of the side the pass is on.
+ * - One that differs makes the passes not comparable.
  */
 export function checkWarmup(mainName, warm, mainRecord, mainFirstRequest, previousFirstRequest, tree) {
   const name = WARMUP_OF[mainName];
   if (!name) throw new Error(`${mainName} has no warm-up`);
-  const broken = (message) => new GateError(brokenRunVerdict("main", tree.harness_changed), `${mainName}: its warm-up ${name} ${message}`);
+  const role = PASSES[mainName].role;
+  const broken = (message) => new GateError(brokenWarmupVerdict(role, tree.harness_changed), `${mainName}: its warm-up ${name} ${message}`);
   const differs = (message) => new GateError(VERDICTS.mismatch, `${name} ${message}`);
   if (!warm) throw broken("was not recorded");
   if (warm.pass !== name || warm.of !== mainName || warm.role !== "warm") throw broken("has a record that is not its own");
   if (passExit(warm.k6_exit) === null) throw broken(`ran, but k6 exited ${JSON.stringify(warm.k6_exit)}`);
   if (!(Number.isInteger(warm.isolation_fails) && warm.isolation_fails >= 0)) throw broken("left no tenant-isolation count");
-  if (warm.isolation_fails > 0) throw new GateError(VERDICTS.mainIsolation, `${name}: ${warm.isolation_fails} page(s) showed another tenant's employees`);
+  if (warm.isolation_fails > 0) throw new GateError(isolationVerdict(role), `${name}: ${warm.isolation_fails} page(s) showed another tenant's employees`);
   if (!(Number.isFinite(warm.p95) && warm.p95 > 0)) throw broken("left no steady-state p95");
   if (!Number.isFinite(warm.first_request)) throw broken("left no first request time");
   for (const key of LOAD_PARAMS) {
@@ -405,14 +418,6 @@ export function decide({ event, scopeApplies, attemptValue, read }) {
   }
   for (const name of ["pr-1", "pr-2"]) if (!passes[name]) throw new GateError(VERDICTS.prInvalid, `${name} was not recorded`);
   const mainPresent = ["main-1", "main-2"].filter((name) => passes[name]);
-  // Each of main's passes starts on a stack its warm-up has just served (2026-11-21).
-  /** @type {Record<string, any>} The warm-up record of each of main's passes present. */
-  const warmups = {};
-  for (const name of mainPresent) {
-    const previous = ORDER.slice(0, ORDER.indexOf(name)).reverse().find((n) => passes[n]);
-    warmups[name] = json(`d56-pass-${WARMUP_OF[name]}.json`);
-    checkWarmup(name, warmups[name], passes[name].record, passes[name].measured.firstRequest, previous ? passes[previous].measured.firstRequest : null, tree);
-  }
 
   // Docs only: a changed file that is in an image (by path, or Markdown by content) makes the change count.
   let applies = staticApplies;
@@ -464,6 +469,15 @@ export function decide({ event, scopeApplies, attemptValue, read }) {
     }
   }
   if (new Set(present.map((name) => passes[name].summarySha)).size !== present.length) throw new GateError(VERDICTS.mismatch, "two passes have the same summary");
+
+  // Each measured pass but pr-2 starts on a stack its warm-up has just served (2026-11-21, 2026-11-22).
+  /** @type {Record<string, any>} The warm-up record of each pass present that has one. */
+  const warmups = {};
+  for (const name of ORDER.filter((n) => passes[n] && WARMUP_OF[n])) {
+    const previous = ORDER.slice(0, ORDER.indexOf(name)).reverse().find((n) => passes[n]);
+    warmups[name] = json(`d56-pass-${WARMUP_OF[name]}.json`);
+    checkWarmup(name, warmups[name], passes[name].record, passes[name].measured.firstRequest, previous ? passes[previous].measured.firstRequest : null, tree);
+  }
 
   const r = mainPresent.length === 2 ? ratio([passes["main-1"].measured.p95, passes["main-2"].measured.p95], [passes["pr-1"].measured.p95, passes["pr-2"].measured.p95]) : NaN;
   const decision = verdict({ event, applies, r, attempt });
@@ -546,11 +560,11 @@ function main() {
     case "record": {
       const [name, exitCode] = rest;
       const warmup = WARMUPS[name];
-      const spec = warmup ? { ...warmup, role: "main" } : PASSES[name];
+      const spec = warmup ? { ...warmup, role: PASSES[warmup.of].role } : PASSES[name];
       if (!spec) throw new Error(`usage: node scripts/d56-ab.mjs record <${[...ORDER, ...Object.keys(WARMUPS)].join("|")}> <k6 exit code>`);
       const tree = JSON.parse(readFileSync(outPath("d56-tree.json"), "utf-8"));
       const params = loadParams(process.env);
-      const failed = (message) => new GateError(brokenRunVerdict(spec.role, tree.harness_changed), `${name}: ${message}`);
+      const failed = (message) => new GateError(warmup ? brokenWarmupVerdict(spec.role, tree.harness_changed) : brokenRunVerdict(spec.role, tree.harness_changed), `${name}: ${message}`);
       // A pass that did not run fails here, before the next pass is spent; the ratio checks every pass again.
       if (passExit(exitCode) === null) {
         if (spec.output) console.error(outputTail(readOut(spec.output)?.toString("utf-8") ?? ""));
@@ -603,7 +617,7 @@ function main() {
         // A warm-up is not measured, but a page with another tenant's employees fails it as any pass (D54).
         const isolation = summary?.root_group?.checks?.[ISOLATION_CHECK];
         if (typeof isolation?.fails !== "number" || !Number.isInteger(isolation.fails) || isolation.fails < 0) throw failed("the summary has no tenant-isolation count");
-        if (isolation.fails > 0) throw new GateError(VERDICTS.mainIsolation, `${name}: ${isolation.fails} page(s) showed another tenant's employees`);
+        if (isolation.fails > 0) throw new GateError(isolationVerdict(spec.role), `${name}: ${isolation.fails} page(s) showed another tenant's employees`);
         const p95 = summary?.metrics?.[CEILING]?.["p(95)"];
         if (!(Number.isFinite(p95) && p95 > 0)) throw failed(`${spec.summary} has no steady-state p95`);
         let firstRequest;
@@ -618,7 +632,7 @@ function main() {
       }
       const measured = validatePass(name, record, summary, rows, tree);
       // The warm-up ran just before on this stack; the ratio step checks the order against the pass before too.
-      if (spec.role === "main") {
+      if (WARMUP_OF[name]) {
         const warmFile = `d56-pass-${WARMUP_OF[name]}.json`;
         const warmBytes = readOut(warmFile);
         let warm = null;

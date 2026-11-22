@@ -428,6 +428,24 @@ jobs:
           fi
           echo "scaliahr-web:local carries no axe or Playwright package."
 
+      # D56 (2026-11-22): the PR's first pass starts on a stack that a k6 pass has
+      # just served, as main's passes do and pr-2 does: an unmeasured pass right
+      # after the e2e, with the D36 step's load settings, to its own files. A
+      # missing or broken one fails the job as "calentamiento del PR roto", and a
+      # page with another tenant's employees fails it too; the ratio step checks
+      # it again. The D36 step below and its line do not change.
+      - name: Warm the PR's stack before the D36 pass (D56 warm-pr-1)
+        run: bash scripts/d56-ab.sh k6 warm-pr-1
+        env:
+          LOAD_BIG_USERS: "60"
+          LOAD_SMALL_USERS: "5"
+          LOAD_VUS: "60"
+          SMALL_VUS: "5"
+          RAMP: "20s"
+          HOLD: "40s"
+          THINK_MIN: "2"
+          THINK_MAX: "6"
+
       # D36: a short run of the load test, so the tooling keeps working and a
       # large regression shows up. The full 1,000-user run is local (RUNBOOK).
       # D54: k6 also writes every sample to requests-first.csv.gz (the artifact
@@ -642,6 +660,7 @@ jobs:
             load/.out/d56-pass-pr-2.json
             load/.out/d56-pass-main-2.json
             load/.out/d56-pass-warm-main-1.json
+            load/.out/d56-pass-warm-pr-1.json
             load/.out/d56-pass-warm-main-2.json
             load/.out/d56-images-pr.json
             load/.out/d56-images-main.json
@@ -649,14 +668,17 @@ jobs:
             load/.out/summary-main-1.json
             load/.out/summary-main-2.json
             load/.out/summary-warm-main-1.json
+            load/.out/summary-warm-pr-1.json
             load/.out/summary-warm-main-2.json
             load/.out/requests-main-1.csv.gz
             load/.out/requests-main-2.csv.gz
             load/.out/requests-warm-main-1.csv.gz
+            load/.out/requests-warm-pr-1.csv.gz
             load/.out/requests-warm-main-2.csv.gz
             load/.out/k6-main-1.txt
             load/.out/k6-main-2.txt
             load/.out/k6-warm-main-1.txt
+            load/.out/k6-warm-pr-1.txt
             load/.out/k6-warm-main-2.txt
             load/.out/k6-exit-second.txt
           retention-days: 14

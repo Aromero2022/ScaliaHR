@@ -49,6 +49,7 @@ const AB_SH = readFileSync(path.join(REPO, "scripts/d56-ab.sh"), "utf-8");
 const LOCAL_UP = readFileSync(path.join(REPO, "scripts/local-up.sh"), "utf-8");
 const OVERRIDE = readFileSync(path.join(REPO, "scripts/d56-main-images.compose.yml"), "utf-8");
 const D36_STEP = "k6 load test, short run (D36)";
+const WARM_PR_STEP = "Warm the PR's stack before the D36 pass (D56 warm-pr-1)";
 const SECOND_STEP = "Second k6 pass, informational, not part of D36 (D54)";
 const TREE_STEP = "Main's tree at HEAD^1 (D56)";
 const MAIN1_STEP = "Main's first k6 pass (D56 main-1)";
@@ -308,7 +309,7 @@ describe("1. the ratio step runs unconditionally and fails the job when it canno
     expect(names.indexOf(RATIO_STEP)).toBeLessThan(names.indexOf("Container logs (on failure)"));
   });
 
-  it.each([TREE_STEP, MAIN1_STEP, PR_STEP, MAIN2_STEP])("%s never continues on error", (name) => {
+  it.each([TREE_STEP, MAIN1_STEP, WARM_PR_STEP, PR_STEP, MAIN2_STEP])("%s never continues on error", (name) => {
     expect(ownLines(stepNamed(name)).join("\n")).not.toMatch(/^\s+continue-on-error:/m);
   });
 
@@ -599,7 +600,7 @@ describe("7. each pass reads its own files (D56)", () => {
 });
 
 describe("8. the same load settings in every pass, printed (D56)", () => {
-  it.each([MAIN1_STEP, PR_STEP, MAIN2_STEP, SECOND_STEP])("%s runs with the D36 step's eight load settings", (name) => {
+  it.each([MAIN1_STEP, WARM_PR_STEP, PR_STEP, MAIN2_STEP, SECOND_STEP])("%s runs with the D36 step's eight load settings", (name) => {
     expect(loadSettings(stepNamed(name))).toEqual(loadSettings(stepNamed(D36_STEP)));
     expect(loadSettings(stepNamed(D36_STEP))).toEqual(PARAMS);
   });
@@ -677,7 +678,7 @@ describe("10. a docs-only diff does not exempt a file that is in an image (D56)"
 
 describe("main's stack is warmed before each of main's passes (D56, 2026-11-21)", () => {
   it("gives each warm-up files of its own, apart from every measured pass's", () => {
-    expect(WARMUP_OF).toEqual({ "main-1": "warm-main-1", "main-2": "warm-main-2" });
+    expect(WARMUP_OF).toEqual({ "main-1": "warm-main-1", "pr-1": "warm-pr-1", "main-2": "warm-main-2" });
     const files = [...Object.values(PASSES), ...Object.values(WARMUPS)].flatMap((spec) => [spec.summary, spec.csv, spec.output].filter(Boolean));
     expect(new Set(files).size).toBe(files.length);
     for (const [name, spec] of Object.entries(WARMUPS)) {
@@ -688,7 +689,9 @@ describe("main's stack is warmed before each of main's passes (D56, 2026-11-21)"
   it("measures main's passes on a warmed stack and says so, and prints each warm-up as not measured", () => {
     const decision = decideIn(world());
     expect(decision.pass).toBe(true);
-    expect(Object.keys(decision.warmups)).toEqual(["main-1", "main-2"]);
+    expect(Object.keys(decision.warmups)).toEqual(["main-1", "pr-1", "main-2"]);
+    expect(passLine("pr-1", decision.passes["pr-1"].record, decision.passes["pr-1"].measured)).toContain(" stack=warmed ");
+    expect(passLine("pr-2", decision.passes["pr-2"].record, decision.passes["pr-2"].measured)).toContain(" stack=after_pass ");
     expect(passLine("main-2", decision.passes["main-2"].record, decision.passes["main-2"].measured)).toContain(" stack=warmed ");
     const line = warmLine("warm-main-1", decision.warmups["main-1"]);
     expect(line).toMatch(/^D56-ab: warm pass=warm-main-1 of=main-1 measured=no p95_steady_ms=70\.00 k6_exit=0 /);
@@ -699,6 +702,7 @@ describe("main's stack is warmed before each of main's passes (D56, 2026-11-21)"
     expect(lines.map((l) => /^D56-ab: (\w+) pass=([\w-]+)/.exec(l)?.slice(1).join(" ") ?? l.split(" ")[1])).toEqual([
       "warm warm-main-1",
       "pass main-1",
+      "warm warm-pr-1",
       "pass pr-1",
       "pass pr-2",
       "warm warm-main-2",
@@ -743,13 +747,45 @@ describe("main's stack is warmed before each of main's passes (D56, 2026-11-21)"
     expect(gateError(() => decideIn(world({ warmups: { "main-2": warm } })))).toMatchObject({ verdict: verdictLabel, message });
   });
 
-  it("checks main-1's warm-up with no pass before it, and leaves pr-1 and pr-2 without one", () => {
+  it("checks main-1's warm-up with no pass before it, leaves pr-2 without one, and warms pr-1 on a docs-only pull request too", () => {
     const tree = validTree;
     const record = recordOf("main-1");
     expect(() => checkWarmup("main-1", warmRecordOf("main-1"), record, START["main-1"], null, tree)).not.toThrow();
-    expect(() => checkWarmup("pr-1", warmRecordOf("main-1"), recordOf("pr-1"), START["pr-1"], null, tree)).toThrow("pr-1 has no warm-up");
+    expect(() => checkWarmup("pr-2", warmRecordOf("main-1"), recordOf("pr-2"), START["pr-2"], null, tree)).toThrow("pr-2 has no warm-up");
     const docsOnly = world({ passes: ["pr-1", "pr-2"], diffFiles: ["docs/a.md"], markdown: { "docs/a.md": { head: "d".repeat(64), base: null } } });
-    expect(decideIn(docsOnly, { scopeApplies: "false" })).toMatchObject({ pass: true, warmups: {} });
+    const decision = decideIn(docsOnly, { scopeApplies: "false" });
+    expect(decision.pass).toBe(true);
+    expect(Object.keys(decision.warmups)).toEqual(["pr-1"]);
+    const unwarmed = world({ passes: ["pr-1", "pr-2"], diffFiles: ["docs/a.md"], markdown: { "docs/a.md": { head: "d".repeat(64), base: null } }, warmups: { "pr-1": null } });
+    expect(gateError(() => decideIn(unwarmed, { scopeApplies: "false" })).verdict).toBe(VERDICTS.prWarmBroken);
+  });
+
+  it("fails a missing or broken warm-up of pr-1 as the PR's own, whatever the harness, and a leak as the PR's", () => {
+    const missing = gateError(() => decideIn(world({ warmups: { "pr-1": null } })));
+    expect(missing).toMatchObject({ verdict: VERDICTS.prWarmBroken, message: "pr-1: its warm-up warm-pr-1 was not recorded" });
+    expect(gateError(() => decideIn(world({ warmups: { "pr-1": null }, harnessChanged: true }))).verdict).toBe(VERDICTS.prWarmBroken);
+    expect(gateError(() => decideIn(world({ warmups: { "pr-1": { k6_exit: "107" } } })))).toMatchObject({
+      verdict: VERDICTS.prWarmBroken,
+      message: 'pr-1: its warm-up warm-pr-1 ran, but k6 exited "107"',
+    });
+    expect(gateError(() => decideIn(world({ warmups: { "pr-1": { isolation_fails: undefined } } })))).toMatchObject({
+      verdict: VERDICTS.prWarmBroken,
+      message: "pr-1: its warm-up warm-pr-1 left no tenant-isolation count",
+    });
+    expect(gateError(() => decideIn(world({ warmups: { "pr-1": { isolation_fails: 3 } } })))).toMatchObject({
+      verdict: VERDICTS.prIsolation,
+      message: "warm-pr-1: 3 page(s) showed another tenant's employees",
+    });
+    expect(decideIn(world({ warmups: { "pr-1": { k6_exit: "99" } } })).pass).toBe(true);
+  });
+
+  it.each([
+    ["other settings", { params: { ...PARAMS, RAMP: "10s" } }, "warm-pr-1 ran with RAMP=10s, pr-1 with 20s"],
+    ["main's images", { web_image: MAIN_IMAGE.web }, "warm-pr-1 warmed other images than pr-1 measured"],
+    ["a start before main-1, the pass before pr-1", { first_request: START["main-1"] - 1 }, "warm-pr-1 did not run right before pr-1"],
+    ["a start after pr-1", { first_request: START["pr-1"] + 1 }, "warm-pr-1 did not run right before pr-1"],
+  ])("refuses a warm-up of pr-1 with %s as not comparable", (_what, warm, message) => {
+    expect(gateError(() => decideIn(world({ warmups: { "pr-1": warm } })))).toMatchObject({ verdict: VERDICTS.mismatch, message });
   });
 });
 
@@ -778,12 +814,18 @@ describe("pull requests and pushes (D56)", () => {
 describe("the docker job runs the passes in the order main, PR, PR, main (D56)", () => {
   it("places every D56 step where its pass belongs", () => {
     const names = dockerSteps().map(stepName);
-    const order = [SCOPE_STEP, TREE_STEP, MAIN1_STEP, LOCAL_UP_STEP, D36_STEP, SECOND_STEP, ISOLATION_STEP, PR_STEP, EXPORT_STEP, ROLLBACK_STEP, MAIN2_STEP, RATIO_STEP, ARTIFACT_STEP];
+    const order = [SCOPE_STEP, TREE_STEP, MAIN1_STEP, LOCAL_UP_STEP, WARM_PR_STEP, D36_STEP, SECOND_STEP, ISOLATION_STEP, PR_STEP, EXPORT_STEP, ROLLBACK_STEP, MAIN2_STEP, RATIO_STEP, ARTIFACT_STEP];
     const at = order.map((name) => names.indexOf(name));
     expect(at).not.toContain(-1);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     // main-1 deletes its stack right before the PR's local:up.
     expect(names.indexOf(LOCAL_UP_STEP)).toBe(names.indexOf(MAIN1_STEP) + 1);
+    // The PR's warm-up runs right before the D36 step, after the e2e, on every pull request and push.
+    expect(names.indexOf(D36_STEP)).toBe(names.indexOf(WARM_PR_STEP) + 1);
+    expect(names.indexOf(WARM_PR_STEP)).toBeGreaterThan(names.indexOf("e2e with axe, zoom and screenshots (D44)"));
+    const warm = stepNamed(WARM_PR_STEP);
+    expect(warm).toContain("run: bash scripts/d56-ab.sh k6 warm-pr-1");
+    expect(ownLines(warm).join("\n")).not.toMatch(/^\s+if:/m);
   });
 
   it("runs main-1 as main-up, its warm-up, k6 and down, and main-2 from the PR's stack stopped, on main's images as built, warmed first", () => {
@@ -1107,7 +1149,7 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
     expect(runAb(clone, ["main-up", "fast"], {}, { D56_BASE_DIR: base }).stderr).toContain('main-up needs build or reuse ("sin referencia")');
     const pr = runAb(clone, ["k6", "pr-1"], {}, { D56_BASE_DIR: base });
     expect(pr.status).toBe(1);
-    expect(pr.stderr).toContain('k6 runs main-1, main-2 or their warm-ups only ("sin referencia")');
+    expect(pr.stderr).toContain('k6 runs main-1, main-2 or a warm-up only ("sin referencia")');
     expect(runAb(clone, ["tree"], {}, { D56_BASE_DIR: base }).status).toBe(0);
     expect(git(base, "rev-parse", "HEAD")).toBe(mainSha);
     const again = runAb(clone, ["tree"], {}, { D56_BASE_DIR: base });
@@ -1208,10 +1250,20 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
     put("pr-1");
     put("pr-2");
     const docker = imagesOf(PR_IMAGE, "local");
+    // pr-1 is recorded only after its warm-up, which fails as the PR's own when it is missing or broken.
+    expect(record("pr-1", "0", docker).stderr).toContain(`pr-1: its warm-up warm-pr-1 was not recorded ("${VERDICTS.prWarmBroken}")`);
+    expect(record("warm-pr-1", "107", docker).stderr).toContain(`warm-pr-1: k6 exited "107"; its output is in the D56 artifact ("${VERDICTS.prWarmBroken}")`);
+    put("warm-pr-1", { p95: 70, isolationFails: 2 });
+    expect(record("warm-pr-1", "0", docker).stderr).toContain(`warm-pr-1: 2 page(s) showed another tenant's employees ("${VERDICTS.prIsolation}")`);
+    put("warm-pr-1", { p95: 70 });
+    const warm = record("warm-pr-1", "0", docker);
+    expect(warm.status).toBe(0);
+    expect(warm.stdout).toMatch(/^D56-ab: warm pass=warm-pr-1 of=pr-1 measured=no p95_steady_ms=70\.00 k6_exit=0 web_image=sha256:3{64} /m);
+    expect(JSON.parse(readFileSync(path.join(out, "d56-pass-warm-pr-1.json"), "utf-8"))).toMatchObject({ pass: "warm-pr-1", role: "warm", of: "pr-1", summary: "summary-warm-pr-1.json", expected_web: PR_IMAGE.web });
     const first = record("pr-1", "0", docker);
     expect(first.stderr).toBe("");
     expect(first.status).toBe(0);
-    expect(first.stdout).toMatch(/^D56-ab: pass pass=pr-1 role=pr stack=after_e2e p95_steady_ms=60\.00 samples=600 k6_exit=0 /m);
+    expect(first.stdout).toMatch(/^D56-ab: pass pass=pr-1 role=pr stack=warmed p95_steady_ms=60\.00 samples=600 k6_exit=0 /m);
     expect(JSON.parse(readFileSync(path.join(out, "d56-pass-pr-1.json"), "utf-8"))).toMatchObject({
       pass: "pr-1",
       summary: "summary.json",
@@ -1374,6 +1426,11 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
     expect(warm.stderr).toContain("  ERRO[0001] setup failed");
     expect(warm.stderr).not.toMatch(/phase:steady|p\(95\)/);
     expect(warm.stderr).toContain('::error::D56: warm-main-2: k6 exited "107"; its output is in the D56 artifact ("sin referencia")');
+    // The PR's warm-up runs the same way on the PR's stack; broken, it is the PR's own verdict.
+    const prWarm = runAb(clone, ["k6", "warm-pr-1"], { npm, docker: "exit 9" }, { ...PARAMS, GITHUB_RUN_ATTEMPT: "1", D56_BASE_DIR: base });
+    expect(prWarm.status).toBe(1);
+    expect(prWarm.stderr).not.toMatch(/phase:steady|p\(95\)/);
+    expect(prWarm.stderr).toContain(`::error::D56: warm-pr-1: k6 exited "107"; its output is in the D56 artifact ("${VERDICTS.prWarmBroken}")`);
   });
 });
 
@@ -1387,9 +1444,9 @@ describe("the D56 artifact and the scope step's output (D56)", () => {
     expect(step).not.toContain("*");
     // Every path is one of D56's own files: a new entry must be added here, on purpose.
     const paths = step.split("\n").filter((line) => /^ {12}load\//.test(line)).map((line) => line.trim());
-    expect(paths).toHaveLength(24);
+    expect(paths).toHaveLength(28);
     for (const file of paths) {
-      expect(file).toMatch(/^load\/\.out\/(d56-(tree|ratio|pass-(main|pr|warm-main)-[12]|images-(pr|main))\.json|d56-diff\.bin|summary-(warm-)?main-[12]\.json|requests-(warm-)?main-[12]\.csv\.gz|k6-(warm-)?main-[12]\.txt|k6-exit-second\.txt)$/);
+      expect(file).toMatch(/^load\/\.out\/(d56-(tree|ratio|pass-(main|pr|warm-main)-[12]|pass-warm-pr-1|images-(pr|main))\.json|d56-diff\.bin|summary-((warm-)?main-[12]|warm-pr-1)\.json|requests-((warm-)?main-[12]|warm-pr-1)\.csv\.gz|k6-((warm-)?main-[12]|warm-pr-1)\.txt|k6-exit-second\.txt)$/);
     }
     expect(readFileSync(path.join(REPO, ".gitignore"), "utf-8")).toMatch(/^load\/\.out\/$/m);
   });
