@@ -1244,7 +1244,9 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
     expect(blind.stderr).toContain(`main-1: cannot read the measured images: Cannot connect to the Docker daemon ("${VERDICTS.noReference}")`);
     // main-1 is recorded only after its warm-up; a warm-up whose summary has no steady-state p95 is broken.
     expect(record("main-1", "0", docker).stderr).toContain(`main-1: its warm-up warm-main-1 was not recorded ("${VERDICTS.noReference}")`);
-    writeFileSync(path.join(out, "summary-warm-main-1.json"), JSON.stringify({ metrics: {} }));
+    const noP95 = summaryOf({ start: START["main-1"] - 120_000 }) as { metrics: Record<string, unknown> };
+    delete noP95.metrics[CEILING];
+    writeFileSync(path.join(out, "summary-warm-main-1.json"), JSON.stringify(noP95));
     writeFileSync(path.join(out, "requests-warm-main-1.csv.gz"), csvOf({ start: START["main-1"] - 120_000 }));
     expect(record("warm-main-1", "0", docker).stderr).toContain(`warm-main-1: summary-warm-main-1.json has no steady-state p95 ("${VERDICTS.noReference}")`);
     put("warm-main-1", { p95: 70, isolationFails: 1 });

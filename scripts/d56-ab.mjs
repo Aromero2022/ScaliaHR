@@ -269,10 +269,10 @@ export function checkWarmup(mainName, warm, mainRecord, mainFirstRequest, previo
   if (!warm) throw broken("was not recorded");
   if (warm.pass !== name || warm.of !== mainName || warm.role !== "warm") throw broken("has a record that is not its own");
   if (passExit(warm.k6_exit) === null) throw broken(`ran, but k6 exited ${JSON.stringify(warm.k6_exit)}`);
-  if (!(Number.isFinite(warm.p95) && warm.p95 > 0)) throw broken("left no steady-state p95");
-  if (!Number.isFinite(warm.first_request)) throw broken("left no first request time");
   if (!(Number.isInteger(warm.isolation_fails) && warm.isolation_fails >= 0)) throw broken("left no tenant-isolation count");
   if (warm.isolation_fails > 0) throw new GateError(VERDICTS.mainIsolation, `${name}: ${warm.isolation_fails} page(s) showed another tenant's employees`);
+  if (!(Number.isFinite(warm.p95) && warm.p95 > 0)) throw broken("left no steady-state p95");
+  if (!Number.isFinite(warm.first_request)) throw broken("left no first request time");
   for (const key of LOAD_PARAMS) {
     if (warm.params?.[key] !== mainRecord.params[key]) throw differs(`ran with ${key}=${warm.params?.[key]}, ${mainName} with ${mainRecord.params[key]}`);
   }
@@ -600,6 +600,10 @@ function main() {
       }
       if (warmup) {
         // Not measured: its record holds what the ratio step checks against its pass, and its p95 for the log.
+        // A warm-up is not measured, but a page with another tenant's employees fails it as any pass (D54).
+        const isolation = summary?.root_group?.checks?.[ISOLATION_CHECK];
+        if (typeof isolation?.fails !== "number" || !Number.isInteger(isolation.fails) || isolation.fails < 0) throw failed("the summary has no tenant-isolation count");
+        if (isolation.fails > 0) throw new GateError(VERDICTS.mainIsolation, `${name}: ${isolation.fails} page(s) showed another tenant's employees`);
         const p95 = summary?.metrics?.[CEILING]?.["p(95)"];
         if (!(Number.isFinite(p95) && p95 > 0)) throw failed(`${spec.summary} has no steady-state p95`);
         let firstRequest;
@@ -608,10 +612,6 @@ function main() {
         } catch (error) {
           throw failed(error.message);
         }
-        // A warm-up is not measured, but a page with another tenant's employees fails it as any pass (D54).
-        const isolation = summary?.root_group?.checks?.[ISOLATION_CHECK];
-        if (typeof isolation?.fails !== "number" || !Number.isInteger(isolation.fails) || isolation.fails < 0) throw failed("the summary has no tenant-isolation count");
-        if (isolation.fails > 0) throw new GateError(VERDICTS.mainIsolation, `${name}: ${isolation.fails} page(s) showed another tenant's employees`);
         const warmRecord = { ...record, p95, first_request: firstRequest, isolation_fails: isolation.fails };
         writeFileSync(outPath(`d56-pass-${name}.json`), `${JSON.stringify(warmRecord, null, 2)}\n`);
         return emit(warmLine(name, warmRecord));

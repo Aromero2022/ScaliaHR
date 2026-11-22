@@ -4775,7 +4775,8 @@ Supabase starts.
   - Each `D56-ab: pass` line of `main` says `stack=warmed`; the table of
     **The four passes** above said "fresh" before the warm-up.
   - Its tenant-isolation count is required too, as in every pass (D54): a
-    missing count is "sin referencia", and a page with another tenant's
+    missing count is "sin referencia" (or "arnés del PR incompatible con
+    main" when the PR changed the harness), and a page with another tenant's
     employees fails the job as "main falla aislamiento".
   - Nothing else of the warm-up is checked (its samples, its other
     thresholds, `vus_max`): it is not measured, and its pass, right after it
