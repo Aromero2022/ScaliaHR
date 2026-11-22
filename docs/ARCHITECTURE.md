@@ -4375,6 +4375,11 @@ choose its runner. D54 measured 46.34–61.61 ms on Intel Xeon 6975P-C and
 | `pr-2` | the PR's, `:local` | after `pr-1` | the D54 second pass | `summary-second.json`, `requests-second.csv.gz`, `second-pass.txt` |
 | `main-2` | `main`'s, `:base`, not rebuilt | fresh | "Main's second k6 pass (D56 main-2)", after the rollback drill | `summary-main-2.json`, `requests-main-2.csv.gz`, `k6-main-2.txt` |
 
+Since 2026-11-21 `main-1` and `main-2` each follow an unmeasured warm-up on
+the same stack (`warm-main-1`, `warm-main-2`), so "fresh" above means a fresh
+stack that the warm-up has just served, and their lines say `stack=warmed`
+(see **Warm-up of `main`'s stack (2026-11-21)** below).
+
 - "Main's tree at HEAD^1 (D56)" runs first, right after the Supabase images
   are restored. It creates `main`'s worktree and records the tree.
 - "The PR's k6 passes for D56 (pr-1, pr-2)" runs after the D54 isolation step
@@ -4531,6 +4536,10 @@ failure prints `::error::D56: … ("<label>")`):
   verification table lists every r measured for the pull request, with its
   head and attempt, so a new commit never hides an earlier r above the
   limit.
+- A re-run that the user authorizes as a repeat measurement, on a head
+  whose attempt 1 passed, is attempt 2 like any other re-run. If it fails
+  for any reason, a further attempt is "tope de una repetición", and only a
+  new head measures again.
 
 **What each pass must hold** (checked in `record`, when the pass is recorded,
 and again in `ratio`):
@@ -4676,7 +4685,7 @@ Supabase starts.
    verification table.
 
 **Limits:**
-- **Stack history.** `main`'s passes run on a fresh stack, `pr-1` after the
+- **Stack history.** `main`'s passes run on a fresh stack (until 2026-11-21; since then on a fresh stack warmed by an unmeasured pass), `pr-1` after the
   e2e, and `pr-2` after `pr-1`. If a stack's history changes the p95, r
   carries that as a bias.
   - The 13 A/A pairs (after the e2e, then after the first pass) show no
@@ -4765,6 +4774,12 @@ Supabase starts.
     it, if there is one. Otherwise the passes are "pasadas no comparables".
   - Each `D56-ab: pass` line of `main` says `stack=warmed`; the table of
     **The four passes** above said "fresh" before the warm-up.
+  - Its tenant-isolation count is required too, as in every pass (D54): a
+    missing count is "sin referencia", and a page with another tenant's
+    employees fails the job as "main falla aislamiento".
+  - Nothing else of the warm-up is checked (its samples, its other
+    thresholds, `vus_max`): it is not measured, and its pass, right after it
+    on the same stack, runs every check of a measured pass.
   - The limit of 1.20, the ABBA order, the cap of one re-run and everything
     about `pr-1` and `pr-2` stay as they were.
   - Tests and mutations cover each check, as they do the closing
@@ -4776,11 +4791,26 @@ Supabase starts.
   the mean of the two has |ln r| ≤ 0.05. If it does not hold, nothing else
   changes, and the user chooses between calibrating the limit and more
   warm-up.
+  - What to expect. The warm-up makes `main`'s passes like `pr-2`, which
+    follows a k6 pass; `pr-1` follows the e2e. In the two A/A runs `pr-1`
+    was 0.089 slower in ln than `pr-2`, so even a perfect warm-up of
+    `main`'s stack leaves ln r ≈ +0.044, and a mean of the PR's two passes
+    that is slower than `main`'s.
+  - With the noise of **The limit** (0.071), the criterion holds by chance
+    about 43 % of the time with no bias at all, about 31 % with that
+    residual, and about 2 % with the −0.140 measured before the warm-up.
+    Two runs tell a large bias from none, not a small bias from none.
+  - Until the user decides, the warm-up stays in the job as it is, and the
+    gate keeps the limit of 1.20.
 - **Cost:** two more k6 passes of about 1.5 min each, about +3 min per run
   of the `docker` job, which took 16 min 49 s to 19 min 34 s before the
   warm-up; the timeout is 45 min.
 - The detection figures of **The limit** stay a bound until the five
   `main` runs of the transition measure the noise of the real topology.
+  The false-block figures are a lower bound and the detection figures above
+  +20 % an upper bound. A push that changes code is not an A/A: only
+  `main-1` against `main-2` in every run, and a push that changes only docs
+  outside the images, measure that noise.
 
 ---
 

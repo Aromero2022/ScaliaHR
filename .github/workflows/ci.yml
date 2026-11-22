@@ -590,10 +590,10 @@ jobs:
           done
 
       # D56: main's second pass, after the PR's stack is stopped and its data
-      # deleted: main's images (:base, not rebuilt) on a fresh stack again, warmed
-      # first by warm-main-2 as main-1 was. Then
-      # main's images are listed too, for the docs-only rule on a push (a pull
-      # request lists them as well, and the ratio step reads only the PR's).
+      # deleted: main's images (:base, not rebuilt) on a fresh stack again,
+      # warmed first by warm-main-2 as main-1 was. Then main's images are listed
+      # too, for the docs-only rule on a push (a pull request lists them as
+      # well, and the ratio step reads only the PR's).
       - name: Main's second k6 pass (D56 main-2)
         if: steps.scope.outputs.applies != 'false'
         run: |

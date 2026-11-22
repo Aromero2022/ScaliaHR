@@ -36,9 +36,9 @@ export const PASSES = Object.freeze({
 });
 /**
  * The unmeasured k6 pass that warms main's stack right before each of main's
- * passes (2026-11-21), so all four passes start on a stack that has served
- * load. Its own files; its p95 is informational and never reaches the log as
- * a `kind:page,phase:steady` line.
+ * passes (2026-11-21), so each of main's passes, like the PR's, starts on a
+ * stack that has served load. Its own files; its p95 is informational and
+ * never reaches the log as a `kind:page,phase:steady` line.
  */
 export const WARMUPS = Object.freeze({
   "warm-main-1": { of: "main-1", summary: "summary-warm-main-1.json", csv: "requests-warm-main-1.csv.gz", output: "k6-warm-main-1.txt" },
@@ -254,10 +254,12 @@ export function warmLine(name, record) {
 
 /**
  * Checks the warm-up of one of main's passes against that pass: recorded, k6
- * exited 0 or 99, a p95, the same settings, harness, attempt and images, and
- * run right before the pass (after `previousFirstRequest`, the pass before it,
- * when there is one). A missing or broken warm-up leaves the pass without a
- * reference; one that differs makes the passes not comparable.
+ * exited 0 or 99, a p95, a tenant-isolation count of 0, the same settings,
+ * harness, attempt and images, and run right before the pass (after
+ * `previousFirstRequest`, the pass before it, when there is one: `record`
+ * passes null, and the ratio step checks that order). A missing or broken
+ * warm-up leaves the pass without a reference, a leak is main's isolation
+ * failure, and one that differs makes the passes not comparable.
  */
 export function checkWarmup(mainName, warm, mainRecord, mainFirstRequest, previousFirstRequest, tree) {
   const name = WARMUP_OF[mainName];
@@ -268,6 +270,9 @@ export function checkWarmup(mainName, warm, mainRecord, mainFirstRequest, previo
   if (warm.pass !== name || warm.of !== mainName || warm.role !== "warm") throw broken("has a record that is not its own");
   if (passExit(warm.k6_exit) === null) throw broken(`ran, but k6 exited ${JSON.stringify(warm.k6_exit)}`);
   if (!(Number.isFinite(warm.p95) && warm.p95 > 0)) throw broken("left no steady-state p95");
+  if (!Number.isFinite(warm.first_request)) throw broken("left no first request time");
+  if (!(Number.isInteger(warm.isolation_fails) && warm.isolation_fails >= 0)) throw broken("left no tenant-isolation count");
+  if (warm.isolation_fails > 0) throw new GateError(VERDICTS.mainIsolation, `${name}: ${warm.isolation_fails} page(s) showed another tenant's employees`);
   for (const key of LOAD_PARAMS) {
     if (warm.params?.[key] !== mainRecord.params[key]) throw differs(`ran with ${key}=${warm.params?.[key]}, ${mainName} with ${mainRecord.params[key]}`);
   }
@@ -603,7 +608,11 @@ function main() {
         } catch (error) {
           throw failed(error.message);
         }
-        const warmRecord = { ...record, p95, first_request: firstRequest };
+        // A warm-up is not measured, but a page with another tenant's employees fails it as any pass (D54).
+        const isolation = summary?.root_group?.checks?.[ISOLATION_CHECK];
+        if (typeof isolation?.fails !== "number" || !Number.isInteger(isolation.fails) || isolation.fails < 0) throw failed("the summary has no tenant-isolation count");
+        if (isolation.fails > 0) throw new GateError(VERDICTS.mainIsolation, `${name}: ${isolation.fails} page(s) showed another tenant's employees`);
+        const warmRecord = { ...record, p95, first_request: firstRequest, isolation_fails: isolation.fails };
         writeFileSync(outPath(`d56-pass-${name}.json`), `${JSON.stringify(warmRecord, null, 2)}\n`);
         return emit(warmLine(name, warmRecord));
       }

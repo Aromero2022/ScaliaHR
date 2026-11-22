@@ -200,7 +200,7 @@ function recordOf(name: string, overrides: Record<string, unknown> = {}) {
 function warmRecordOf(main: string, overrides: Record<string, unknown> = {}) {
   const name = WARMUP_OF[main as keyof typeof WARMUP_OF];
   const spec = WARMUPS[name as keyof typeof WARMUPS];
-  return { ...recordOf(main), pass: name, role: "warm", of: main, summary: spec.summary, csv: spec.csv, p95: 70, first_request: START[main] - 120_000, ...overrides };
+  return { ...recordOf(main), pass: name, role: "warm", of: main, summary: spec.summary, csv: spec.csv, p95: 70, first_request: START[main] - 120_000, isolation_fails: 0, ...overrides };
 }
 const nul = (files: string[]) => Buffer.from(files.map((f) => `${f}\0`).join(""));
 function treeOf(files: string[], markdown: Record<string, { head: string | null; base: string | null }> = {}, harnessChanged = false) {
@@ -728,11 +728,15 @@ describe("main's stack is warmed before each of main's passes (D56, 2026-11-21)"
 
   it.each([
     ["no p95", { p95: 0 }, VERDICTS.noReference, "main-2: its warm-up warm-main-2 left no steady-state p95"],
+    ["a first request that is not a time", { first_request: "5" }, VERDICTS.noReference, "main-2: its warm-up warm-main-2 left no first request time"],
+    ["no isolation count", { isolation_fails: undefined }, VERDICTS.noReference, "main-2: its warm-up warm-main-2 left no tenant-isolation count"],
+    ["a page with another tenant's employees", { isolation_fails: 2 }, VERDICTS.mainIsolation, "warm-main-2: 2 page(s) showed another tenant's employees"],
     ["another pass's record", { of: "main-1" }, VERDICTS.noReference, "main-2: its warm-up warm-main-2 has a record that is not its own"],
     ["other settings", { params: { ...PARAMS, HOLD: "30s" } }, VERDICTS.mismatch, "warm-main-2 ran with HOLD=30s, main-2 with 40s"],
     ["another harness", { harness: "fedcba987654" }, VERDICTS.mismatch, "warm-main-2 ran another harness than main-2"],
     ["another attempt", { run_attempt: "2" }, VERDICTS.mismatch, "warm-main-2 was recorded in attempt 2, main-2 in attempt 1"],
-    ["other images", { web_image: PR_IMAGE.web }, VERDICTS.mismatch, "warm-main-2 warmed other images than main-2 measured"],
+    ["another web image", { web_image: PR_IMAGE.web }, VERDICTS.mismatch, "warm-main-2 warmed other images than main-2 measured"],
+    ["another worker image", { worker_image: PR_IMAGE.worker }, VERDICTS.mismatch, "warm-main-2 warmed other images than main-2 measured"],
     ["a start after its pass", { first_request: START["main-2"] + 1 }, VERDICTS.mismatch, "warm-main-2 did not run right before main-2"],
     ["a start before the pass before it", { first_request: START["pr-2"] - 1 }, VERDICTS.mismatch, "warm-main-2 did not run right before main-2"],
   ])("refuses a warm-up with %s", (_what, warm, verdictLabel, message) => {
@@ -1243,10 +1247,18 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
     writeFileSync(path.join(out, "summary-warm-main-1.json"), JSON.stringify({ metrics: {} }));
     writeFileSync(path.join(out, "requests-warm-main-1.csv.gz"), csvOf({ start: START["main-1"] - 120_000 }));
     expect(record("warm-main-1", "0", docker).stderr).toContain(`warm-main-1: summary-warm-main-1.json has no steady-state p95 ("${VERDICTS.noReference}")`);
+    put("warm-main-1", { p95: 70, isolationFails: 1 });
+    expect(record("warm-main-1", "0", docker).stderr).toContain(`warm-main-1: 1 page(s) showed another tenant's employees ("${VERDICTS.mainIsolation}")`);
+    expect(existsSync(path.join(out, "d56-pass-warm-main-1.json"))).toBe(false);
+    const noCount = summaryOf({ p95: 70, start: START["main-1"] - 120_000 }) as { root_group: { checks: Record<string, unknown> } };
+    delete noCount.root_group.checks[ISOLATION_CHECK];
+    writeFileSync(path.join(out, "summary-warm-main-1.json"), JSON.stringify(noCount));
+    expect(record("warm-main-1", "0", docker).stderr).toContain(`warm-main-1: the summary has no tenant-isolation count ("${VERDICTS.noReference}")`);
     put("warm-main-1", { p95: 70 });
     const warm = record("warm-main-1", "99", docker);
     expect(warm.status).toBe(0);
     expect(warm.stdout).toMatch(/^D56-ab: warm pass=warm-main-1 of=main-1 measured=no p95_steady_ms=70\.00 k6_exit=99 /m);
+    expect(JSON.parse(readFileSync(path.join(out, "d56-pass-warm-main-1.json"), "utf-8"))).toMatchObject({ isolation_fails: 0, k6_exit: "99" });
     expect(record("main-1", "0", docker).status).toBe(0);
 
     const harness = recordWorld((dir) => writeFileSync(path.join(dir, "load/pages.js"), "// changed harness\n"));
