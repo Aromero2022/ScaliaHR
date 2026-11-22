@@ -330,7 +330,8 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/d56-ab.sh tree
 
-      # D56: main's first pass, on a fresh stack, then its data deleted so the
+      # D56: main's first pass, on a fresh stack warmed by an unmeasured pass
+      # first (warm-main-1, since 2026-11-21), then its data deleted so the
       # PR's stack below starts as it did before D56. Skipped only when the scope
       # step said the diff cannot change the images; the ratio step then checks
       # that claim against the images. On a push there is no scope step, so this
@@ -339,6 +340,7 @@ jobs:
         if: steps.scope.outputs.applies != 'false'
         run: |
           bash scripts/d56-ab.sh main-up build
+          bash scripts/d56-ab.sh k6 warm-main-1
           bash scripts/d56-ab.sh k6 main-1
           bash scripts/d56-ab.sh down
         env:
@@ -588,7 +590,8 @@ jobs:
           done
 
       # D56: main's second pass, after the PR's stack is stopped and its data
-      # deleted: main's images (:base, not rebuilt) on a fresh stack again. Then
+      # deleted: main's images (:base, not rebuilt) on a fresh stack again, warmed
+      # first by warm-main-2 as main-1 was. Then
       # main's images are listed too, for the docs-only rule on a push (a pull
       # request lists them as well, and the ratio step reads only the PR's).
       - name: Main's second k6 pass (D56 main-2)
@@ -596,6 +599,7 @@ jobs:
         run: |
           bash scripts/d56-ab.sh down
           bash scripts/d56-ab.sh main-up reuse
+          bash scripts/d56-ab.sh k6 warm-main-2
           bash scripts/d56-ab.sh k6 main-2
           node scripts/d56-ab.mjs images main
         env:
@@ -637,15 +641,23 @@ jobs:
             load/.out/d56-pass-pr-1.json
             load/.out/d56-pass-pr-2.json
             load/.out/d56-pass-main-2.json
+            load/.out/d56-pass-warm-main-1.json
+            load/.out/d56-pass-warm-main-2.json
             load/.out/d56-images-pr.json
             load/.out/d56-images-main.json
             load/.out/d56-ratio.json
             load/.out/summary-main-1.json
             load/.out/summary-main-2.json
+            load/.out/summary-warm-main-1.json
+            load/.out/summary-warm-main-2.json
             load/.out/requests-main-1.csv.gz
             load/.out/requests-main-2.csv.gz
+            load/.out/requests-warm-main-1.csv.gz
+            load/.out/requests-warm-main-2.csv.gz
             load/.out/k6-main-1.txt
             load/.out/k6-main-2.txt
+            load/.out/k6-warm-main-1.txt
+            load/.out/k6-warm-main-2.txt
             load/.out/k6-exit-second.txt
           retention-days: 14
 

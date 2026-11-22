@@ -29,11 +29,22 @@ export const OUT = "load/.out";
 export const ORDER = Object.freeze(["main-1", "pr-1", "pr-2", "main-2"]);
 /** Each pass's own files in load/.out, and the state of its stack when k6 starts. */
 export const PASSES = Object.freeze({
-  "main-1": { role: "main", summary: "summary-main-1.json", csv: "requests-main-1.csv.gz", output: "k6-main-1.txt", stack: "fresh" },
+  "main-1": { role: "main", summary: "summary-main-1.json", csv: "requests-main-1.csv.gz", output: "k6-main-1.txt", stack: "warmed" },
   "pr-1": { role: "pr", summary: "summary.json", csv: "requests-first.csv.gz", output: "", stack: "after_e2e" },
   "pr-2": { role: "pr", summary: "summary-second.json", csv: "requests-second.csv.gz", output: "second-pass.txt", stack: "after_pass" },
-  "main-2": { role: "main", summary: "summary-main-2.json", csv: "requests-main-2.csv.gz", output: "k6-main-2.txt", stack: "fresh" },
+  "main-2": { role: "main", summary: "summary-main-2.json", csv: "requests-main-2.csv.gz", output: "k6-main-2.txt", stack: "warmed" },
 });
+/**
+ * The unmeasured k6 pass that warms main's stack right before each of main's
+ * passes (2026-11-21), so all four passes start on a stack that has served
+ * load. Its own files; its p95 is informational and never reaches the log as
+ * a `kind:page,phase:steady` line.
+ */
+export const WARMUPS = Object.freeze({
+  "warm-main-1": { of: "main-1", summary: "summary-warm-main-1.json", csv: "requests-warm-main-1.csv.gz", output: "k6-warm-main-1.txt" },
+  "warm-main-2": { of: "main-2", summary: "summary-warm-main-2.json", csv: "requests-warm-main-2.csv.gz", output: "k6-warm-main-2.txt" },
+});
+export const WARMUP_OF = Object.freeze({ "main-1": "warm-main-1", "main-2": "warm-main-2" });
 /** The load settings of the D36 step; every pass must run with the same ones. */
 export const LOAD_PARAMS = Object.freeze(["LOAD_BIG_USERS", "LOAD_SMALL_USERS", "LOAD_VUS", "SMALL_VUS", "RAMP", "HOLD", "THINK_MIN", "THINK_MAX"]);
 export const IMAGES = Object.freeze({
@@ -227,6 +238,47 @@ export function passLine(name, record, measured) {
   });
 }
 
+/** The informational line of a warm-up: never a measured pass, never a `kind:page,phase:steady` line. */
+export function warmLine(name, record) {
+  return abLine("warm", {
+    pass: name,
+    of: record.of,
+    measured: "no",
+    p95_steady_ms: record.p95.toFixed(2),
+    k6_exit: Number(record.k6_exit),
+    web_image: record.web_image,
+    cpu: record.cpu,
+    attempt: record.run_attempt,
+  });
+}
+
+/**
+ * Checks the warm-up of one of main's passes against that pass: recorded, k6
+ * exited 0 or 99, a p95, the same settings, harness, attempt and images, and
+ * run right before the pass (after `previousFirstRequest`, the pass before it,
+ * when there is one). A missing or broken warm-up leaves the pass without a
+ * reference; one that differs makes the passes not comparable.
+ */
+export function checkWarmup(mainName, warm, mainRecord, mainFirstRequest, previousFirstRequest, tree) {
+  const name = WARMUP_OF[mainName];
+  if (!name) throw new Error(`${mainName} has no warm-up`);
+  const broken = (message) => new GateError(brokenRunVerdict("main", tree.harness_changed), `${mainName}: its warm-up ${name} ${message}`);
+  const differs = (message) => new GateError(VERDICTS.mismatch, `${name} ${message}`);
+  if (!warm) throw broken("was not recorded");
+  if (warm.pass !== name || warm.of !== mainName || warm.role !== "warm") throw broken("has a record that is not its own");
+  if (passExit(warm.k6_exit) === null) throw broken(`ran, but k6 exited ${JSON.stringify(warm.k6_exit)}`);
+  if (!(Number.isFinite(warm.p95) && warm.p95 > 0)) throw broken("left no steady-state p95");
+  for (const key of LOAD_PARAMS) {
+    if (warm.params?.[key] !== mainRecord.params[key]) throw differs(`ran with ${key}=${warm.params?.[key]}, ${mainName} with ${mainRecord.params[key]}`);
+  }
+  if (warm.harness !== mainRecord.harness) throw differs(`ran another harness than ${mainName}`);
+  if (String(warm.run_attempt) !== String(mainRecord.run_attempt)) throw differs(`was recorded in attempt ${warm.run_attempt}, ${mainName} in attempt ${mainRecord.run_attempt}`);
+  if (warm.web_image !== mainRecord.web_image || warm.worker_image !== mainRecord.worker_image) throw differs(`warmed other images than ${mainName} measured`);
+  if (!(warm.first_request < mainFirstRequest) || (previousFirstRequest !== null && !(warm.first_request > previousFirstRequest))) {
+    throw differs(`did not run right before ${mainName}`);
+  }
+}
+
 // 3. The images, for the docs-only rule
 
 /** The files under /app (node_modules and .next left out) and the sha256 of each Markdown file, from `find` and `sha256sum`. */
@@ -330,6 +382,7 @@ export function decide({ event, scopeApplies, attemptValue, read }) {
     throw new GateError(VERDICTS.mismatch, `unknown event "${event}"`);
   }
 
+  /** @type {Record<string, any>} Each recorded pass: its record, what it measured and its summary's hash. */
   const passes = {};
   for (const name of ORDER) {
     const record = json(`d56-pass-${name}.json`);
@@ -347,6 +400,14 @@ export function decide({ event, scopeApplies, attemptValue, read }) {
   }
   for (const name of ["pr-1", "pr-2"]) if (!passes[name]) throw new GateError(VERDICTS.prInvalid, `${name} was not recorded`);
   const mainPresent = ["main-1", "main-2"].filter((name) => passes[name]);
+  // Each of main's passes starts on a stack its warm-up has just served (2026-11-21).
+  /** @type {Record<string, any>} The warm-up record of each of main's passes present. */
+  const warmups = {};
+  for (const name of mainPresent) {
+    const previous = ORDER.slice(0, ORDER.indexOf(name)).reverse().find((n) => passes[n]);
+    warmups[name] = json(`d56-pass-${WARMUP_OF[name]}.json`);
+    checkWarmup(name, warmups[name], passes[name].record, passes[name].measured.firstRequest, previous ? passes[previous].measured.firstRequest : null, tree);
+  }
 
   // Docs only: a changed file that is in an image (by path, or Markdown by content) makes the change count.
   let applies = staticApplies;
@@ -401,7 +462,7 @@ export function decide({ event, scopeApplies, attemptValue, read }) {
 
   const r = mainPresent.length === 2 ? ratio([passes["main-1"].measured.p95, passes["main-2"].measured.p95], [passes["pr-1"].measured.p95, passes["pr-2"].measured.p95]) : NaN;
   const decision = verdict({ event, applies, r, attempt });
-  return { tree, passes, applies, r, attempt, event, ...decision };
+  return { tree, passes, warmups, applies, r, attempt, event, ...decision };
 }
 
 export function ratioLine({ event, applies, r, attempt, verdict: text, passes }) {
@@ -479,8 +540,9 @@ function main() {
     }
     case "record": {
       const [name, exitCode] = rest;
-      const spec = PASSES[name];
-      if (!spec) throw new Error(`usage: node scripts/d56-ab.mjs record <${ORDER.join("|")}> <k6 exit code>`);
+      const warmup = WARMUPS[name];
+      const spec = warmup ? { ...warmup, role: "main" } : PASSES[name];
+      if (!spec) throw new Error(`usage: node scripts/d56-ab.mjs record <${[...ORDER, ...Object.keys(WARMUPS)].join("|")}> <k6 exit code>`);
       const tree = JSON.parse(readFileSync(outPath("d56-tree.json"), "utf-8"));
       const params = loadParams(process.env);
       const failed = (message) => new GateError(brokenRunVerdict(spec.role, tree.harness_changed), `${name}: ${message}`);
@@ -507,7 +569,8 @@ function main() {
       }
       const record = {
         pass: name,
-        role: spec.role,
+        role: warmup ? "warm" : spec.role,
+        ...(warmup ? { of: warmup.of } : {}),
         summary: spec.summary,
         csv: spec.csv,
         k6_exit: String(exitCode),
@@ -517,7 +580,7 @@ function main() {
         params,
         run_attempt: process.env.GITHUB_RUN_ATTEMPT ?? "",
       };
-      writeFileSync(outPath(`d56-pass-${name}.json`), `${JSON.stringify(record, null, 2)}\n`);
+      if (!warmup) writeFileSync(outPath(`d56-pass-${name}.json`), `${JSON.stringify(record, null, 2)}\n`);
       let summary;
       try {
         summary = JSON.parse(summaryBytes.toString("utf-8"));
@@ -530,7 +593,34 @@ function main() {
       } catch (error) {
         throw failed(error.message);
       }
-      return emit(passLine(name, record, validatePass(name, record, summary, rows, tree)));
+      if (warmup) {
+        // Not measured: its record holds what the ratio step checks against its pass, and its p95 for the log.
+        const p95 = summary?.metrics?.[CEILING]?.["p(95)"];
+        if (!(Number.isFinite(p95) && p95 > 0)) throw failed(`${spec.summary} has no steady-state p95`);
+        let firstRequest;
+        try {
+          firstRequest = firstRequestMs(rows);
+        } catch (error) {
+          throw failed(error.message);
+        }
+        const warmRecord = { ...record, p95, first_request: firstRequest };
+        writeFileSync(outPath(`d56-pass-${name}.json`), `${JSON.stringify(warmRecord, null, 2)}\n`);
+        return emit(warmLine(name, warmRecord));
+      }
+      const measured = validatePass(name, record, summary, rows, tree);
+      // The warm-up ran just before on this stack; the ratio step checks the order against the pass before too.
+      if (spec.role === "main") {
+        const warmFile = `d56-pass-${WARMUP_OF[name]}.json`;
+        const warmBytes = readOut(warmFile);
+        let warm = null;
+        try {
+          if (warmBytes !== null) warm = JSON.parse(warmBytes.toString("utf-8"));
+        } catch {
+          throw failed(`${warmFile} is not JSON`);
+        }
+        checkWarmup(name, warm, record, measured.firstRequest, null, tree);
+      }
+      return emit(passLine(name, record, measured));
     }
     case "images": {
       const [role] = rest;
@@ -550,7 +640,10 @@ function main() {
     }
     case "ratio": {
       const decision = decide({ event: process.env.GITHUB_EVENT_NAME, scopeApplies: process.env.SCOPE_APPLIES ?? "", attemptValue: process.env.GITHUB_RUN_ATTEMPT, read: readOut });
-      for (const name of ORDER) if (decision.passes[name]) emit(passLine(name, decision.passes[name].record, decision.passes[name].measured));
+      for (const name of ORDER) {
+        if (decision.warmups[name]) emit(warmLine(WARMUP_OF[name], decision.warmups[name]));
+        if (decision.passes[name]) emit(passLine(name, decision.passes[name].record, decision.passes[name].measured));
+      }
       const line = ratioLine(decision);
       emit(line);
       writeFileSync(outPath("d56-ratio.json"), `${JSON.stringify({ line, r: decision.r, applies: decision.applies, attempt: decision.attempt, pass: decision.pass, verdict: decision.verdict, label: decision.label ?? null }, null, 2)}\n`);

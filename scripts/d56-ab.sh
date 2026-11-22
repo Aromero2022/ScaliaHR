@@ -10,6 +10,9 @@
 #   bash scripts/d56-ab.sh tree                  worktree of HEAD^1, the diff and load/.out/d56-tree.json
 #   bash scripts/d56-ab.sh main-up build|reuse   start Supabase and main's images from the worktree
 #   bash scripts/d56-ab.sh k6 main-1|main-2      one k6 pass on main's stack, its output to a file
+#   bash scripts/d56-ab.sh k6 warm-main-1|warm-main-2
+#                                                the unmeasured pass that warms main's stack right before
+#                                                main-1 or main-2 (2026-11-21), the same way, to its own files
 #   bash scripts/d56-ab.sh down                  stop the running stack, delete its data, check nothing is left
 # Every failure it checks for prints "::error::D56: … ("<verdict>")" and exits 1;
 # anything else stops it through set -e, with a non-zero exit all the same.
@@ -156,7 +159,7 @@ cmd_main_up() {
 
 cmd_k6() {
   local pass="${1:-}" code=0
-  case "$pass" in main-1 | main-2) ;; *) die "$NO_REFERENCE" "k6 runs main-1 or main-2 only" ;; esac
+  case "$pass" in main-1 | main-2 | warm-main-1 | warm-main-2) ;; *) die "$NO_REFERENCE" "k6 runs main-1, main-2 or their warm-ups only" ;; esac
   rm -f "$OUT/summary-${pass}.json" "$OUT/requests-${pass}.csv.gz" "$OUT/k6-${pass}.txt"
   # The PR's harness, which re-seeds the load tenants first, with the step's load
   # settings. k6's summary goes to a file: the job's only steady-state page line
@@ -196,5 +199,5 @@ case "${1:-}" in
   main-up) cmd_main_up "${2:-}" ;;
   k6) cmd_k6 "${2:-}" ;;
   down) cmd_down ;;
-  *) die "$NO_REFERENCE" "usage: bash scripts/d56-ab.sh tree | main-up build|reuse | k6 main-1|main-2 | down" ;;
+  *) die "$NO_REFERENCE" "usage: bash scripts/d56-ab.sh tree | main-up build|reuse | k6 main-1|main-2|warm-main-1|warm-main-2 | down" ;;
 esac
