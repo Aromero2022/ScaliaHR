@@ -2067,6 +2067,11 @@ machine):**
       same runner, computed by `scripts/d56-ab.mjs`. This band stays for five
       `main` runs as "banda global (informativa)", without blocking, and is
       then dropped from the verification table (D56).
+    - Since 2026-11-22 the D36 step's pass follows an unmeasured k6 warm-up
+      on the same stack (D56, **Warm-up of the PR's stack**). The step, its
+      `{ kind:page,phase:steady }` line and its files keep their names, but
+      the band now reads a warmed pass, unlike the `main` runs it was built
+      from: one more reason it is only informational.
     - Baseline: the median of the steady-state p95 of the last five CI runs
       on `main`.
     - The last five runs: the latest completed CI runs on `main` whose
@@ -4036,6 +4041,8 @@ lower-case keys, only strings and finite numbers as values):
    "unavailable", with an `::warning::` that gives the reason.
 2. `healthy to k6`: seconds from the web container turning healthy to k6's
    first request in the CSV. Tests the time since the stack came up.
+   Since D56's warm-up of the PR's stack (2026-11-22), that time also holds
+   `warm-pr-1`, the unmeasured k6 pass between the e2e and the D36 step.
    - The probe log is read in the step "First healthy probe of the web
      container (D54)", right after `local:up`. Docker keeps only the last
      five probes in `State.Health.Log` (50 s at the image's 10 s interval),
@@ -4380,6 +4387,12 @@ the same stack (`warm-main-1`, `warm-main-2`), so "fresh" above means a fresh
 stack that the warm-up has just served, and their lines say `stack=warmed`
 (see **Warm-up of `main`'s stack (2026-11-21)** below).
 
+Since 2026-11-22 `pr-1` also follows an unmeasured warm-up, `warm-pr-1`,
+right after the e2e and before the D36 step, so "after the e2e" above means
+after the e2e and that warm-up, and its line says `stack=warmed` too (see
+**Warm-up of the PR's stack (2026-11-22)** below). `pr-2` follows `pr-1` as
+before.
+
 - "Main's tree at HEAD^1 (D56)" runs first, right after the Supabase images
   are restored. It creates `main`'s worktree and records the tree.
 - "The PR's k6 passes for D56 (pr-1, pr-2)" runs after the D54 isolation step
@@ -4518,6 +4531,11 @@ failure prints `::error::D56: … ("<label>")`):
 - **"el PR falla aislamiento"**: a PR pass showed another tenant's employees.
 - **"pasada del PR inválida"**: a PR pass that is missing or broken. `pr-1`
   requires the D36 step to pass; `pr-2` requires k6 to exit 0 or 99.
+- **"calentamiento del PR roto"** (since 2026-11-22): the warm-up of `pr-1`,
+  `warm-pr-1`, is missing or broken: not recorded, not its own, k6 other than
+  0 or 99, no steady-state p95, no first request time or no tenant-isolation
+  count. It fails the job, whatever the harness. A page with another tenant's
+  employees in it is "el PR falla aislamiento".
 - **"pasadas no comparables"**: the passes differ in settings, harness,
   attempt, revision, image, order or summaries.
 - **"solo docs mal clasificado"**: a docs-only pull request with a changed
@@ -4812,6 +4830,68 @@ Supabase starts.
   +20 % an upper bound. A push that changes code is not an A/A: only
   `main-1` against `main-2` in every run, and a push that changes only docs
   outside the images, measure that noise.
+- **Result of that validation (head 4cf2c03, 2026-11-22).** Both runs on
+  Intel Xeon 6975P-C, on two runners: the CI run and the one repeat
+  measurement the user authorized (attempt 2).
+
+  | Run | `warm-main-1` | `main-1` | `pr-1` | `pr-2` | `warm-main-2` | `main-2` | r | ln r | ln(`pr-1`/`pr-2`) | ln(`main`/`pr-2`) |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Attempt 1 | 58.34 ms | 43.77 ms | 51.15 ms | 46.10 ms | 61.67 ms | 45.65 ms | 1.0863 | +0.083 | +0.104 | −0.031 |
+  | Attempt 2 | 60.97 ms | 55.87 ms | 53.67 ms | 57.03 ms | 53.94 ms | 51.38 ms | 1.0326 | +0.032 | −0.061 | −0.062 |
+
+  - `main` is the geometric mean of `main-1` and `main-2`.
+  - The criterion did not hold: |ln r| was 0.083 in attempt 1 (above 0.07),
+    and the mean ln r was +0.057 (above 0.05).
+  - The mean bias went from −0.140 to +0.057. Each warm-up was slower than
+    the measured pass after it, so it did take the cold start.
+  - What was left came from `pr-1`, which followed the e2e and not a k6
+    pass: ln(`pr-1`/`pr-2`) was +0.104 and −0.061, and `main` stood within
+    −0.03 to −0.06 of `pr-2`.
+- **The criterion is replaced (the user, 2026-11-22).** |ln r| ≤ 0.07 in
+  each of two runs was too strict for two data points: it holds only about
+  43 % of the time with no bias at all. The criterion of **Warm-up of the
+  PR's stack (2026-11-22)** below replaces it; the one above stays as the
+  record of what was asked first.
+
+**Warm-up of the PR's stack (2026-11-22):**
+- **Decision** (the user, 2026-11-22): warm `pr-1`'s stack too. After the e2e
+  and before the D36 step, an unmeasured k6 pass, `warm-pr-1`, runs on the
+  PR's stack, in its own step ("Warm the PR's stack before the D36 pass (D56
+  warm-pr-1)"). So all four measured passes follow a k6 pass on their own
+  stack: `main-1` and `main-2` their warm-ups, `pr-1` its warm-up, and `pr-2`
+  `pr-1`.
+- It is a pass like the others: the PR's harness, the D36 step's eight load
+  settings and the re-seed. It runs on every pull request and push, docs-only
+  ones included, so the D36 step always measures the same kind of stack.
+- Its summary, CSV and k6 output go to `summary-warm-pr-1.json`,
+  `requests-warm-pr-1.csv.gz` and `k6-warm-pr-1.txt`, in the D56 artifact,
+  and `record warm-pr-1` writes `d56-pass-warm-pr-1.json`. No
+  `{ kind:page,phase:steady }` line reaches the log.
+- What it must hold, checked when it is recorded, when `pr-1` is recorded and
+  in the ratio step:
+  - its tenant-isolation count: a page with another tenant's employees fails
+    the job as "el PR falla aislamiento";
+  - k6 exited 0 or 99, a steady-state p95 and a first request time;
+  - when it is missing or broken, the verdict is its own, "calentamiento del
+    PR roto", and the job fails closed;
+  - the same settings, harness, attempt and PR images as `pr-1`, and a start
+    after `main-1` and before `pr-1`: otherwise "pasadas no comparables".
+- The D36 step (`pr-1`), its line and its files, and the informational band,
+  keep their names and files. `pr-1`'s `D56-ab: pass` line says
+  `stack=warmed`.
+- Tests and mutations cover each check, as for the other conditions.
+- **Validation** (the pull request is still an A/A): the CI run of the head
+  with this warm-up, and one repeat measurement the user authorized
+  (attempt 2). It counts as fixed when both hold:
+  - **structure:** |mean ln(`pr-1`/`pr-2`)| ≤ 0.05 over the two runs, so
+    `pr-1` no longer stands apart from `pr-2`;
+  - **bias:** |mean ln r| ≤ 0.07, and |ln r| ≤ 0.14 (2σ) in each run.
+- If it holds, the bias counts as fixed, and it keeps being measured in the
+  five `main` runs of the transition: ln(`main-2`/`main-1`) and
+  ln(`pr-2`/`pr-1`) in each. If it does not, nothing else changes, and the
+  next option is to calibrate the limit.
+- **Cost:** one more k6 pass, about 1 min 25 s, on top of the 19 min 13 s to
+  19 min 37 s of the job with `main`'s warm-ups; the timeout is 45 min.
 
 ---
 
