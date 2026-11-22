@@ -5095,7 +5095,7 @@ Supabase starts.
     the `docker` job starts on its runner, never a remote Supabase project
     (CLAUDE.md). It is not done in the pull request that adds D56.
 - **How the watch rule is applied** (the reading of the pull request that
-  adds D56, for the user to confirm):
+  adds D56, confirmed by the user on 2026-11-22):
   - Which pull requests: those whose ratio step computed r, from the first
     one after D56's merge. The pull request that adds D56 does not count:
     its A/A runs are the data of this decision (the four with warm-ups).
