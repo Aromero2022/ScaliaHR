@@ -4075,6 +4075,9 @@ lower-case keys, only strings and finite numbers as values):
 6. `second pass`: the same k6 run again, right after the first, on the same
    runner and stack, with the same settings, re-seeded like the first. Tests
    the cold-start hypothesis.
+   - Since D56's `warm-pr-1` (2026-11-22) the first pass also follows a k6
+     pass on the same stack, so the two passes compare a warm stack with a
+     warm one, no longer a cold one with a warm one.
    - It prints its p95, failed requests, failed checks, the pages that
      showed another tenant's employees, k6's exit code, its seconds and
      `counts_for_d36=no`. Its k6 summary goes to `second-pass.txt` in the
@@ -4141,6 +4144,9 @@ request's CI measures the real cost.
 - The second pass re-seeds the load tenants: it repeats the first pass's
   procedure on a stack that has just served it, so it separates a warm stack
   from a cold one, not fresh data from old.
+  Since D56's `warm-pr-1` (2026-11-22) the first pass also runs on a stack
+  that a k6 pass has just served, so the second pass no longer separates a
+  warm stack from a cold one either.
 - The CSV reader expects k6 v1.8.2's columns; a k6 upgrade that changes them
   makes the `requests` and `healthy to k6` lines fail loudly, not misread.
   Since D56 such an upgrade also fails the job: D56 reads every pass's CSV
@@ -4728,6 +4734,10 @@ Supabase starts.
 - **New failures.** The job now also fails when `main`'s stack cannot be
   built or run ("sin referencia"), which did not exist before. That is the
   cost of failing closed.
+  Since `warm-pr-1` (2026-11-22) it also fails when the PR's warm-up is
+  missing or broken ("calentamiento del PR roto"), docs-only pull requests
+  included, and a harness the PR broke shows first as that verdict, in the
+  warm-up's step, not as "pasada del PR inválida" on `pr-1`.
 - **A change in how the stack starts.** `main-up` is the PR's
   `scripts/d56-ab.sh` run on HEAD^1's files, and it mirrors the PR's
   `scripts/local-up.sh`.
@@ -4847,11 +4857,18 @@ Supabase starts.
   - What was left came from `pr-1`, which followed the e2e and not a k6
     pass: ln(`pr-1`/`pr-2`) was +0.104 and −0.061, and `main` stood within
     −0.03 to −0.06 of `pr-2`.
+  - That reading is weak evidence (added after this pull request's review,
+    2026-11-22): over the two runs ln(`pr-1`/`pr-2`) averaged +0.022, well
+    inside its noise of 0.071 (see **What the new criterion can tell**
+    below), and `main` was faster than `pr-2` too. The two runs do not show
+    on their own that `pr-1` stood apart.
 - **The criterion is replaced (the user, 2026-11-22).** |ln r| ≤ 0.07 in
   each of two runs was too strict for two data points: it holds only about
   43 % of the time with no bias at all. The criterion of **Warm-up of the
   PR's stack (2026-11-22)** below replaces it; the one above stays as the
   record of what was asked first.
+  The 43 % is the figure of the bullet "With the noise of **The limit**
+  (0.071)" above.
 
 **Warm-up of the PR's stack (2026-11-22):**
 - **Decision** (the user, 2026-11-22): warm `pr-1`'s stack too. After the e2e
@@ -4876,6 +4893,8 @@ Supabase starts.
     PR roto", and the job fails closed;
   - the same settings, harness, attempt and PR images as `pr-1`, and a start
     after `main-1` and before `pr-1`: otherwise "pasadas no comparables".
+    On a docs-only pull request, which has no `main-1`, only the start
+    before `pr-1` is checked.
 - The D36 step (`pr-1`), its line and its files, and the informational band,
   keep their names and files. `pr-1`'s `D56-ab: pass` line says
   `stack=warmed`.
@@ -4892,6 +4911,28 @@ Supabase starts.
   next option is to calibrate the limit.
 - **Cost:** one more k6 pass, about 1 min 25 s, on top of the 19 min 13 s to
   19 min 37 s of the job with `main`'s warm-ups; the timeout is 45 min.
+- **What the new criterion can tell** (added after this pull request's
+  review, 2026-11-22, for the user's decision; the criterion is unchanged):
+  - With the noise of **The limit** (0.071 in ln per pass, so 0.100 for
+    ln(`pr-1`/`pr-2`) in one run, 0.071 for its mean over two runs, and
+    0.050 for the mean ln r), a simulation of 400 000 pairs of runs gives:
+    with no bias at all, structure holds about 52 % of the time, bias about
+    80 %, and both about 42 %. The two are independent: structure reads the
+    difference of the PR's two passes, bias their sum.
+  - Both hold about 17 % of the time with `pr-1` 0.089 slower than `pr-2`
+    (the two A/A runs before the warm-ups), and about 4 % with the −0.140
+    measured before the warm-ups.
+  - So, like the criterion it replaces, it tells a large bias from none,
+    not a small one. With no bias it misses about 58 % of the time, so a
+    miss alone is no evidence for calibrating the limit.
+  - Read per run instead (each run's ln(`pr-1`/`pr-2`) within 0.05), it
+    would hold about 12 % of the time with no bias.
+  - The two runs of head 4cf2c03, without `warm-pr-1`, already meet it:
+    mean ln(`pr-1`/`pr-2`) +0.022, mean ln r +0.057, and |ln r| 0.083 and
+    0.032. So a pass on the new head would not show on its own that
+    `warm-pr-1` helped; the five `main` runs of the transition measure it.
+  - If those five runs show the bias again, nothing changes on its own: the
+    figures go to the user, as when the criterion does not hold.
 
 ---
 

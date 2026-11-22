@@ -48,12 +48,6 @@ export const WARMUPS = Object.freeze({
 });
 export const WARMUP_OF = Object.freeze({ "main-1": "warm-main-1", "pr-1": "warm-pr-1", "main-2": "warm-main-2" });
 
-/** The verdict of a missing or broken warm-up: the PR's own, or that of a broken main pass. */
-export function brokenWarmupVerdict(role, harnessChanged) {
-  return role === "pr" ? VERDICTS.prWarmBroken : brokenRunVerdict("main", harnessChanged);
-}
-/** The verdict of a page with another tenant's employees, on the side the pass is on. */
-const isolationVerdict = (role) => (role === "main" ? VERDICTS.mainIsolation : VERDICTS.prIsolation);
 /** The load settings of the D36 step; every pass must run with the same ones. */
 export const LOAD_PARAMS = Object.freeze(["LOAD_BIG_USERS", "LOAD_SMALL_USERS", "LOAD_VUS", "SMALL_VUS", "RAMP", "HOLD", "THINK_MIN", "THINK_MAX"]);
 export const IMAGES = Object.freeze({
@@ -163,6 +157,12 @@ export function brokenRunVerdict(role, harnessChanged) {
   if (role === "pr") return VERDICTS.prInvalid;
   return harnessChanged ? VERDICTS.harness : VERDICTS.noReference;
 }
+/** The verdict of a missing or broken warm-up: the PR's own, or that of a broken main pass. */
+export function brokenWarmupVerdict(role, harnessChanged) {
+  return role === "pr" ? VERDICTS.prWarmBroken : brokenRunVerdict("main", harnessChanged);
+}
+/** The verdict of a page with another tenant's employees, on the side the pass is on. */
+const isolationVerdict = (role) => (role === "main" ? VERDICTS.mainIsolation : VERDICTS.prIsolation);
 
 export function loadParams(env) {
   const params = {};
@@ -273,27 +273,27 @@ export function warmLine(name, record) {
  * - A leak is the isolation failure of the side the pass is on.
  * - One that differs makes the passes not comparable.
  */
-export function checkWarmup(mainName, warm, mainRecord, mainFirstRequest, previousFirstRequest, tree) {
-  const name = WARMUP_OF[mainName];
-  if (!name) throw new Error(`${mainName} has no warm-up`);
-  const role = PASSES[mainName].role;
-  const broken = (message) => new GateError(brokenWarmupVerdict(role, tree.harness_changed), `${mainName}: its warm-up ${name} ${message}`);
+export function checkWarmup(passName, warm, passRecord, passFirstRequest, previousFirstRequest, tree) {
+  const name = WARMUP_OF[passName];
+  if (!name) throw new Error(`${passName} has no warm-up`);
+  const role = PASSES[passName].role;
+  const broken = (message) => new GateError(brokenWarmupVerdict(role, tree.harness_changed), `${passName}: its warm-up ${name} ${message}`);
   const differs = (message) => new GateError(VERDICTS.mismatch, `${name} ${message}`);
   if (!warm) throw broken("was not recorded");
-  if (warm.pass !== name || warm.of !== mainName || warm.role !== "warm") throw broken("has a record that is not its own");
+  if (warm.pass !== name || warm.of !== passName || warm.role !== "warm") throw broken("has a record that is not its own");
   if (passExit(warm.k6_exit) === null) throw broken(`ran, but k6 exited ${JSON.stringify(warm.k6_exit)}`);
   if (!(Number.isInteger(warm.isolation_fails) && warm.isolation_fails >= 0)) throw broken("left no tenant-isolation count");
   if (warm.isolation_fails > 0) throw new GateError(isolationVerdict(role), `${name}: ${warm.isolation_fails} page(s) showed another tenant's employees`);
   if (!(Number.isFinite(warm.p95) && warm.p95 > 0)) throw broken("left no steady-state p95");
   if (!Number.isFinite(warm.first_request)) throw broken("left no first request time");
   for (const key of LOAD_PARAMS) {
-    if (warm.params?.[key] !== mainRecord.params[key]) throw differs(`ran with ${key}=${warm.params?.[key]}, ${mainName} with ${mainRecord.params[key]}`);
+    if (warm.params?.[key] !== passRecord.params[key]) throw differs(`ran with ${key}=${warm.params?.[key]}, ${passName} with ${passRecord.params[key]}`);
   }
-  if (warm.harness !== mainRecord.harness) throw differs(`ran another harness than ${mainName}`);
-  if (String(warm.run_attempt) !== String(mainRecord.run_attempt)) throw differs(`was recorded in attempt ${warm.run_attempt}, ${mainName} in attempt ${mainRecord.run_attempt}`);
-  if (warm.web_image !== mainRecord.web_image || warm.worker_image !== mainRecord.worker_image) throw differs(`warmed other images than ${mainName} measured`);
-  if (!(warm.first_request < mainFirstRequest) || (previousFirstRequest !== null && !(warm.first_request > previousFirstRequest))) {
-    throw differs(`did not run right before ${mainName}`);
+  if (warm.harness !== passRecord.harness) throw differs(`ran another harness than ${passName}`);
+  if (String(warm.run_attempt) !== String(passRecord.run_attempt)) throw differs(`was recorded in attempt ${warm.run_attempt}, ${passName} in attempt ${passRecord.run_attempt}`);
+  if (warm.web_image !== passRecord.web_image || warm.worker_image !== passRecord.worker_image) throw differs(`warmed other images than ${passName} measured`);
+  if (!(warm.first_request < passFirstRequest) || (previousFirstRequest !== null && !(warm.first_request > previousFirstRequest))) {
+    throw differs(`did not run right before ${passName}`);
   }
 }
 

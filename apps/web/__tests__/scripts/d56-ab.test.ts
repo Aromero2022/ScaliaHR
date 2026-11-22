@@ -782,6 +782,8 @@ describe("main's stack is warmed before each of main's passes (D56, 2026-11-21)"
   it.each([
     ["other settings", { params: { ...PARAMS, RAMP: "10s" } }, "warm-pr-1 ran with RAMP=10s, pr-1 with 20s"],
     ["main's images", { web_image: MAIN_IMAGE.web }, "warm-pr-1 warmed other images than pr-1 measured"],
+    ["main's worker image", { worker_image: MAIN_IMAGE.worker }, "warm-pr-1 warmed other images than pr-1 measured"],
+    ["the same start as main-1", { first_request: START["main-1"] }, "warm-pr-1 did not run right before pr-1"],
     ["a start before main-1, the pass before pr-1", { first_request: START["main-1"] - 1 }, "warm-pr-1 did not run right before pr-1"],
     ["a start after pr-1", { first_request: START["pr-1"] + 1 }, "warm-pr-1 did not run right before pr-1"],
   ])("refuses a warm-up of pr-1 with %s as not comparable", (_what, warm, message) => {
@@ -1409,6 +1411,51 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
     expect(result.stdout).toMatch(/^D56-ab: pass pass=main-1 role=main stack=warmed p95_steady_ms=60\.00 samples=600 k6_exit=0 /m);
     expect(readFileSync(path.join(out, "k6-main-1.txt"), "utf-8")).toContain("{ kind:page,phase:steady }");
     expect(JSON.parse(readFileSync(path.join(out, "d56-pass-main-1.json"), "utf-8"))).toMatchObject({ pass: "main-1", k6_exit: "0", params: PARAMS });
+  });
+
+  it("k6: warms the PR's stack the same way, to its own files, with no p95 in the log", () => {
+    const { clone, prHead } = mergeClone(() => {});
+    const base = path.join(tempDir("d56-base-"), "ScaliaHR");
+    expect(runAb(clone, ["tree"], {}, { PR_HEAD: prHead, D56_BASE_DIR: base }).status).toBe(0);
+    const out = path.join(clone, "load/.out");
+    const fixture = tempDir("d56-fixture-");
+    // The warm-up runs 2 min before pr-1, after the e2e, to its own files.
+    writeFileSync(path.join(fixture, "summary-warm-pr-1.json"), JSON.stringify(summaryOf({ p95: 70, start: START["pr-1"] - 120_000 })));
+    writeFileSync(path.join(fixture, "requests-warm-pr-1.csv.gz"), csvOf({ p95: 70, start: START["pr-1"] - 120_000 }));
+    const npm = [
+      '[ "$LOAD_SUMMARY" = summary-warm-pr-1.json ] || { echo "unexpected summary $LOAD_SUMMARY" >&2; exit 8; }',
+      '[ "$*" = "run load:test -- --out csv=fileName=/out/requests-warm-pr-1.csv.gz,timeFormat=unix_milli" ] || { echo "unexpected npm $*" >&2; exit 9; }',
+      `cp ${fixture}/summary-warm-pr-1.json ${out}/summary-warm-pr-1.json`,
+      `cp ${fixture}/requests-warm-pr-1.csv.gz ${out}/requests-warm-pr-1.csv.gz`,
+      'echo "      { kind:page,phase:steady }...: avg=70ms p(95)=70ms"',
+    ].join("\n");
+    const docker = [
+      'case "$*" in',
+      `  "inspect -f {{.Image}} scaliahr-web-1"|"image inspect -f {{.Id}} scaliahr-web:local") echo ${PR_IMAGE.web} ;;`,
+      `  "inspect -f {{.Image}} scaliahr-worker-1"|"image inspect -f {{.Id}} scaliahr-worker:local") echo ${PR_IMAGE.worker} ;;`,
+      '  "image inspect -f {{index .Config.Labels "*) git describe --always --dirty --abbrev=12 ;;',
+      '  *) echo "unexpected docker $*" >&2; exit 9 ;;',
+      "esac",
+    ].join("\n");
+    const warm = runAb(clone, ["k6", "warm-pr-1"], { npm, docker }, { ...PARAMS, GITHUB_RUN_ATTEMPT: "1", D56_BASE_DIR: base });
+    expect(warm.stderr).toBe("");
+    expect(warm.status).toBe(0);
+    expect(warm.stdout).not.toMatch(/phase:steady|p\(95\)/);
+    expect(warm.stdout).toMatch(/^D56-ab: warm pass=warm-pr-1 of=pr-1 measured=no p95_steady_ms=70\.00 k6_exit=0 /m);
+    expect(readFileSync(path.join(out, "k6-warm-pr-1.txt"), "utf-8")).toContain("{ kind:page,phase:steady }");
+    expect(existsSync(path.join(out, "summary.json"))).toBe(false);
+    expect(JSON.parse(readFileSync(path.join(out, "d56-pass-warm-pr-1.json"), "utf-8"))).toMatchObject({
+      pass: "warm-pr-1",
+      role: "warm",
+      of: "pr-1",
+      summary: "summary-warm-pr-1.json",
+      csv: "requests-warm-pr-1.csv.gz",
+      p95: 70,
+      first_request: START["pr-1"] - 120_000,
+      isolation_fails: 0,
+      expected_web: PR_IMAGE.web,
+      params: PARAMS,
+    });
   });
 
   it("k6: a main pass whose run broke is \"sin referencia\", with its output's tail and no p95 line", () => {
