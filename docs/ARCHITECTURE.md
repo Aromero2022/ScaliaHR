@@ -4683,6 +4683,9 @@ Supabase starts.
     systematic difference: the second pass was faster in 7 of them.
   - A fresh stack against one after the e2e has not been measured. The first
     D56 runs measure it, `main`'s included.
+  - The first D56 runs measured it, and it is a bias: see **Warm-up of
+    `main`'s stack (2026-11-21)** below. Since then `main`'s passes start
+    on a warmed stack.
 - **The PR's harness on `main`'s schema.** `main`'s passes run the PR's seed
   and `load/pages.js` against `main`'s schema. A PR whose harness needs its
   own migrations breaks the `main` passes, which gives "arnés del PR
@@ -4719,6 +4722,65 @@ Supabase starts.
     hand.
   - Its disk use is not measured: two builds, the worktree's `npm ci` and
     three sets of images. A run that fails for lack of disk points here.
+
+**Warm-up of `main`'s stack (2026-11-21):**
+- **Finding.** The pull request that adds D56 changes no code that goes
+  into the images, so its first two CI runs were in effect A/A runs with
+  D56's real order. Both gave r below 1:
+
+  | Head | CPU | `main-1` | `pr-1` | `pr-2` | `main-2` | r | ln r |
+  |---|---|---|---|---|---|---|---|
+  | 1e2c25c | AMD EPYC 7763 | 123.51 ms | 106.09 ms | 95.63 ms | 121.31 ms | 0.8229 | −0.195 |
+  | 847877b | Intel Xeon 6975P-C | 55.95 ms | 52.93 ms | 49.17 ms | 55.22 ms | 0.9178 | −0.086 |
+
+  - `main`'s two passes barely differed (−1 to −2 %); the PR's second pass
+    was 7 to 10 % faster than its first. A stack that has just served load
+    answers faster, and `main`'s passes started on a stack that had served
+    none.
+  - The mean ln r was −0.140, 2.0 times the 0.071 of **The limit**. With
+    that bias a real regression of up to about +38 % gives r ≈ 1.20 and does
+    not block.
+- **Decision** (the user, 2026-11-21, option 2 of three: warm the stack;
+  the others were to calibrate the limit with the measured bias, or to
+  gather more data first): before `main-1` and before `main-2`, an
+  unmeasured k6 pass, `warm-main-1` and `warm-main-2`, runs on the same
+  stack.
+  - It is a pass like the measured ones: the PR's harness, the same eight
+    load settings from the step's `env`, and the seed's re-seed of the load
+    tenants first.
+  - Its summary, CSV and k6 output go to files of its own
+    (`summary-warm-main-N.json`, `requests-warm-main-N.csv.gz`,
+    `k6-warm-main-N.txt`), all in the D56 artifact. None of it reaches the
+    log as a `{ kind:page,phase:steady }` line.
+  - `record warm-main-N` writes `d56-pass-warm-main-N.json` and prints a
+    `D56-ab: warm … measured=no p95_steady_ms=…` line. Its p95 is
+    informational and never enters r.
+  - Recording `main-N` and the ratio step both require it. The warm-up must
+    be recorded, k6 must have exited 0 or 99, and it must have left a
+    steady-state p95. When one of those fails, its pass is "sin referencia"
+    (or "arnés del PR incompatible con main" when the PR changed the
+    harness), and the job fails closed.
+  - It must also have run with the same settings, harness, attempt and
+    images as its pass, and started right before it: after the pass before
+    it, if there is one. Otherwise the passes are "pasadas no comparables".
+  - Each `D56-ab: pass` line of `main` says `stack=warmed`; the table of
+    **The four passes** above said "fresh" before the warm-up.
+  - The limit of 1.20, the ABBA order, the cap of one re-run and everything
+    about `pr-1` and `pr-2` stay as they were.
+  - Tests and mutations cover each check, as they do the closing
+    conditions; the pull request's verification table lists them.
+- **Validation** (the pull request is still an A/A): its CI on the head
+  with the warm-up, and one re-run of the `docker` job that the user
+  authorized as a repeat measurement on another runner (not a re-run for a
+  failure). The bias counts as fixed when |ln r| ≤ 0.07 in both runs and
+  the mean of the two has |ln r| ≤ 0.05. If it does not hold, nothing else
+  changes, and the user chooses between calibrating the limit and more
+  warm-up.
+- **Cost:** two more k6 passes of about 1.5 min each, about +3 min per run
+  of the `docker` job, which took 16 min 49 s to 19 min 34 s before the
+  warm-up; the timeout is 45 min.
+- The detection figures of **The limit** stay a bound until the five
+  `main` runs of the transition measure the noise of the real topology.
 
 ---
 
