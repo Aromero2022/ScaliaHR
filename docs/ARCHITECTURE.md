@@ -4723,6 +4723,9 @@ Supabase starts.
     on a warmed stack.
   - Since 2026-11-22 `pr-1` runs after the e2e and then an unmeasured
     pass, `warm-pr-1`: see **Warm-up of the PR's stack (2026-11-22)** below.
+  - What was left after the warm-ups, a mean ln r of +0.072, was accepted
+    with the limit at 1.20: see **Result of the PR warm-up and decision
+    (2026-11-22)** below.
 - **The PR's harness on `main`'s schema.** `main`'s passes run the PR's seed
   and `load/pages.js` against `main`'s schema. A PR whose harness needs its
   own migrations breaks the `main` passes, which gives "arnés del PR
@@ -4962,6 +4965,177 @@ Supabase starts.
   - If those five runs show the bias again, nothing changes on its own: the
     figures go to the user, as when the criterion does not hold.
     No bound is set for those runs: the user reads their figures.
+
+**Result of the PR warm-up and decision (2026-11-22):**
+- **The validation of `warm-pr-1`** (head 0af2f14, run 45001149656): the CI
+  run (attempt 1) and the one repeat measurement the user authorized
+  (attempt 2, on another runner). All five jobs of the CI workflow (`app`,
+  `secrets`, `db`, `db-reset-test` and `docker`) passed in both; attempt 2
+  re-ran all five. The
+  warm-ups' p95 are informational: the script requires one from each
+  warm-up, but compares none with a limit.
+
+  | Run | CPU | `warm-main-1` | `main-1` | `warm-pr-1` | `pr-1` | `pr-2` | `warm-main-2` | `main-2` | r | ln r |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Attempt 1 | AMD EPYC 9V74 | 78.69 ms | 65.87 ms | 99.99 ms | 78.18 ms | 75.47 ms | 80.43 ms | 75.70 ms | 1.0878 | +0.084 |
+  | Attempt 2 | Intel Xeon 6975P-C | 50.02 ms | 45.93 ms | 56.36 ms | 51.62 ms | 57.16 ms | 61.63 ms | 53.75 ms | 1.0933 | +0.089 |
+
+  - The criterion did not hold. Structure held (mean ln(`pr-1`/`pr-2`)
+    −0.033) and each |ln r| was within 0.14 (0.084 and 0.089), but the mean
+    ln r was +0.087, above 0.07.
+  - `pr-1` no longer stood apart from `pr-2`. What was left came from
+    `main`, faster than both of the PR's passes: ln(`pr-2`/`main`) was
+    +0.067 and +0.140.
+  - The figures the transition tracks, here in these two runs:
+    ln(`main-2`/`main-1`) was +0.139 and +0.157, so `main-2` was slower
+    than `main-1` in both, and ln(`pr-2`/`pr-1`) was −0.035 and +0.102.
+  - Cost: the `docker` job took 22 min 39 s (AMD) and 21 min 12 s (Intel),
+    with 1 min 25 s and 1 min 26 s for `warm-pr-1`. On Intel that is 1 min
+    35 s to 2 min more than with `main`'s warm-ups only, and 23 min 48 s
+    below the 45 min timeout (22 min 21 s on AMD).
+- **The four runs with warm-ups** (4cf2c03 with `main`'s two, 0af2f14 with
+  all three; ln r is half of ln(`pr-1`/`pr-2`) minus ln(`main`/`pr-2`)):
+
+  | Run | Warm-ups | CPU | r | ln r | ln(`pr-1`/`pr-2`) | ln(`main`/`pr-2`) |
+  |---|---|---|---|---|---|---|
+  | 4cf2c03, attempt 1 | `main`'s | Intel Xeon 6975P-C | 1.0863 | +0.083 | +0.104 | −0.031 |
+  | 4cf2c03, attempt 2 | `main`'s | Intel Xeon 6975P-C | 1.0326 | +0.032 | −0.061 | −0.062 |
+  | 0af2f14, attempt 1 | all three | AMD EPYC 9V74 | 1.0878 | +0.084 | +0.035 | −0.067 |
+  | 0af2f14, attempt 2 | all three | Intel Xeon 6975P-C | 1.0933 | +0.089 | −0.102 | −0.140 |
+  | Mean | | | | +0.072 | −0.006 | −0.075 |
+
+  - All four are positive, with mean +0.072. Before the warm-ups ln r was
+    −0.195 and −0.086. After them the bias went from negative to positive,
+    and did not go away.
+  - The residual sits on `main`'s side: `main` was faster than `pr-2` in
+    all four runs, while ln(`pr-1`/`pr-2`) averaged −0.006.
+  - With the noise of **The limit**, the mean of four runs has σ 0.036, so
+    +0.072 is 2.0 times it. The four ln r spread less than that noise
+    (standard deviation 0.027), but four values do not measure it.
+  - Only the two runs of 0af2f14 ran the job as it is now, with all three
+    warm-ups. Their mean ln r is +0.087.
+- **The two-run criteria are a record, not a gate.** Both, the first one
+  and the one that replaced it, hold by chance only about 42–43 % of the
+  time with no bias, so the second misses about 58 % of the time with no
+  bias at all (**What the new criterion can tell** above). The first one's
+  miss led to `warm-pr-1`; from now on neither decides anything. They stay
+  in D56 as the record of what was asked and measured, and no step of the
+  job reads them.
+- **Decision** (the user, 2026-11-22): the residual bias is accepted, and
+  the limit stays at 1.20. This closes the next option that the PR
+  warm-up's **Validation** named: the criterion missed, and the limit is
+  not calibrated.
+  - Why: the residual goes the safe way. A bias of +0.072 makes the gate
+    stricter with the pull request, not more lenient: for a real change,
+    the limit acts as about 1.20 × e^−0.072 ≈ 1.12.
+  - The figures assume independent normal noise in ln, with σ = 0.071 per
+    pass as in **The limit** (with two passes on each side that is also the
+    σ of ln r), the mean bias +0.072, and attempt 2 independent of attempt
+    1 (a new job on a new runner, as **The limit** assumes). They are
+    computed exactly and checked with a simulation of 400 000 runs:
+    - a real regression of +20 % fails attempt 1 about 84 % of the time,
+      and blocks (attempt 1 and its re-run both above 1.20) about 71 %,
+      against 50 % and 25 % with no bias;
+    - with no regression, attempt 1 is red about 6 % of the time and the
+      pull request is blocked about 0.4 %, against 0.5 % and 0.003 % with
+      no bias.
+  - With +0.087, the mean of the two runs of the job as it is now: with no
+    regression, attempt 1 is red about 9 % of the time and the pull request
+    is blocked about 0.8 %; +20 % fails attempt 1 about 89 % of the time
+    and blocks about 79 %.
+  - σ = 0.071 is a lower bound of D56's noise (**The limit**). With 0.10
+    per pass and the bias +0.072, attempt 1 is red about 14 % of the time
+    with no regression and the pull request is blocked about 1.8 %, and
+    +20 % blocks about 58 %.
+  - Something that slows both attempts alike, such as the same slow kind of
+    runner, makes them less independent: the block figures with no
+    regression are then somewhat higher.
+  - What a red attempt 1 with no code cause costs: one re-run of the
+    `docker` job, about 21–23 min, and that re-run is the cap's only one
+    (**What the cap counts**). If it then fails for another reason, an e2e
+    flake for example, only a new head measures again.
+  - The decision concerns only how r is read against 1.20, and nothing
+    about r itself changed. The
+    tenant-isolation count is still required in every pass, warm-ups
+    included, and a page with another tenant's employees still fails the
+    job ("main falla aislamiento" or "el PR falla aislamiento"). That is
+    never a red attempt 1 of the watch rule below, and the bias is never a
+    reason to read it as noise.
+- **Probable cause (not measured):** the state of the database of the PR's
+  stack against `main`'s new one.
+  - The PR's stack starts once, with `npm run local:up`, on a new database
+    too (after `main-1`'s `down`), and serves the e2e, which creates and
+    deletes its accounts, before `warm-pr-1`. By `pr-2` it has had three
+    cycles of the load seed (`warm-pr-1`, `pr-1`, `pr-2`), two of which
+    first delete the `load-*` tenants and accounts of the one before
+    (`load/seed.mjs`).
+  - Each `main` pass starts on a new database (`down` runs `supabase stop
+    --no-backup`, then `main-up` starts it again), with two cycles: its
+    warm-up's and its own, the second one deleting the first's.
+  - Rows deleted and created again leave dead rows and change the
+    planner's statistics until autovacuum catches up. That is a hypothesis:
+    nothing in these runs measured it.
+  - These runs weaken the seed-cycle part of it. `pr-1` and the `main`
+    passes are each measured after their second cycle. `pr-2`, after its
+    third, was about as fast as `pr-1`: ln(`pr-2`/`pr-1`) averaged +0.006
+    over the four runs (+0.033 over the two of 0af2f14, faster in one and
+    slower in the other), inside the noise and far less than `main`'s lead
+    over `pr-2` (mean 0.075). The e2e is the part no run has compared.
+  - It does not explain either why `main-2` was slower than `main-1` in
+    both runs of 0af2f14, since both start on a new database with the same
+    two cycles. The `VACUUM (ANALYZE)` of the watch rule is an example, not
+    a measured fix.
+- **Watch rule** (the user's):
+  - In every pull request that runs D56, the verification table writes
+    down r, ln r, and whether attempt 1 was red with no code cause.
+  - If 2 or more attempts 1 of the first 10 pull requests with D56 are red
+    with no real regression, a pull request of its own makes the database
+    state of both stacks symmetric, for example a `VACUUM (ANALYZE)` before
+    each measured pass on both stacks. Those are the throwaway local stacks
+    the `docker` job starts on its runner, never a remote Supabase project
+    (CLAUDE.md). It is not done in the pull request that adds D56.
+- **How the watch rule is applied** (the reading of the pull request that
+  adds D56, for the user to confirm):
+  - Which pull requests: those whose ratio step computed r, from the first
+    one after D56's merge. The pull request that adds D56 does not count:
+    its A/A runs are the data of this decision (the four with warm-ups).
+    A docs-only pull request has no r and does not count. A Dependabot
+    pull request that
+    runs D56 counts; the loop writes its figures when it reviews it
+    (CLAUDE.md). Pushes to `main` do not count; their r is reported as
+    **The limit** and **Verdicts** say.
+  - Which attempts: every attempt 1 that computed r, including those of
+    later heads, since each new head is a run with its own attempt 1
+    (**What the cap counts**). A pull request whose only r came from
+    attempt 2 adds no attempt 1.
+  - Which red: only "sobre el límite en el intento 1". An attempt 1 with
+    any other label, such as "sin referencia", or one where an earlier step
+    failed (an e2e flake), has no r above the limit and says nothing about
+    the bias.
+  - "With no code cause" and "with no real regression" mean the same
+    thing. The verification table writes the judgment with its evidence:
+    whether the diff changes files that go into the images, and attempt 2's
+    r. A case that is not clear counts as red with no code cause, and the
+    user confirms it when reviewing the table.
+  - The running count lives in the verification tables: each one carries
+    it on from the one before (pull requests counted, red attempts 1 so
+    far). The rule fires as soon as the second red arrives, without
+    waiting for the tenth pull request.
+  - The five `main` runs of the transition still report
+    ln(`main-2`/`main-1`) and ln(`pr-2`/`pr-1`) to the user, with no bound;
+    only the watch rule has a trigger for the bias (a push with r above
+    1.20 is still "regresión ya mergeada", **Verdicts**).
+- **What 2 of 10 can tell:** with exactly the accepted bias and σ = 0.071,
+  2 or more red attempts 1 in 10 with no regression happen about 12 % of
+  the time, about 1 time in 8 with nothing changed. It is 0.1 % with no
+  bias, about 22 % with +0.087 and about 40 % with σ = 0.10. So the rule
+  also fires when the noise is larger than **The limit** assumes, and a
+  trigger alone does not show that the bias grew. These figures assume one
+  attempt 1 per pull request; later heads add attempts, and the rule then
+  fires more often.
+- **It watches only the strict side.** A bias that turned negative again, as
+  before the warm-ups, would show in the ln r the tables write down; no
+  bound is set for it, and the user reads those figures.
 
 ---
 
