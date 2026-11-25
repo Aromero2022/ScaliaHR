@@ -1,8 +1,12 @@
-// D36: whether a pull request's k6 run is compared with main's median.
+// D36: whether a pull request's k6 run is compared with main.
 // The CI step feeds `git diff -z --name-only --no-renames HEAD^1 HEAD` of the
 // pull request's merge commit to this script on stdin. When every path is Markdown,
-// under docs/ or under .claude/, the images are main's, so the comparison does
-// not apply; k6 still runs and its own p95 < 500 ms threshold still gates.
+// under docs/ or under .claude/, the comparison does not apply; k6 still runs
+// and its own p95 < 500 ms threshold still gates.
+// D56: the same verdict skips main's k6 passes of the A/B ratio when it is
+// false, and scripts/d56-ab.mjs checks it against the images' files. The
+// summary line below still names main's median: D36's band, informational
+// during D56's transition.
 import { appendFileSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -51,6 +55,8 @@ function main() {
   }
   console.log(verdict);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${verdict}\n`);
+  // D56: main's k6 passes are skipped only on "false", and the ratio step reads the verdict.
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `applies=${applies}\n`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();

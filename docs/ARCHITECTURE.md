@@ -2053,6 +2053,9 @@ machine):**
       verification table writes the second as "no aplica (sin cambios en la
       imagen)". If HEAD is not the pull request's merge commit, or `git diff`
       fails, the step fails the job instead of picking an answer.
+    - Since D56 the step also writes `applies=true` or `applies=false` to its
+      output. `main`'s k6 passes are skipped only on `false`, and D56's ratio
+      step checks that verdict against the diff and against the PR's images.
   - **Noise band (after 9c PR 6c, the user's choice among three variants):**
     it replaces the three-run baseline and the 20 % limit above. With them,
     #73 and #74, whose images had the same code as `main`'s, blocked in two
@@ -2060,6 +2063,15 @@ machine):**
     the main loop reads the steady-state p95 from the `docker` job's log of
     each run and fills the pull request's verification table. No script
     computes the band.
+    - Since D56 (2026-11-20) the gate is the A/B ratio with `main` on the
+      same runner, computed by `scripts/d56-ab.mjs`. This band stays for five
+      `main` runs as "banda global (informativa)", without blocking, and is
+      then dropped from the verification table (D56).
+    - Since 2026-11-22 the D36 step's pass follows an unmeasured k6 warm-up
+      on the same stack (D56, **Warm-up of the PR's stack**). The step, its
+      `{ kind:page,phase:steady }` line and its files keep their names, but
+      the band now reads a warmed pass, unlike the `main` runs it was built
+      from: one more reason it is only informational.
     - Baseline: the median of the steady-state p95 of the last five CI runs
       on `main`.
     - The last five runs: the latest completed CI runs on `main` whose
@@ -2076,6 +2088,9 @@ machine):**
       three `main` runs has no k6 result, an investigation of why is due,
       and the phase's next pull request does not open until the
       investigation is open.
+      - Since D56, during its transition, "sin línea base" is informational:
+        it no longer holds back a merge, since the gate is D56's ratio (D56,
+        **Transition**).
     - Limit: the larger of median × 1.2 and median + 2 × MAD of those five
       runs. MAD is the median of the absolute deviations from the median,
       unscaled.
@@ -2133,12 +2148,18 @@ machine):**
       not open until the investigation is open. The reference changes only
       by the user's
       explicit decision, noted here.
+      - Since D56, during its transition, this control is informational:
+        it no longer holds back the next pull request (D56,
+        **Transition**).
     - `main` above the limit: every pull request's verification table also
       checks the latest `main` run against the band of the five valid runs
       before it. If it is above, the table notes "main sobre el límite" with
       the commit. Two `main` runs in a row above their limits count as
       "deriva (main ×2)", and the phase's next pull request does not open
       until the investigation is open.
+      - Since D56, during its transition, "main sobre el límite" and
+        "deriva (main ×2)" are informational: they no longer hold back the
+        next pull request (D56, **Transition**).
       - The band of a `main` run comes from the five valid runs before it,
         all inside the same ten-commit window. With fewer than five valid
         runs before it, the table says "main sin revisar": informational,
@@ -2172,6 +2193,9 @@ machine):**
       not for the limit. It is informational, and its numbers appear only in
       its "D36-diag:" lines (`second pass`, and `sign-ins` and `requests`
       with `pass=second`) and in the artifact.
+      - Since D56 the second pass is also `pr-2` of the A/B ratio, which
+        replaces the band as the gate. For the band, informational during
+        D56's transition, it still never counts.
     - CSV transition (pending the user's decision): since D54 the first pass
       writes a CSV. The baseline mixes `main` runs without and with the CSV
       until there are five `main` runs with it. During that transition D36
@@ -3960,6 +3984,9 @@ those pull requests), and why `main`, which only has first attempts, gave
 the D36 investigation: instrumentation only. Part B (warm-up, window, `HOLD`,
 baseline) is a later decision. Phase 9c, before its PR 6d (`motion/react`,
 ROADMAP).
+- Part B is D56 (2026-11-20): the gate is now the A/B ratio of four k6 passes
+  on the same runner, `main`, PR, PR, `main`, and this second pass is the PR's
+  second one (`pr-2`).
 
 **What does not change:** the window, `RAMP`, `HOLD`, the phase rule, the
 thresholds, the noise band and its limits, and the number D36 reads: the
@@ -3997,6 +4024,16 @@ and the rollback drill, still skip after a failure.)
       has a threshold of its own (`rate==1`, D36), so a single page with
       another tenant's employees fails the first pass, and the job, within
       what the check sees (D36).
+    - Since D56 the ratio step fails the job when any of the four passes,
+      this one included, has no isolation count (D56, condition 3).
+- Since D56 the first pass and this second pass are also `pr-1` and `pr-2`
+  of D56's ratio. The step "The PR's k6 passes for D56 (pr-1, pr-2)" checks
+  them as D56 checks every pass (k6's exit code, the steady samples, the CSV
+  against the summary, the run's thresholds) and fails the job when one is
+  broken, as "pasada del PR inválida". The diagnostic steps themselves still
+  never fail it.
+  Since `warm-pr-1` (2026-11-22) that step also checks `pr-1`'s warm-up, so it
+  can fail as "calentamiento del PR roto" or "pasadas no comparables" too.
 
 **The lines** (`scripts/d36-diag.mjs`), each one for one possible cause.
 `diagLine` refuses any line off the grammar (a closed list of topics,
@@ -4006,6 +4043,8 @@ lower-case keys, only strings and finite numbers as values):
    "unavailable", with an `::warning::` that gives the reason.
 2. `healthy to k6`: seconds from the web container turning healthy to k6's
    first request in the CSV. Tests the time since the stack came up.
+   Since D56's warm-up of the PR's stack (2026-11-22), that time also holds
+   `warm-pr-1`, the unmeasured k6 pass between the e2e and the D36 step.
    - The probe log is read in the step "First healthy probe of the web
      container (D54)", right after `local:up`. Docker keeps only the last
      five probes in `State.Health.Log` (50 s at the image's 10 s interval),
@@ -4038,6 +4077,9 @@ lower-case keys, only strings and finite numbers as values):
 6. `second pass`: the same k6 run again, right after the first, on the same
    runner and stack, with the same settings, re-seeded like the first. Tests
    the cold-start hypothesis.
+   - Since D56's `warm-pr-1` (2026-11-22) the first pass also follows a k6
+     pass on the same stack, so the two passes compare a warm stack with a
+     warm one, no longer a cold one with a warm one.
    - It prints its p95, failed requests, failed checks, the pages that
      showed another tenant's employees, k6's exit code, its seconds and
      `counts_for_d36=no`. Its k6 summary goes to `second-pass.txt` in the
@@ -4104,8 +4146,13 @@ request's CI measures the real cost.
 - The second pass re-seeds the load tenants: it repeats the first pass's
   procedure on a stack that has just served it, so it separates a warm stack
   from a cold one, not fresh data from old.
+  Since D56's `warm-pr-1` (2026-11-22) the first pass also runs on a stack
+  that a k6 pass has just served, so the second pass no longer separates a
+  warm stack from a cold one either.
 - The CSV reader expects k6 v1.8.2's columns; a k6 upgrade that changes them
   makes the `requests` and `healthy to k6` lines fail loudly, not misread.
+  Since D56 such an upgrade also fails the job: D56 reads every pass's CSV
+  with the same reader.
 
 **Checks:**
 - Unit tests (`apps/web/__tests__/scripts/d36-diag.test.ts`): the line
@@ -4299,6 +4346,796 @@ its requester is refused, sensitive fields come out masked without "Ver dato
 sensible", each export leaves one audit entry without values, and the static
 rate-limit and zod coverage tests (D31, D39) include the new actions and
 routes.
+
+---
+
+## D56 — The k6 Gate as an A/B Ratio with `main` on the Same Runner
+
+**Decision:** the `docker` job compares the pull request with `main` on the
+same runner, in four k6 passes in the order `main`, PR, PR, `main` (ABBA), and
+computes `r = exp(mean(ln p95 of the PR's two passes) − mean(ln p95 of main's
+two passes))` from the steady-state page p95 of each pass. A pull request blocks when r is
+above 1.20 on the first attempt and on the one re-run of the `docker` job.
+`scripts/d56-ab.mjs` computes r and decides in the step "D56 A/B ratio of the
+four k6 passes"; nobody reads it off the log by hand. It replaces the noise
+band as D36's comparison with `main`. This is part B of the D36 investigation
+(D54), option C, approved by the user on 2026-11-20 in the ABBA order. Phase
+9c, before its PR 6d.
+
+**Why:** the p95 follows the runner's CPU model, and a pull request does not
+choose its runner. D54 measured 46.34–61.61 ms on Intel Xeon 6975P-C and
+94.92–130.79 ms on AMD EPYC 7763 and Intel Xeon Platinum 8573C.
+- A band built from `main` runs on other runners blocked #79 because of the
+  hardware.
+- It also lets through any regression smaller than the gap between CPU models.
+- On one runner and one image the passes are much closer. In the 13 attempts
+  with both D54 passes (#79, #80, #81 and `main`, through bdccf77),
+  ln(second/first) has a mean of +0.0046 and a standard deviation of 0.1005.
+  That is the A/A noise.
+
+**Unchanged:**
+- The 500 ms ceiling, which is the D36 step's own threshold and still fails
+  the job.
+- The isolation threshold `rate==1` (D36), now required in all four passes.
+- The docs-only exemption (D36, since 9c PR 6c).
+- The number the old rule reads: the `{ kind:page,phase:steady }` line of the
+  D36 step. It is still the only such line in the job's log.
+
+**The four passes:**
+
+| Pass | Images | Stack when k6 starts | Step | Summary, CSV, k6 output |
+|---|---|---|---|---|
+| `main-1` | `main`'s, `:base` | fresh | "Main's first k6 pass (D56 main-1)", before the PR's `local:up` | `summary-main-1.json`, `requests-main-1.csv.gz`, `k6-main-1.txt` |
+| `pr-1` | the PR's, `:local` | after the e2e | "k6 load test, short run (D36)" | `summary.json`, `requests-first.csv.gz`, the log |
+| `pr-2` | the PR's, `:local` | after `pr-1` | the D54 second pass | `summary-second.json`, `requests-second.csv.gz`, `second-pass.txt` |
+| `main-2` | `main`'s, `:base`, not rebuilt | fresh | "Main's second k6 pass (D56 main-2)", after the rollback drill | `summary-main-2.json`, `requests-main-2.csv.gz`, `k6-main-2.txt` |
+
+Since 2026-11-21 `main-1` and `main-2` each follow an unmeasured warm-up on
+the same stack (`warm-main-1`, `warm-main-2`), so "fresh" above means a fresh
+stack that the warm-up has just served, and their lines say `stack=warmed`
+(see **Warm-up of `main`'s stack (2026-11-21)** below).
+
+Since 2026-11-22 `pr-1` also follows an unmeasured warm-up, `warm-pr-1`,
+right after the e2e and before the D36 step, so "after the e2e" above means
+after the e2e and that warm-up, and its line says `stack=warmed` too (see
+**Warm-up of the PR's stack (2026-11-22)** below). `pr-2` follows `pr-1` as
+before.
+
+- "Main's tree at HEAD^1 (D56)" runs first, right after the Supabase images
+  are restored. It creates `main`'s worktree and records the tree.
+- "The PR's k6 passes for D56 (pr-1, pr-2)" runs after the D54 isolation step
+  and records the PR's passes while their containers still run. A broken PR
+  pass fails the job there, before `main-2` is spent.
+- HEAD^1 depends on the event:
+  - on a pull request it is `main`, the first parent of GitHub's merge commit.
+    The tree step checks that HEAD^2 is the pull request's head, as the D36
+    scope step does;
+  - on a push it is the previous commit of `main`.
+- Each stack starts from nothing:
+  - Before `main-2`, and after `main-1` (so the PR's `local:up` starts as it
+    did before D56), the running stack is taken down. That means
+    `docker compose down --remove-orphans`, then `supabase stop --no-backup`,
+    which deletes its volumes.
+  - A check then fails the step if anything is left: a `supabase_*` or
+    `scaliahr-*` container, a `supabase_*` volume, a `supabase_network_*`
+    network, or anything answering on port 3000.
+
+**`main`'s stack is built with `main`'s files** (`scripts/d56-ab.sh`):
+- The worktree of HEAD^1 lives under `$RUNNER_TEMP/d56/`, in a folder with the
+  checkout's name.
+  - The Supabase CLI names a local stack after its folder, because
+    `supabase/config.toml` has no `project_id`.
+  - The same name gives the same containers and ports, which
+    `scripts/load-test.sh` finds from the PR's checkout.
+  - `main-up` checks this: both `supabase status` calls must give the same
+    database URL and API URL.
+- These come from the worktree:
+  - the migrations and `seed.sql` (`supabase start` and `migration up --local`,
+    both with `--workdir`);
+  - `.env.docker.example` and `scripts/set-local-role-passwords.mjs`;
+  - `docker-compose.yml` and both Dockerfiles.
+- The local-database guard runs before any migration.
+- `main`'s images are tagged `scaliahr-web:base` and `scaliahr-worker:base`
+  (`scripts/d56-main-images.compose.yml`). They never take `:local` or
+  `:previous`, which the PR's `local:up` and the rollback drill use.
+- `main-2` reuses those images without rebuilding them. It first checks that
+  they exist and that they were built with the same anon key, which is a build
+  argument of the web image.
+- The steps mirror `scripts/local-up.sh`: network and Mailpit discovery, the
+  revision label, the port (127.0.0.1:3000), `/api/health`, and the worker's
+  `system.ping` and email smoke tests. A test maps each log line of
+  `local-up.sh` to its counterpart, so a new step there makes it fail.
+- From the PR, only two things are used:
+  - the k6 harness (`load/**`, `scripts/load-test.sh`);
+  - the step's load settings.
+
+  Each pass's "D56-ab: pass" line prints both: the harness as a hash of those
+  files, and the eight settings.
+
+**The same load data before every pass:**
+- Each pass runs `npm run load:test`. Its seed deletes the load tenants
+  (`load-*`), their rows and the `@load.scaliahr.test` Auth accounts, then
+  creates them again. So all four passes start with the same load data.
+- The seed copies the demo tenant's RBP template (groups, roles, permissions
+  and grants), which comes from `seed.sql` on both stacks.
+- The e2e leaves residue, and only on the PR's stack, before `pr-1`:
+  - It changes the demo tenant's job records and skills, user links and
+    memberships, then deletes its accounts and undoes what it saved.
+  - It does not touch the RBP template.
+- That residue does not reach what k6 measures:
+  - the load tenants are created again before every pass;
+  - k6 signs in only with load accounts;
+  - the pages read only the signed-in tenant's rows (RLS).
+- What the residue can change is the size of shared tables, such as
+  `auth.users`, sessions and the audit log. That is part of the difference in
+  stack history (see **Limits**).
+
+**The limit:**
+- r is above 1.20 when ln r is above 0.182.
+- The 0.1005 is the noise of a difference between two passes, so one pass has
+  about 0.1005/√2 = 0.071. With two passes on each side, ln r has the same
+  0.071.
+- Assuming independent passes with normal noise in ln, the estimates are:
+  - A false block on a single attempt about 0.5 % of the time, and on both
+    attempts about 0.003 %.
+  - A regression of +20 % blocks 50 % of the time on one attempt, and 25 %
+    with the confirming re-run.
+  - +30 % blocks 87 % and 76 % of the time; +50 % almost always.
+  - For comparison, the band blocked +50 % 31 % of the time and +100 % 60 % of
+    the time (D36).
+- With 13 pairs, the 95 % interval of the standard deviation is 0.072–0.166.
+  The false block on a single attempt is then somewhere between 0.02 % and
+  6 %, so these figures are an order of magnitude.
+- The 0.1005 comes from two passes of one build on one stack. D56 compares
+  two builds on two stacks, and `pr-1` and `pr-2` share their build, so the
+  noise D56 meets is at least that: the false-block figures are a lower
+  bound, and the detection figures above +20 % an upper bound.
+- A push to `main` that changes only docs outside the images is a real A/A
+  with the ABBA order: on a push `main`'s passes always run, and both sides
+  are the same code built twice. Its r is reported, and the user decides
+  what bias measured there reopens the 1.20.
+
+**Verdicts** (the label in quotes is the one the verification table uses; a
+failure prints `::error::D56: … ("<label>")`):
+- **Pull request:**
+  - r ≤ 1.20 passes.
+  - r above 1.20 on attempt 1 fails as "sobre el límite en el intento 1", and
+    allows one re-run of the `docker` job.
+  - r above 1.20 on attempt 2 fails as "sobre el límite en el intento 2", and
+    the pull request is blocked.
+  - Attempt 3 or later fails as "tope de una repetición", whatever r is. The
+    cap lives in the script, which reads `GITHUB_RUN_ATTEMPT`; an empty or
+    non-numeric attempt fails.
+- **Push to `main`:**
+  - r is computed against HEAD^1 and reported.
+  - r above 1.20 fails the push CI with an `::error::` as "regresión ya
+    mergeada", a warning that a regression was already merged.
+  - It is not re-run.
+  - The next pull request's verification table reports it.
+  - What follows is D36's: the red push opens an investigation, and the
+    phase's next pull request does not open until it is open. Attempt 1 is
+    the one that counts: if the push is re-run anyway, the re-run measures
+    again, but does not clear attempt 1's `::error::`.
+  - HEAD^1 is the commit before the pushed head. With squash merges that is
+    the previous `main`; a push of several commits compares only with the
+    commit before its last one.
+- **"sin referencia"** (fails closed): a `main` pass that could not be run or
+  read. Examples: the worktree is not at HEAD^1; Supabase, the migrations, the
+  images or a smoke test failed; k6 exited other than 0 or 99; a file is
+  missing. One re-run of the job is allowed, under the same cap.
+- **"arnés del PR incompatible con main"**: the PR changes `load/**` or
+  `scripts/load-test.sh`, and a `main` pass broke (the seed failed, or k6
+  exited other than 0 or 99).
+  - It is not "sin referencia". It fails the job.
+  - It is resolved only by a user exception documented in the pull request.
+  - Once the harness changed, any failed check of a `main` pass gives this
+    verdict, not only the seed and k6's exit code: a crossed threshold, fewer
+    than 500 steady samples, a CSV that does not match its summary,
+    `vus_max`, or a missing isolation count (`brokenRunVerdict()`). A
+    transient failure is labeled the same way; the error names the check
+    that failed, and the verification table repeats it.
+- **"main falla aislamiento"**: a `main` pass showed another tenant's
+  employees. It fails with no ratio.
+- **"el PR falla aislamiento"**: a PR pass showed another tenant's employees.
+- **"pasada del PR inválida"**: a PR pass that is missing or broken. `pr-1`
+  requires the D36 step to pass; `pr-2` requires k6 to exit 0 or 99.
+- **"calentamiento del PR roto"** (since 2026-11-22): the warm-up of `pr-1`,
+  `warm-pr-1`, is missing or broken: not recorded, not its own, k6 other than
+  0 or 99, no steady-state p95, no first request time or no tenant-isolation
+  count. It fails the job, whatever the harness. A page with another tenant's
+  employees in it is "el PR falla aislamiento".
+- **"pasadas no comparables"**: the passes differ in settings, harness,
+  attempt, revision, image, order or summaries.
+- **"solo docs mal clasificado"**: a docs-only pull request with a changed
+  file that is in an image.
+
+**What the cap counts:**
+- The cap counts the `docker` job's attempts (`GITHUB_RUN_ATTEMPT`), not the
+  r values measured. The one re-run is shared by whatever made attempt 1
+  fail: r above the limit, "sin referencia", or another step of the job (an
+  e2e flake is also fixed by re-running the job, D44).
+- When attempt 1 left no r, attempt 2 is the only measurement. r above 1.20
+  there blocks on one measurement, not two, so the 0.003 % of **The limit**
+  does not hold for it. The verification table says so, and merging always
+  waits for the user's «aprobado».
+- A new head of the pull request is a new run, with its own attempt 1. The
+  verification table lists every r measured for the pull request, with its
+  head and attempt, so a new commit never hides an earlier r above the
+  limit.
+- A re-run that the user authorizes as a repeat measurement, on a head
+  whose attempt 1 passed, is attempt 2 like any other re-run. If it fails
+  for any reason, a further attempt is "tope de una repetición", and only a
+  new head measures again.
+
+**What each pass must hold** (checked in `record`, when the pass is recorded,
+and again in `ratio`):
+- k6 exited 0 or 99. For `pr-1`, the D36 step passed.
+- The tenant-isolation count (`root_group.checks`) is present and 0, and the
+  `rate==1` threshold was not crossed. A missing count fails.
+- Each run's own correctness thresholds are present and not crossed: `checks`,
+  `checks{check:no other tenant's employees}` and
+  `http_req_failed{kind:page}`.
+- Every other threshold is not crossed either, except the 500 ms ceiling: that
+  one is the measurement.
+- The steady-state p95 is a number above 0.
+- `vus_max` equals `LOAD_VUS + 3 × SMALL_VUS`.
+- The CSV has at least 500 steady-state page samples (about 940 in CI), and
+  its p95 equals the summary's within 0.001 ms.
+
+**What the passes must share** (checked in `ratio`):
+- The same eight load settings, which are set in the step's `env` (identical
+  in the four steps) and printed.
+- The same harness hash and the same attempt.
+- Images:
+  - the image each pass measured is the id of its tag: `:base` for `main`,
+    `:local` for the PR, for web and for worker;
+  - its revision label is the `git describe` of HEAD^1 or of HEAD;
+  - `main-1` equals `main-2`, `pr-1` equals `pr-2`, and `main`'s differs from
+    the PR's.
+- The ABBA order, read from the first request in each CSV.
+- Four different summaries.
+
+**Docs only:**
+- On a pull request:
+  - `main`'s passes are skipped only when the D36 scope step wrote
+    `applies=false` to its output.
+  - The ratio step has no `if:`. It reads that verdict (`SCOPE_APPLIES`) and
+    checks it against the diff.
+  - It lists the PR's images: every file under `/app` outside `node_modules`
+    and `.next`, and the sha256 of every Markdown file.
+  - It fails as "solo docs mal clasificado" when a changed file is in an image:
+    by its path, or, for Markdown, by its content before or after the change.
+  - With the scope "aplica" and `main`'s passes missing, it fails as "sin
+    referencia".
+- On a push there is no scope step:
+  - `main`'s passes always run, and the scope comes from the diff.
+  - The listings of `main`'s and the PR's images decide. A changed file found
+    in an image makes the comparison apply.
+- Each listing runs offline, read-only and without capabilities except
+  `DAC_READ_SEARCH`. It must contain a file that every image has, so an empty
+  or failed listing never reads as "no Markdown".
+
+**Closing conditions and their tests** (`apps/web/__tests__/scripts/d56-ab.test.ts`;
+each test fails when its condition is broken):
+
+| # | Condition | Where | Tests |
+|---|---|---|---|
+| 1 | The ratio step has no `if:` and no `continue-on-error`, and fails when it cannot compute r | `ci.yml`, `decide()`, `verdict()` | "1. the ratio step runs unconditionally…" |
+| 2 | Each pass is validated: k6 0/99, enough steady samples, the CSV matching the summary, the run's own thresholds | `validatePass()` | "2. every pass is validated…" |
+| 3 | A missing isolation count fails, in every pass | `validatePass()` | "3. a missing tenant-isolation count fails…" |
+| 4 | Each pass's web and worker image is its tag's; `main` ≠ PR | `record`, `decide()`, `d56-main-images.compose.yml` | "4. the image each pass measured" |
+| 5 | The worktree is exactly at HEAD^1, and its SHA is printed | `d56-ab.sh tree`, `treeRecord()` | "5. main's worktree is exactly HEAD^1", "tree: …" |
+| 6 | A broken `main` pass is "sin referencia" and fails closed; one re-run, enforced in the script | `brokenRunVerdict()`, `verdict()`, `runAttempt()` | "6. a broken main pass fails closed…" |
+| 7 | Each pass reads its own files, named after the pass | `PASSES`, `validatePass()`, `decide()` | "7. each pass reads its own files" |
+| 8 | The same load settings in every pass, from the PR's `ci.yml`, printed | `loadParams()`, `passLine()`, `decide()` | "8. the same load settings in every pass, printed" |
+| 9 | `timeout-minutes` on the `docker` job | `ci.yml` | "9. the docker job has a time limit" |
+| 10 | Docs only never exempts a file that is in an image | `filesInImages()`, `decide()` | "10. a docs-only diff does not exempt a file that is in an image" |
+
+- More tests cover:
+  - pull requests and pushes, scope "aplica" without `main`'s passes included;
+  - `main`'s own files and the `local-up.sh` mirror;
+  - `scripts/d56-ab.sh` run as CI runs it, against a real merge clone with fake
+    `supabase`, `docker`, `npm` and `curl`;
+  - the artifact list.
+  - the order of the D56 steps in the `docker` job and the lines each one
+    runs;
+  - `main-up build` and `main-up reuse` end to end, and each command's
+    failures.
+- The mutations that break each condition are checked by the pull request
+  that adds D56 and listed in its verification table.
+
+**Lines:**
+- Every command prints "D56-ab:" lines in the log and in the job summary:
+  - `tree`: both SHAs and revisions, the diff's file count, and whether the
+    harness changed;
+  - `pass`, one per pass: pass, role, stack, `p95_steady_ms`, samples, k6's
+    exit code, web image, revision, CPU, harness, the eight settings and the
+    attempt;
+  - `images`;
+  - `ratio`: r, the limit, both pairs of p95, the scope, the event, the attempt
+    and the verdict.
+- `abLine` refuses a line that carries `kind:page,phase:steady` or `p(95)`, so
+  the D36 step's line stays the only one in the job's log.
+
+**Artifact:** `d56-ab-attempt-<n>`, kept 14 days.
+- It holds the tree, the diff, the record of each pass, both image listings,
+  the ratio, and `main`'s summaries, CSVs and k6 output. The PR's pass files
+  are in D54's artifact.
+- It is an explicit list, never `load/.out` whole: `accounts.json` holds the
+  load accounts' emails and their shared password.
+- A failed upload never fails the job.
+
+**Cost:** two more k6 passes, one build of `main`'s images and two more
+Supabase starts.
+- Estimated at about +9 min per run of the `docker` job, which took
+  11–19 min. The pull request that adds D56 measures the real cost in its CI.
+- `timeout-minutes: 45` fails a hung job instead of letting it run for 6 h.
+- The repository is public, so Actions minutes cost nothing (Principle 8).
+
+**Transition:**
+- For the five `main` runs after D56's merge, the verification table keeps
+  the D36 band as "banda global (informativa)", and then drops it.
+- During those runs, "sin línea base", the drift control and "main sobre el
+  límite" are informational too.
+- The pull request that adds D56 is still gated by the old rule, reported as
+  before, and also by its own ratio step.
+- The five runs are the first five push runs of `main` from D56's merge on
+  (D56's own included) whose D36 step produced a p95. Docs-only pushes count
+  too, as they do for the band.
+- Dropping the band is a pull request of its own, approved by the user. It
+  decides what else of D36 goes with it: the drift control, "main ×2", the
+  rule of the last three runs without k6, and the CSV transition (D54). The
+  band stays informational until that pull request merges.
+- Since D56 the pass the band reads (`pr-1`) runs after `main-1` on the same
+  runner, so it no longer measures exactly what the band's runs before D56
+  measured. One more reason the band is only informational.
+
+**The six adjustments of the approval, and where each lives:**
+1. `main`'s stack is built with `main`'s files, and from the PR only the
+   harness and the load settings, printed on each pass's line: "`main`'s
+   stack is built with `main`'s files" above, `scripts/d56-ab.sh`,
+   `passLine()`.
+2. "arnés del PR incompatible con main": **Verdicts**, `brokenRunVerdict()`
+   and `treeRecord()`.
+3. The same load data before every pass, and why the e2e residue does not
+   reach k6: "The same load data before every pass" above.
+4. A push compares with HEAD^1 and fails once above the limit, without a
+   re-run, as a regression already merged: **Verdicts**, "Push to `main`",
+   and `verdict()`.
+5. Docs only: `main`'s passes are skipped only when the scope said "no
+   aplica", and the ratio step, with no `if:`, fails when the scope applies
+   and `main`'s passes are missing: **Docs only** and `decide()`.
+6. One draft pull request, a test with its mutation for each condition, no
+   pushes while CI runs, and no ready or merge without a new «aprobado»:
+   **Closing conditions and their tests**, and the pull request's
+   verification table.
+
+**Limits:**
+- **Stack history.** `main`'s passes run on a fresh stack (until 2026-11-21; since then on a fresh stack warmed by an unmeasured pass), `pr-1` after the
+  e2e, and `pr-2` after `pr-1`. If a stack's history changes the p95, r
+  carries that as a bias.
+  - The 13 A/A pairs (after the e2e, then after the first pass) show no
+    systematic difference: the second pass was faster in 7 of them.
+  - A fresh stack against one after the e2e has not been measured. The first
+    D56 runs measure it, `main`'s included.
+  - The first D56 runs measured it, and it is a bias: see **Warm-up of
+    `main`'s stack (2026-11-21)** below. Since then `main`'s passes start
+    on a warmed stack.
+  - Since 2026-11-22 `pr-1` runs after the e2e and then an unmeasured
+    pass, `warm-pr-1`: see **Warm-up of the PR's stack (2026-11-22)** below.
+  - What was left after the warm-ups, a mean ln r of +0.072, was accepted
+    with the limit at 1.20: see **Result of the PR warm-up and decision
+    (2026-11-22)** below.
+- **The PR's harness on `main`'s schema.** `main`'s passes run the PR's seed
+  and `load/pages.js` against `main`'s schema. A PR whose harness needs its
+  own migrations breaks the `main` passes, which gives "arnés del PR
+  incompatible con main".
+- **A change in the harness.** The harness is the same in all four passes, so
+  a harness change that slows both sides equally does not show in r.
+- **Slow creep.** Each pull request is compared with its own `main`, so a
+  creep of less than 20 % per pull request adds up without blocking. A push
+  compares only with the previous commit. The full local run (1,150 users,
+  `docs/RUNBOOK.md`) at the close of each phase remains the check for creep.
+- **Markdown not listed.** Markdown inside `node_modules` or `.next` is not
+  listed, so a changed Markdown file copied there would go unseen.
+- **New failures.** The job now also fails when `main`'s stack cannot be
+  built or run ("sin referencia"), which did not exist before. That is the
+  cost of failing closed.
+  Since `warm-pr-1` (2026-11-22) it also fails when the PR's warm-up is
+  missing or broken ("calentamiento del PR roto"), docs-only pull requests
+  included, and a harness the PR broke shows first as that verdict, in the
+  warm-up's step, not as "pasada del PR inválida" on `pr-1`.
+  That holds when the PR's own stack breaks the harness, or on a docs-only
+  pull request. When the PR changes the harness, `warm-main-1` runs it
+  first, in `main-1`'s step, and a break there is "arnés del PR
+  incompatible con main".
+- **A change in how the stack starts.** `main-up` is the PR's
+  `scripts/d56-ab.sh` run on HEAD^1's files, and it mirrors the PR's
+  `scripts/local-up.sh`.
+  - A pull request that changes how the stack starts must keep `d56-ab.sh`
+    working with `main`'s files, as a migration keeps the old code working
+    (expand, then contract). Such changes include a step of `local-up.sh`,
+    the ports or a `project_id` in `supabase/config.toml`, a service of
+    `docker-compose.yml`, or a variable of `.env.docker.example`.
+  - When it cannot, `main`'s passes fail as "sin referencia" on every
+    attempt. As for the harness, that is resolved only by a user exception
+    documented in the pull request. The next pull request compares with the
+    new `main` again.
+  - `down` uses the PR's `docker-compose.yml` on `main`'s containers. It
+    works because both use the project `scaliahr` and `--remove-orphans`.
+- **Only for CI.** `scripts/d56-ab.sh` needs `RUNNER_TEMP` (or
+  `D56_BASE_DIR`) and refuses a worktree that already exists.
+  - It never removes the worktree and leaves the `:base` images behind: the
+    runner is thrown away after the job. Run locally, both are cleaned by
+    hand.
+  - Its disk use is not measured: two builds, the worktree's `npm ci` and
+    three sets of images. A run that fails for lack of disk points here.
+
+**Warm-up of `main`'s stack (2026-11-21):**
+- **Finding.** The pull request that adds D56 changes no code that goes
+  into the images, so its first two CI runs were in effect A/A runs with
+  D56's real order. Both gave r below 1:
+
+  | Head | CPU | `main-1` | `pr-1` | `pr-2` | `main-2` | r | ln r |
+  |---|---|---|---|---|---|---|---|
+  | 1e2c25c | AMD EPYC 7763 | 123.51 ms | 106.09 ms | 95.63 ms | 121.31 ms | 0.8229 | −0.195 |
+  | 847877b | Intel Xeon 6975P-C | 55.95 ms | 52.93 ms | 49.17 ms | 55.22 ms | 0.9178 | −0.086 |
+
+  - `main`'s two passes barely differed (−1 to −2 %); the PR's second pass
+    was 7 to 10 % faster than its first. A stack that has just served load
+    answers faster, and `main`'s passes started on a stack that had served
+    none.
+  - The mean ln r was −0.140, 2.0 times the 0.071 of **The limit**. With
+    that bias a real regression of up to about +38 % gives r ≈ 1.20 and does
+    not block.
+- **Decision** (the user, 2026-11-21, option 2 of three: warm the stack;
+  the others were to calibrate the limit with the measured bias, or to
+  gather more data first): before `main-1` and before `main-2`, an
+  unmeasured k6 pass, `warm-main-1` and `warm-main-2`, runs on the same
+  stack.
+  - It is a pass like the measured ones: the PR's harness, the same eight
+    load settings from the step's `env`, and the seed's re-seed of the load
+    tenants first.
+  - Its summary, CSV and k6 output go to files of its own
+    (`summary-warm-main-N.json`, `requests-warm-main-N.csv.gz`,
+    `k6-warm-main-N.txt`), all in the D56 artifact. None of it reaches the
+    log as a `{ kind:page,phase:steady }` line.
+  - `record warm-main-N` writes `d56-pass-warm-main-N.json` and prints a
+    `D56-ab: warm … measured=no p95_steady_ms=…` line. Its p95 is
+    informational and never enters r.
+  - Recording `main-N` and the ratio step both require it. The warm-up must
+    be recorded, k6 must have exited 0 or 99, and it must have left a
+    steady-state p95. When one of those fails, its pass is "sin referencia"
+    (or "arnés del PR incompatible con main" when the PR changed the
+    harness), and the job fails closed.
+  - It must also have run with the same settings, harness, attempt and
+    images as its pass, and started right before it: after the pass before
+    it, if there is one. Otherwise the passes are "pasadas no comparables".
+  - Each `D56-ab: pass` line of `main` says `stack=warmed`; the table of
+    **The four passes** above said "fresh" before the warm-up.
+  - Its tenant-isolation count is required too, as in every pass (D54): a
+    missing count is "sin referencia" (or "arnés del PR incompatible con
+    main" when the PR changed the harness), and a page with another tenant's
+    employees fails the job as "main falla aislamiento".
+  - Nothing else of the warm-up is checked (its samples, its other
+    thresholds, `vus_max`): it is not measured, and its pass, right after it
+    on the same stack, runs every check of a measured pass.
+  - The limit of 1.20, the ABBA order, the cap of one re-run and everything
+    about `pr-1` and `pr-2` stay as they were.
+  - Tests and mutations cover each check, as they do the closing
+    conditions; the pull request's verification table lists them.
+- **Validation** (the pull request is still an A/A): its CI on the head
+  with the warm-up, and one re-run of the `docker` job that the user
+  authorized as a repeat measurement on another runner (not a re-run for a
+  failure). The bias counts as fixed when |ln r| ≤ 0.07 in both runs and
+  the mean of the two has |ln r| ≤ 0.05. If it does not hold, nothing else
+  changes, and the user chooses between calibrating the limit and more
+  warm-up.
+  - What to expect. The warm-up makes `main`'s passes like `pr-2`, which
+    follows a k6 pass; `pr-1` follows the e2e. In the two A/A runs `pr-1`
+    was 0.089 slower in ln than `pr-2`, so even a perfect warm-up of
+    `main`'s stack leaves ln r ≈ +0.044, and a mean of the PR's two passes
+    that is slower than `main`'s.
+  - With the noise of **The limit** (0.071), the criterion holds by chance
+    about 43 % of the time with no bias at all, about 31 % with that
+    residual, and about 2 % with the −0.140 measured before the warm-up.
+    Two runs tell a large bias from none, not a small bias from none.
+  - Until the user decides, the warm-up stays in the job as it is, and the
+    gate keeps the limit of 1.20.
+- **Cost:** two more k6 passes of about 1.5 min each, about +3 min per run
+  of the `docker` job, which took 16 min 49 s to 19 min 34 s before the
+  warm-up; the timeout is 45 min.
+- The detection figures of **The limit** stay a bound until the five
+  `main` runs of the transition measure the noise of the real topology.
+  The false-block figures are a lower bound and the detection figures above
+  +20 % an upper bound. A push that changes code is not an A/A: only
+  `main-1` against `main-2` in every run, and a push that changes only docs
+  outside the images, measure that noise.
+- **Result of that validation (head 4cf2c03, 2026-11-22).** Both runs on
+  Intel Xeon 6975P-C, on two runners: the CI run and the one repeat
+  measurement the user authorized (attempt 2).
+
+  | Run | `warm-main-1` | `main-1` | `pr-1` | `pr-2` | `warm-main-2` | `main-2` | r | ln r | ln(`pr-1`/`pr-2`) | ln(`main`/`pr-2`) |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Attempt 1 | 58.34 ms | 43.77 ms | 51.15 ms | 46.10 ms | 61.67 ms | 45.65 ms | 1.0863 | +0.083 | +0.104 | −0.031 |
+  | Attempt 2 | 60.97 ms | 55.87 ms | 53.67 ms | 57.03 ms | 53.94 ms | 51.38 ms | 1.0326 | +0.032 | −0.061 | −0.062 |
+
+  - `main` is the geometric mean of `main-1` and `main-2`.
+  - The criterion did not hold: |ln r| was 0.083 in attempt 1 (above 0.07),
+    and the mean ln r was +0.057 (above 0.05).
+  - The mean bias went from −0.140 to +0.057. Each warm-up was slower than
+    the measured pass after it, so it did take the cold start.
+  - What was left came from `pr-1`, which followed the e2e and not a k6
+    pass: ln(`pr-1`/`pr-2`) was +0.104 and −0.061, and `main` stood within
+    −0.03 to −0.06 of `pr-2`.
+  - That reading is weak evidence (added after this pull request's review,
+    2026-11-22): over the two runs ln(`pr-1`/`pr-2`) averaged +0.022, well
+    inside its noise of 0.071 (see **What the new criterion can tell**
+    below), and `main` was faster than `pr-2` too. The two runs do not show
+    on their own that `pr-1` stood apart.
+- **The criterion is replaced (the user, 2026-11-22).** |ln r| ≤ 0.07 in
+  each of two runs was too strict for two data points: it holds only about
+  43 % of the time with no bias at all. The criterion of **Warm-up of the
+  PR's stack (2026-11-22)** below replaces it; the one above stays as the
+  record of what was asked first.
+  The 43 % is the figure of the bullet "With the noise of **The limit**
+  (0.071)" above.
+
+**Warm-up of the PR's stack (2026-11-22):**
+- **Decision** (the user, 2026-11-22): warm `pr-1`'s stack too. After the e2e
+  and before the D36 step, an unmeasured k6 pass, `warm-pr-1`, runs on the
+  PR's stack, in its own step ("Warm the PR's stack before the D36 pass (D56
+  warm-pr-1)"). So all four measured passes follow a k6 pass on their own
+  stack: `main-1` and `main-2` their warm-ups, `pr-1` its warm-up, and `pr-2`
+  `pr-1`.
+- It is a pass like the others: the PR's harness, the D36 step's eight load
+  settings and the re-seed. It runs on every pull request and push, docs-only
+  ones included, so the D36 step always measures the same kind of stack.
+- Its summary, CSV and k6 output go to `summary-warm-pr-1.json`,
+  `requests-warm-pr-1.csv.gz` and `k6-warm-pr-1.txt`, in the D56 artifact,
+  and `record warm-pr-1` writes `d56-pass-warm-pr-1.json`. No
+  `{ kind:page,phase:steady }` line reaches the log.
+- What it must hold, checked when it is recorded, when `pr-1` is recorded and
+  in the ratio step:
+  - its tenant-isolation count: a page with another tenant's employees fails
+    the job as "el PR falla aislamiento";
+  - k6 exited 0 or 99, a steady-state p95 and a first request time;
+  - when it is missing or broken, the verdict is its own, "calentamiento del
+    PR roto", and the job fails closed;
+  - the same settings, harness, attempt and PR images as `pr-1`, and a start
+    after `main-1` and before `pr-1`: otherwise "pasadas no comparables".
+    On a docs-only pull request, which has no `main-1`, only the start
+    before `pr-1` is checked.
+- The D36 step (`pr-1`), its line and its files, and the informational band,
+  keep their names and files. `pr-1`'s `D56-ab: pass` line says
+  `stack=warmed`.
+- Tests and mutations cover each check, as for the other conditions.
+- **Validation** (the pull request is still an A/A): the CI run of the head
+  with this warm-up, and one repeat measurement the user authorized
+  (attempt 2). It counts as fixed when both hold:
+  - **structure:** |mean ln(`pr-1`/`pr-2`)| ≤ 0.05 over the two runs, so
+    `pr-1` no longer stands apart from `pr-2`;
+  - **bias:** |mean ln r| ≤ 0.07, and |ln r| ≤ 0.14 (2σ) in each run.
+- If it holds, the bias counts as fixed, and it keeps being measured in the
+  five `main` runs of the transition: ln(`main-2`/`main-1`) and
+  ln(`pr-2`/`pr-1`) in each. If it does not, nothing else changes, and the
+  next option is to calibrate the limit.
+  ln(`pr-2`/`pr-1`) has the opposite sign of the criterion's
+  ln(`pr-1`/`pr-2`).
+- **Cost:** one more k6 pass, about 1 min 25 s, on top of the 19 min 13 s to
+  19 min 37 s of the job with `main`'s warm-ups; the timeout is 45 min.
+- **What the new criterion can tell** (added after this pull request's
+  review, 2026-11-22, for the user's decision; the criterion is unchanged):
+  - With the noise of **The limit** (0.071 in ln per pass, so 0.100 for
+    ln(`pr-1`/`pr-2`) in one run, 0.071 for its mean over two runs, and
+    0.050 for the mean ln r), a simulation of 400 000 pairs of runs gives:
+    with no bias at all, structure holds about 52 % of the time, bias about
+    80 %, and both about 42 %. The two are independent: structure reads the
+    difference of the PR's two passes, bias their sum.
+  - These figures take σ = 0.071, which **The limit** calls a lower bound
+    of D56's noise. With 0.10 per pass, with no bias, structure holds about
+    38 %, bias about 58 % and both about 22 %.
+  - Both hold about 17 % of the time with `pr-1` 0.089 slower than `pr-2`
+    (the two A/A runs before the warm-ups), and about 4 % with the −0.140
+    measured before the warm-ups.
+    The 4 % takes `pr-1` equal to `pr-2`; with `pr-1` also 0.089 slower, as
+    in those runs, it is about 2 %.
+  - So, like the criterion it replaces, it tells a large bias from none,
+    not a small one. With no bias it misses about 58 % of the time, so a
+    miss alone is no evidence for calibrating the limit.
+    More exactly, it is weak evidence: a miss is at most about 1.7 times as
+    likely with a bias as without one (at most 96 % against 58 %). Whether
+    to calibrate after a miss is the user's choice, with these figures.
+  - Read per run instead (each run's ln(`pr-1`/`pr-2`) within 0.05), it
+    would hold about 12 % of the time with no bias.
+  - The two runs of head 4cf2c03, without `warm-pr-1`, already meet it:
+    mean ln(`pr-1`/`pr-2`) +0.022, mean ln r +0.057, and |ln r| 0.083 and
+    0.032. So a pass on the new head would not show on its own that
+    `warm-pr-1` helped; the five `main` runs of the transition measure it.
+  - More exactly, they measure whether `pr-1` stands apart from `pr-2`
+    with `warm-pr-1`, not whether `warm-pr-1` helped. The four D56 runs
+    before it gave ln(`pr-1`/`pr-2`) +0.104, +0.074, +0.104 and −0.061
+    (mean +0.055, σ of the mean 0.050), and five runs have a mean with σ
+    0.045: against those four, only an effect of about 0.13 or more would
+    show.
+  - Most of 4cf2c03's residual came from `main`'s side: ln r is half of
+    ln(`pr-1`/`pr-2`) plus ln(`pr-2`/`main`). Of its mean +0.057, about
+    +0.011 came from `pr-1` and about +0.046 from `main` being faster than
+    `pr-2`.
+  - If those five runs show the bias again, nothing changes on its own: the
+    figures go to the user, as when the criterion does not hold.
+    No bound is set for those runs: the user reads their figures.
+
+**Result of the PR warm-up and decision (2026-11-22):**
+- **The validation of `warm-pr-1`** (head 0af2f14, run 45001149656): the CI
+  run (attempt 1) and the one repeat measurement the user authorized
+  (attempt 2, on another runner). All five jobs of the CI workflow (`app`,
+  `secrets`, `db`, `db-reset-test` and `docker`) passed in both; attempt 2
+  re-ran all five. The
+  warm-ups' p95 are informational: the script requires one from each
+  warm-up, but compares none with a limit.
+
+  | Run | CPU | `warm-main-1` | `main-1` | `warm-pr-1` | `pr-1` | `pr-2` | `warm-main-2` | `main-2` | r | ln r |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Attempt 1 | AMD EPYC 9V74 | 78.69 ms | 65.87 ms | 99.99 ms | 78.18 ms | 75.47 ms | 80.43 ms | 75.70 ms | 1.0878 | +0.084 |
+  | Attempt 2 | Intel Xeon 6975P-C | 50.02 ms | 45.93 ms | 56.36 ms | 51.62 ms | 57.16 ms | 61.63 ms | 53.75 ms | 1.0933 | +0.089 |
+
+  - The criterion did not hold. Structure held (mean ln(`pr-1`/`pr-2`)
+    −0.033) and each |ln r| was within 0.14 (0.084 and 0.089), but the mean
+    ln r was +0.087, above 0.07.
+  - `pr-1` no longer stood apart from `pr-2`. What was left came from
+    `main`, faster than both of the PR's passes: ln(`pr-2`/`main`) was
+    +0.067 and +0.140.
+  - The figures the transition tracks, here in these two runs:
+    ln(`main-2`/`main-1`) was +0.139 and +0.157, so `main-2` was slower
+    than `main-1` in both, and ln(`pr-2`/`pr-1`) was −0.035 and +0.102.
+  - Cost: the `docker` job took 22 min 39 s (AMD) and 21 min 12 s (Intel),
+    with 1 min 25 s and 1 min 26 s for `warm-pr-1`. On Intel that is 1 min
+    35 s to 2 min more than with `main`'s warm-ups only, and 23 min 48 s
+    below the 45 min timeout (22 min 21 s on AMD).
+- **The four runs with warm-ups** (4cf2c03 with `main`'s two, 0af2f14 with
+  all three; ln r is half of ln(`pr-1`/`pr-2`) minus ln(`main`/`pr-2`)):
+
+  | Run | Warm-ups | CPU | r | ln r | ln(`pr-1`/`pr-2`) | ln(`main`/`pr-2`) |
+  |---|---|---|---|---|---|---|
+  | 4cf2c03, attempt 1 | `main`'s | Intel Xeon 6975P-C | 1.0863 | +0.083 | +0.104 | −0.031 |
+  | 4cf2c03, attempt 2 | `main`'s | Intel Xeon 6975P-C | 1.0326 | +0.032 | −0.061 | −0.062 |
+  | 0af2f14, attempt 1 | all three | AMD EPYC 9V74 | 1.0878 | +0.084 | +0.035 | −0.067 |
+  | 0af2f14, attempt 2 | all three | Intel Xeon 6975P-C | 1.0933 | +0.089 | −0.102 | −0.140 |
+  | Mean | | | | +0.072 | −0.006 | −0.075 |
+
+  - All four are positive, with mean +0.072. Before the warm-ups ln r was
+    −0.195 and −0.086. After them the bias went from negative to positive,
+    and did not go away.
+  - The residual sits on `main`'s side: `main` was faster than `pr-2` in
+    all four runs, while ln(`pr-1`/`pr-2`) averaged −0.006.
+  - With the noise of **The limit**, the mean of four runs has σ 0.036, so
+    +0.072 is 2.0 times it. The four ln r spread less than that noise
+    (standard deviation 0.027), but four values do not measure it.
+  - Only the two runs of 0af2f14 ran the job as it is now, with all three
+    warm-ups. Their mean ln r is +0.087.
+- **The two-run criteria are a record, not a gate.** Both, the first one
+  and the one that replaced it, hold by chance only about 42–43 % of the
+  time with no bias, so the second misses about 58 % of the time with no
+  bias at all (**What the new criterion can tell** above). The first one's
+  miss led to `warm-pr-1`; from now on neither decides anything. They stay
+  in D56 as the record of what was asked and measured, and no step of the
+  job reads them.
+- **Decision** (the user, 2026-11-22): the residual bias is accepted, and
+  the limit stays at 1.20. This closes the next option that the PR
+  warm-up's **Validation** named: the criterion missed, and the limit is
+  not calibrated.
+  - Why: the residual goes the safe way. A bias of +0.072 makes the gate
+    stricter with the pull request, not more lenient: for a real change,
+    the limit acts as about 1.20 × e^−0.072 ≈ 1.12.
+  - The figures assume independent normal noise in ln, with σ = 0.071 per
+    pass as in **The limit** (with two passes on each side that is also the
+    σ of ln r), the mean bias +0.072, and attempt 2 independent of attempt
+    1 (a new job on a new runner, as **The limit** assumes). They are
+    computed exactly and checked with a simulation of 400 000 runs:
+    - a real regression of +20 % fails attempt 1 about 84 % of the time,
+      and blocks (attempt 1 and its re-run both above 1.20) about 71 %,
+      against 50 % and 25 % with no bias;
+    - with no regression, attempt 1 is red about 6 % of the time and the
+      pull request is blocked about 0.4 %, against 0.5 % and 0.003 % with
+      no bias.
+  - With +0.087, the mean of the two runs of the job as it is now: with no
+    regression, attempt 1 is red about 9 % of the time and the pull request
+    is blocked about 0.8 %; +20 % fails attempt 1 about 89 % of the time
+    and blocks about 79 %.
+  - σ = 0.071 is a lower bound of D56's noise (**The limit**). With 0.10
+    per pass and the bias +0.072, attempt 1 is red about 14 % of the time
+    with no regression and the pull request is blocked about 1.8 %, and
+    +20 % blocks about 58 %.
+  - Something that slows both attempts alike, such as the same slow kind of
+    runner, makes them less independent: the block figures with no
+    regression are then somewhat higher.
+  - What a red attempt 1 with no code cause costs: one re-run of the
+    `docker` job, about 21–23 min, and that re-run is the cap's only one
+    (**What the cap counts**). If it then fails for another reason, an e2e
+    flake for example, only a new head measures again.
+  - The decision concerns only how r is read against 1.20, and nothing
+    about r itself changed. The
+    tenant-isolation count is still required in every pass, warm-ups
+    included, and a page with another tenant's employees still fails the
+    job ("main falla aislamiento" or "el PR falla aislamiento"). That is
+    never a red attempt 1 of the watch rule below, and the bias is never a
+    reason to read it as noise.
+- **Probable cause (not measured):** the state of the database of the PR's
+  stack against `main`'s new one.
+  - The PR's stack starts once, with `npm run local:up`, on a new database
+    too (after `main-1`'s `down`), and serves the e2e, which creates and
+    deletes its accounts, before `warm-pr-1`. By `pr-2` it has had three
+    cycles of the load seed (`warm-pr-1`, `pr-1`, `pr-2`), two of which
+    first delete the `load-*` tenants and accounts of the one before
+    (`load/seed.mjs`).
+  - Each `main` pass starts on a new database (`down` runs `supabase stop
+    --no-backup`, then `main-up` starts it again), with two cycles: its
+    warm-up's and its own, the second one deleting the first's.
+  - Rows deleted and created again leave dead rows and change the
+    planner's statistics until autovacuum catches up. That is a hypothesis:
+    nothing in these runs measured it.
+  - These runs weaken the seed-cycle part of it. `pr-1` and the `main`
+    passes are each measured after their second cycle. `pr-2`, after its
+    third, was about as fast as `pr-1`: ln(`pr-2`/`pr-1`) averaged +0.006
+    over the four runs (+0.033 over the two of 0af2f14, faster in one and
+    slower in the other), inside the noise and far less than `main`'s lead
+    over `pr-2` (mean 0.075). The e2e is the part no run has compared.
+  - It does not explain either why `main-2` was slower than `main-1` in
+    both runs of 0af2f14, since both start on a new database with the same
+    two cycles. The `VACUUM (ANALYZE)` of the watch rule is an example, not
+    a measured fix.
+- **Watch rule** (the user's):
+  - In every pull request that runs D56, the verification table writes
+    down r, ln r, and whether attempt 1 was red with no code cause.
+  - If 2 or more attempts 1 of the first 10 pull requests with D56 are red
+    with no real regression, a pull request of its own makes the database
+    state of both stacks symmetric, for example a `VACUUM (ANALYZE)` before
+    each measured pass on both stacks. Those are the throwaway local stacks
+    the `docker` job starts on its runner, never a remote Supabase project
+    (CLAUDE.md). It is not done in the pull request that adds D56.
+- **How the watch rule is applied** (the reading of the pull request that
+  adds D56, confirmed by the user on 2026-11-22):
+  - Which pull requests: those whose ratio step computed r, from the first
+    one after D56's merge. The pull request that adds D56 does not count:
+    its A/A runs are the data of this decision (the four with warm-ups).
+    A docs-only pull request has no r and does not count. A Dependabot
+    pull request that
+    runs D56 counts; the loop writes its figures when it reviews it
+    (CLAUDE.md). Pushes to `main` do not count; their r is reported as
+    **The limit** and **Verdicts** say.
+  - Which attempts: every attempt 1 that computed r, including those of
+    later heads, since each new head is a run with its own attempt 1
+    (**What the cap counts**). A pull request whose only r came from
+    attempt 2 adds no attempt 1.
+  - Which red: only "sobre el límite en el intento 1". An attempt 1 with
+    any other label, such as "sin referencia", or one where an earlier step
+    failed (an e2e flake), has no r above the limit and says nothing about
+    the bias.
+  - "With no code cause" and "with no real regression" mean the same
+    thing. The verification table writes the judgment with its evidence:
+    whether the diff changes files that go into the images, and attempt 2's
+    r. A case that is not clear counts as red with no code cause, and the
+    user confirms it when reviewing the table.
+  - The running count lives in the verification tables: each one carries
+    it on from the one before (pull requests counted, red attempts 1 so
+    far). The rule fires as soon as the second red arrives, without
+    waiting for the tenth pull request.
+  - The five `main` runs of the transition still report
+    ln(`main-2`/`main-1`) and ln(`pr-2`/`pr-1`) to the user, with no bound;
+    only the watch rule has a trigger for the bias (a push with r above
+    1.20 is still "regresión ya mergeada", **Verdicts**).
+- **What 2 of 10 can tell:** with exactly the accepted bias and σ = 0.071,
+  2 or more red attempts 1 in 10 with no regression happen about 12 % of
+  the time, about 1 time in 8 with nothing changed. It is 0.1 % with no
+  bias, about 22 % with +0.087 and about 40 % with σ = 0.10. So the rule
+  also fires when the noise is larger than **The limit** assumes, and a
+  trigger alone does not show that the bias grew. These figures assume one
+  attempt 1 per pull request; later heads add attempts, and the rule then
+  fires more often.
+- **It watches only the strict side.** A bias that turned negative again, as
+  before the warm-ups, would show in the ln r the tables write down; no
+  bound is set for it, and the user reads those figures.
 
 ---
 

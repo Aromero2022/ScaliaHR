@@ -1,0 +1,8 @@
+# D56: main's images for the A/B comparison of the docker job, under their own
+# tags, so the PR's :local and the rollback drill's :previous are never touched.
+# Used by scripts/d56-ab.sh on top of the docker-compose.yml of main's worktree.
+services:
+  web:
+    image: scaliahr-web:base
+  worker:
+    image: scaliahr-worker:base
