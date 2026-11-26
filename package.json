@@ -41,7 +41,7 @@
     "otplib": "^13.6.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "turbo": "^2.11.11",
+    "turbo": "^2.11.13",
     "typescript": "^5.7.0"
   },
   "packageManager": "npm@10.9.4",
