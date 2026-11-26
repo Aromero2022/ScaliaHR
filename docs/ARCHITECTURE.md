@@ -4770,6 +4770,16 @@ Supabase starts.
     hand.
   - Its disk use is not measured: two builds, the worktree's `npm ci` and
     three sets of images. A run that fails for lack of disk points here.
+- **Known limit: a warm-up's start is checked against the previous pass's
+  start, not its end** (2026-11-26, post-merge review of #82).
+  `checkWarmup()` in `scripts/d56-ab.mjs` accepts a warm-up whose first
+  request comes after the previous pass's first request, so a warm-up that
+  overlapped the end of that pass would still pass as "right before" its
+  own pass (see the two warm-up sections below).
+  - It holds today because the steps run in series: a warm-up's step starts
+    only after the previous pass's step has ended.
+  - If the steps ever run in parallel, the check must compare the warm-up's
+    first request with the previous pass's last request instead.
 
 **Warm-up of `main`'s stack (2026-11-21):**
 - **Finding.** The pull request that adds D56 changes no code that goes

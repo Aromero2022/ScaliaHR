@@ -359,9 +359,9 @@ export function verdict({ event, applies, r, attempt }) {
   return { pass: false, label: VERDICTS.overSecond, verdict: `r ${shownR(r)} is above ${LIMIT} on the re-run as well: the pull request is blocked` };
 }
 
-/** GITHUB_RUN_ATTEMPT as a number, or an error: an unset attempt must not skip the cap. */
+/** GITHUB_RUN_ATTEMPT as a number, or the cap's error: an unset attempt must not skip the cap. */
 export function runAttempt(value) {
-  if (!/^[1-9]\d*$/.test(value ?? "")) throw new Error(`GITHUB_RUN_ATTEMPT "${value}" is not an attempt number`);
+  if (!/^[1-9]\d*$/.test(value ?? "")) throw new GateError(VERDICTS.cap, `GITHUB_RUN_ATTEMPT "${value}" is not an attempt number`);
   return Number(value);
 }
 
@@ -405,7 +405,13 @@ export function decide({ event, scopeApplies, attemptValue, read }) {
   for (const name of ORDER) {
     const record = json(`d56-pass-${name}.json`);
     if (!record) continue;
-    const summary = json(PASSES[name].summary);
+    // A summary that cannot be read is a broken pass, labeled as `record` labels it.
+    let summary;
+    try {
+      summary = json(PASSES[name].summary);
+    } catch (error) {
+      throw new GateError(brokenRunVerdict(PASSES[name].role, tree.harness_changed), `${name}: ${error.message}`);
+    }
     const csv = read(PASSES[name].csv);
     if (!summary || csv === null) throw new GateError(brokenRunVerdict(PASSES[name].role, tree.harness_changed), `${name}: its summary or CSV is missing`);
     let rows;
@@ -562,9 +568,21 @@ function main() {
       const warmup = WARMUPS[name];
       const spec = warmup ? { ...warmup, role: PASSES[warmup.of].role } : PASSES[name];
       if (!spec) throw new Error(`usage: node scripts/d56-ab.mjs record <${[...ORDER, ...Object.keys(WARMUPS)].join("|")}> <k6 exit code>`);
-      const tree = JSON.parse(readFileSync(outPath("d56-tree.json"), "utf-8"));
-      const params = loadParams(process.env);
-      const failed = (message) => new GateError(warmup ? brokenWarmupVerdict(spec.role, tree.harness_changed) : brokenRunVerdict(spec.role, tree.harness_changed), `${name}: ${message}`);
+      const verdictOf = (harnessChanged) => (warmup ? brokenWarmupVerdict(spec.role, harnessChanged) : brokenRunVerdict(spec.role, harnessChanged));
+      let tree;
+      try {
+        tree = JSON.parse(readFileSync(outPath("d56-tree.json"), "utf-8"));
+      } catch (error) {
+        // Without the tree the harness is unknown: the verdict of a pass whose harness did not change.
+        throw new GateError(verdictOf(false), `${name}: d56-tree.json cannot be read, so the tree step did not run (${error.code ?? error.message})`);
+      }
+      const failed = (message) => new GateError(verdictOf(tree.harness_changed), `${name}: ${message}`);
+      let params;
+      try {
+        params = loadParams(process.env);
+      } catch (error) {
+        throw failed(error.message);
+      }
       // A pass that did not run fails here, before the next pass is spent; the ratio checks every pass again.
       if (passExit(exitCode) === null) {
         if (spec.output) console.error(outputTail(readOut(spec.output)?.toString("utf-8") ?? ""));
@@ -586,6 +604,12 @@ function main() {
       } catch (error) {
         throw failed(`cannot read the measured images: ${String(error.stderr || error.message).trim().split("\n")[0]}`);
       }
+      let harness;
+      try {
+        harness = harnessHash();
+      } catch (error) {
+        throw failed(error.message);
+      }
       const record = {
         pass: name,
         role: warmup ? "warm" : spec.role,
@@ -595,7 +619,7 @@ function main() {
         k6_exit: String(exitCode),
         ...images,
         cpu: lscpuModel(),
-        harness: harnessHash(),
+        harness,
         params,
         run_attempt: process.env.GITHUB_RUN_ATTEMPT ?? "",
       };

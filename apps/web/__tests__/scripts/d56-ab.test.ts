@@ -526,6 +526,23 @@ describe("6. a broken main pass fails closed; one re-run, enforced in the script
     expect(gateError(() => decideIn(world({ passes: ["main-1", "pr-1", "pr-2"] }))).message).toContain("(main-2)");
   });
 
+  it("labels a pass summary that is not JSON as that pass's broken run, as record does", () => {
+    const broken = (name: string, harnessChanged = false) => {
+      const w = world({ harnessChanged });
+      w.files.set(PASSES[name as keyof typeof PASSES].summary, Buffer.from("{ not json"));
+      return gateError(() => decideIn(w));
+    };
+    const main = broken("main-2");
+    expect(main.verdict).toBe(VERDICTS.noReference);
+    expect(main.message).toBe("main-2: summary-main-2.json is not JSON");
+    expect(broken("main-1", true).verdict).toBe(VERDICTS.harness);
+    expect(broken("pr-2").verdict).toBe(VERDICTS.prInvalid);
+  });
+
+  it("labels a run attempt that is not a number with the cap's verdict", () => {
+    expect(gateError(() => runAttempt("")).verdict).toBe(VERDICTS.cap);
+  });
+
   it.each([
     ["pull_request", 1, 1.1, true, undefined],
     ["pull_request", 1, LIMIT, true, undefined],
@@ -1243,9 +1260,24 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
         '  *) echo "unexpected docker $*" >&2; exit 9 ;;',
         "esac",
       ].join("\n");
-    const record = (name: string, exit: string, docker: string) => runNode(clone, ["record", name, exit], { docker }, { ...PARAMS, GITHUB_RUN_ATTEMPT: "1" });
+    const record = (name: string, exit: string, docker: string, env: Record<string, string> = {}) =>
+      runNode(clone, ["record", name, exit], { docker }, { ...PARAMS, GITHUB_RUN_ATTEMPT: "1", ...env });
     return { out, put, imagesOf, record };
   };
+
+  it("record: without the tree step's file, or with a load setting unset, fails with the pass's own verdict", () => {
+    const { clone } = mergeClone(() => {});
+    const noTree = (name: string) => runNode(clone, ["record", name, "0"], {}, { ...PARAMS, GITHUB_RUN_ATTEMPT: "1" });
+    const main = noTree("main-1");
+    expect(main.status).toBe(1);
+    expect(main.stderr).toContain(`main-1: d56-tree.json cannot be read, so the tree step did not run (ENOENT) ("${VERDICTS.noReference}")`);
+    expect(noTree("pr-2").stderr).toContain(`("${VERDICTS.prInvalid}")`);
+    expect(noTree("warm-pr-1").stderr).toContain(`("${VERDICTS.prWarmBroken}")`);
+    const { record, imagesOf } = recordWorld();
+    const unset = record("main-1", "0", imagesOf(MAIN_IMAGE, "base"), { THINK_MAX: "" });
+    expect(unset.status).toBe(1);
+    expect(unset.stderr).toContain(`main-1: the load setting THINK_MAX is not set ("${VERDICTS.noReference}")`);
+  });
 
   it("record: records the PR's passes from their own files and the :local images, and a broken one as the PR's", () => {
     const { out, put, imagesOf, record } = recordWorld();
@@ -1388,6 +1420,12 @@ describe("scripts/d56-ab.sh, run as CI runs it (D56)", { timeout: 30_000 }, () =
     const unwarmed = runAb(clone, ["k6", "main-1"], { npm, docker }, env);
     expect(unwarmed.status).toBe(1);
     expect(unwarmed.stderr).toContain(`::error::D56: main-1: its warm-up warm-main-1 was not recorded ("${VERDICTS.noReference}")`);
+    // A warm-up whose k6 fails leaves no record behind, not even an earlier run's.
+    writeFileSync(path.join(out, "d56-pass-warm-main-1.json"), "{}");
+    const failing = runAb(clone, ["k6", "warm-main-1"], { npm: "exit 3", docker }, env);
+    expect(failing.status).toBe(1);
+    expect(failing.stderr).toContain(`warm-main-1: k6 exited "3"`);
+    expect(existsSync(path.join(out, "d56-pass-warm-main-1.json"))).toBe(false);
     const warm = runAb(clone, ["k6", "warm-main-1"], { npm, docker }, env);
     expect(warm.stderr).toBe("");
     expect(warm.status).toBe(0);
