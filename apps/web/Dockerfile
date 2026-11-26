@@ -5,7 +5,7 @@
 # runtime from the container environment.
 
 ARG NODE_IMAGE=node:22-alpine
-ARG TURBO_VERSION=2.11.11
+ARG TURBO_VERSION=2.11.13
 
 FROM ${NODE_IMAGE} AS base
 RUN apk add --no-cache libc6-compat openssl
