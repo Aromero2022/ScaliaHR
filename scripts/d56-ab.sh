@@ -161,7 +161,8 @@ cmd_main_up() {
 cmd_k6() {
   local pass="${1:-}" code=0
   case "$pass" in main-1 | main-2 | warm-main-1 | warm-main-2 | warm-pr-1) ;; *) die "$NO_REFERENCE" "k6 runs main-1, main-2 or a warm-up only" ;; esac
-  rm -f "$OUT/summary-${pass}.json" "$OUT/requests-${pass}.csv.gz" "$OUT/k6-${pass}.txt"
+  # Its record too: a pass whose record fails must not leave an earlier run's behind for the ratio step.
+  rm -f "$OUT/summary-${pass}.json" "$OUT/requests-${pass}.csv.gz" "$OUT/k6-${pass}.txt" "$OUT/d56-pass-${pass}.json"
   # The PR's harness, which re-seeds the load tenants first, with the step's load
   # settings. k6's summary goes to a file: the job's only steady-state page line
   # stays the first PR pass's (D36, D54).
