@@ -2176,6 +2176,19 @@ machine):**
         outliers are excluded: removing them would lower the band by hand.
       - An investigation closes when its cause is written in D36, or when
         the user accepts the new level with a decision noted in D36.
+      - Since D56, a push to `main` with "regresión ya mergeada" opens an
+        investigation under this rule too (D56, **Verdicts**). The first
+        one, the push of 65b4fa7 (#85, 2026-11-26), is open: D56,
+        **Investigation of 65b4fa7**. Its cause and its closing are written
+        here once the user has decided.
+        - Closed by the user's decision on 2026-11-26: runner noise, no
+          regression of the code. The limit of 1.20 does not change.
+        - supabase-js: unchanged on the per-page path.
+        - Attempt 1: a slow window of the runner (AMD EPYC 7763, 21:24–21:30)
+          that follows the clock, not the code.
+        - Attempt 2: within the limit (r 1.1007).
+        - Local A/B with no CPU limit: ln r −0.025 (95 % interval −0.152 to
+          +0.102), which rules out +0.266.
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.
@@ -5146,6 +5159,256 @@ Supabase starts.
 - **It watches only the strict side.** A bias that turned negative again, as
   before the warm-ups, would show in the ln r the tables write down; no
   bound is set for it, and the user reads those figures.
+
+**Investigation of 65b4fa7: "regresión ya mergeada" on the push of #85 (2026-11-26):**
+- **The red push.** Run 45895921823, attempt 1, the push of 65b4fa7: the
+  squash of #85, the six minor/patch updates of #83 (turbo 2.11.13,
+  @supabase/supabase-js 2.119.2, autoprefixer 10.7.0, postcss 8.5.33,
+  @typescript-eslint/eslint-plugin 8.73.0 and nodemailer 10.6.1) and
+  `ARG TURBO_VERSION=2.11.13`. The step "D56 A/B ratio of the four k6
+  passes" gave r 1.3042 (ln r +0.266), "regresión ya mergeada", on an AMD
+  EPYC 7763 runner. The same tree (f947d74) gave r 0.9792 in #85's own run
+  (45893240080, attempt 1, Intel Xeon 6975P-C).
+  - f947d74 is the tree, not a commit: `git rev-parse <commit>^{tree}`
+    gives it for both #85's head (a5e4d83) and the squash 65b4fa7, so the
+    two runs measured the same files.
+  - As **Verdicts** ("Push to `main`") and D36 say, the red push opens this
+    investigation, and the phase's next pull request (9c PR 6d), by the
+    user's instruction, does not open until the user has reviewed it (D36
+    asks only that the investigation be open).
+  - The loop's report after #85's merge said nothing was pending: it had not
+    checked the push's CI. From here on the loop checks the CI of the push
+    to `main` after every merge.
+- **1. One re-run of the `docker` job** (attempt 2, as an extra measurement:
+  it measures again and does not clear attempt 1's `::error::`).
+
+  | Run | CPU | `warm-main-1` | `main-1` | `warm-pr-1` | `pr-1` | `pr-2` | `warm-main-2` | `main-2` | r | ln r |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | #85 (a5e4d83), attempt 1 | Intel Xeon 6975P-C | 66.71 ms | 59.39 ms | 59.99 ms | 62.73 ms | 52.28 ms | 56.44 ms | 57.59 ms | 0.9792 | −0.021 |
+  | Push 65b4fa7, attempt 1 | AMD EPYC 7763 | 114.17 ms | 105.92 ms | 113.03 ms | 140.42 ms | 146.68 ms | 162.91 ms | 114.32 ms | 1.3042 | +0.266 |
+  | Push 65b4fa7, attempt 2 | Intel Xeon 6975P-C | 54.01 ms | 48.55 ms | 57.47 ms | 56.43 ms | 60.81 ms | 67.88 ms | 58.33 ms | 1.1007 | +0.096 |
+
+  - Attempt 2 is within the limit ("within the limit"). Its +0.096 is near
+    the accepted residual bias (+0.072, σ 0.071, **Result of the PR
+    warm-up and decision**), and it comes mostly from `main-1`, the lowest
+    of its four passes.
+- **2. Per route, sign-ins and retries** (the CSVs of the `d56-ab` and
+  `d36-diag` artifacts of the pushes of b43484c, fb94ed1 and 65b4fa7,
+  attempts 1 and 2; the steady-state p95 per route of `load/pages.js`, with
+  the three `/employees` variants told apart by their URL). Each cell is
+  ln of the PR side over `main`'s side, as r is computed:
+
+  | Route | b43484c | fb94ed1 | 65b4fa7, attempt 1 | 65b4fa7, attempt 2 |
+  |---|---|---|---|---|
+  | `/dashboard` | −0.024 | +0.009 | +0.414 | +0.033 |
+  | `/employees` | +0.085 | −0.048 | +0.265 | +0.153 |
+  | `/employees?page=2` | −0.063 | +0.024 | +0.371 | +0.038 |
+  | `/employees?q=Empleado%201` | −0.185 | −0.381 | +0.367 | +0.209 |
+  | `/org-chart` | −0.059 | −0.032 | +0.141 | +0.109 |
+  | `/performance` | −0.182 | +0.088 | +0.117 | +0.378 |
+  | `/skills-hub` | +0.161 | −0.089 | +0.023 | +0.218 |
+  | `/profile` | −0.239 | −0.387 | +0.288 | −0.066 |
+  | All pages (r's ln) | −0.043 | −0.040 | +0.266 | +0.096 |
+
+  - A route has 53–222 steady samples per pass, so a single route moves by
+    ±0.2–0.4 with no change at all (b43484c and fb94ed1, both green).
+  - Attempt 1 is positive on all eight routes, larger on the heavier pages
+    (the dashboard, the three `/employees` and `/profile`) and smallest on
+    `/skills-hub`. It is broad, not one route, so it points to the runner
+    or the stack. It cannot rule out a change on every page's path either,
+    such as supabase-js, which step 3 checks.
+  - Attempt 2 is mixed (−0.066 to +0.378), with no route standing out.
+  - Sign-ins: 71 in the ramp and 4 in the steady phase in every pass of
+    every run, no sign-in retries, and no steady page other than 200. The
+    sign-ins of attempt 1 (straight to GoTrue, not through the web
+    container) are not slower on the PR side (p50 73–76 ms in all seven
+    passes).
+  - The timeline of attempt 1 shows where the difference is. The PR's own
+    warm-up, 90 s before `pr-1`, was about as fast as `main-1`, and `main`'s
+    warm-up, after `pr-2`, was the slowest pass of the job:
+
+    | Start of the steady phase (UTC) | Pass | Tree | p50 | p95 |
+    |---|---|---|---|---|
+    | 21:13:20 | `warm-main-1` | fb94ed1 | 44.2 ms | 114.2 ms |
+    | 21:14:47 | `main-1` | fb94ed1 | 42.1 ms | 105.9 ms |
+    | 21:23:21 | `warm-pr-1` | 65b4fa7 | 44.3 ms | 113.0 ms |
+    | 21:24:50 | `pr-1` | 65b4fa7 | 48.3 ms | 140.4 ms |
+    | 21:26:18 | `pr-2` | 65b4fa7 | 43.8 ms | 146.7 ms |
+    | 21:29:10 | `warm-main-2` | fb94ed1 | 51.4 ms | 162.9 ms |
+    | 21:30:37 | `main-2` | fb94ed1 | 41.2 ms | 114.3 ms |
+
+    The slow stretch, about 21:24–21:30, follows the clock, not the tree:
+    it covers `pr-1`, `pr-2` and `main`'s warm-up. In fb94ed1's push all
+    seven passes sit between 50.5 and 60.4 ms.
+- **3. The published tarballs of @supabase/supabase-js 2.119.0 and 2.119.2**
+  and of its five dependencies (`npm pack` of both versions, diffed; nothing
+  run from them):
+  - auth-js, realtime-js and functions-js: only their version strings, plus
+    comments in auth-js's types. `GoTrueClient` (`getClaims`, `getUser`,
+    the JWKS cache, locks and token refresh) is byte-identical.
+  - postgrest-js: `dist/index.cjs` and `dist/index.mjs` are byte-identical;
+    only a comment typo and the version changed in its sources.
+  - storage-js: one real change, object URLs now checked by
+    `validateStorageUrl`. `apps/web` never calls storage, functions or
+    realtime.
+  - supabase-js: 209 changed lines in `dist/index.mjs` (199 not empty).
+    132 of them are 66 identical lines moved: the bundler's oxc runtime
+    helpers (`_typeof`, `toPrimitive`, `toPropertyKey`, `_defineProperty`,
+    `ownKeys`, `_objectSpread2`), now placed before the code that uses
+    them. The rest is the version string and a rewrite of the
+    `X-Client-Info` header's runtime detection (17 lines out, 58 in:
+    `detectClientEnvironment()` and `formatClientEnvironment()`). That
+    header is a top-level `const`, computed once when the module loads.
+  - On the per-page server path (`createServerClient` of `@supabase/ssr`
+    0.12.7, unchanged; `getClaims()` in the middleware and the pages;
+    `.from()`/`.rpc()` through PostgREST's `fetch`), nothing changed but
+    that header's value. There is no new request, JWT check, lock or timer.
+- **4. Local A/B, fb94ed1 (A) against 65b4fa7 (B)** (this session's
+  container, 4 CPUs, nothing remote): Supabase local (CLI 2.122.1, CI's
+  excluded services); web and worker images of both trees built with the
+  repository's Dockerfiles; the stack switched with `docker compose up
+  --no-build --force-recreate`; D36's short k6 run (k6 v1.8.2, CI's load
+  settings), with one unmeasured warm-up after every switch, as D56 runs
+  them. Each order ran two cycles: ABBA (A, B, B, A, as `main-1`, `pr-1`,
+  `pr-2`, `main-2`) and BAAB (the reverse), first with no CPU limit, then
+  with web and worker at `docker update --cpus 1`. The A images carry
+  supabase-js 2.119.0 and the B images 2.119.2 (the version string in their
+  server bundles).
+
+  - No CPU limit:
+
+    | Order, cycle | Position 1 | Position 2 | Position 3 | Position 4 | r | ln r |
+    |---|---|---|---|---|---|---|
+    | ABBA, 1 | A 105.41 ms | B 120.63 ms | B 110.55 ms | A 141.63 ms | 0.9451 | −0.056 |
+    | ABBA, 2 | A 95.68 ms | B 110.48 ms | B 100.60 ms | A 130.78 ms | 0.9425 | −0.059 |
+    | BAAB, 1 | B 139.70 ms | A 169.83 ms | A 119.00 ms | B 130.45 ms | 0.9496 | −0.052 |
+    | BAAB, 2 | B 141.85 ms | A 117.25 ms | A 146.46 ms | B 138.25 ms | 1.0686 | +0.066 |
+
+    - Mean ln r: ABBA −0.058 (r 0.944), BAAB +0.007 (r 1.007), ABBA+BAAB
+      −0.025 (r 0.975). The mean of both orders is the one that counts:
+      it cancels the position effect below.
+    - Pooled SD within each order 0.059 (2 degrees of freedom), SE of the
+      mean 0.030, 95 % interval with Student's t (df 2, 4.303): −0.152 to
+      +0.102.
+    - Per route (ABBA, the eight routes): ln of B over A from −0.130 to
+      +0.092, −0.061 for all pages (the samples of the four passes of each
+      tree pooled); no route stands out. Sign-ins: 71 in
+      the ramp and 4 in the steady phase in every pass, no retries, no
+      steady page other than 200.
+  - Web and worker at 1 CPU:
+
+    | Order, cycle | Position 1 | Position 2 | Position 3 | Position 4 | r | ln r |
+    |---|---|---|---|---|---|---|
+    | ABBA, 1 | A 218.89 ms | B 191.51 ms | B 168.28 ms | A 344.54 ms | 0.6537 | −0.425 |
+    | ABBA, 2 | A 174.88 ms | B 192.06 ms | B 233.52 ms | A 208.72 ms | 1.1085 | +0.103 |
+    | BAAB, 1 | B 219.53 ms | A 309.28 ms | A 391.08 ms | B 382.71 ms | 0.8334 | −0.182 |
+    | BAAB, 2 | B 275.35 ms | A 250.79 ms | A 215.88 ms | B 226.85 ms | 1.0741 | +0.072 |
+
+    - Mean ln r: ABBA −0.161 (r 0.851), BAAB −0.055 (r 0.946), ABBA+BAAB
+      −0.108 (r 0.897).
+    - Pooled SD within each order 0.293 (df 2), SE of the mean 0.146, 95 %
+      interval (t 4.303): −0.739 to +0.522.
+
+  - Limits of the local measurement:
+    - The images are built on a local base, `node22-ccr:local`:
+      `node:22-alpine` plus the session proxy's CA and
+      `NODE_EXTRA_CA_CERTS`, needed only so that `npm ci` and `apk` reach
+      their registries through this container's TLS proxy. A and B use the
+      same base, so it cancels in r, but they are not CI's images.
+    - One Supabase database serves every pass and is never restarted,
+      unlike CI, where each `main` pass starts on a new one.
+    - k6, Supabase and the two containers share the same 4 CPUs.
+    - The runs' files stay in `load/.out` (git-ignored) and are not
+      committed.
+
+  - **Position effect (an open observation; D56 does not change).** The
+    p95 by position in the cycle, whatever the tree, and the mean ln
+    against position 1:
+
+    | Position | No CPU limit | Mean ln vs 1 | 1 CPU | Mean ln vs 1 |
+    |---|---|---|---|---|
+    | 1 | A 105.41, A 95.68, B 139.70, B 141.85 ms | 0 | A 218.89, A 174.88, B 219.53, B 275.35 ms | 0 |
+    | 2 | B 120.63, B 110.48, A 169.83, A 117.25 ms | +0.071 | B 191.51, B 192.06, A 309.28, A 250.79 ms | +0.052 |
+    | 3 | B 110.55, B 100.60, A 119.00, A 146.46 ms | −0.008 | B 168.28, B 233.52, A 391.08, A 215.88 ms | +0.090 |
+    | 4 | A 141.63, A 130.78, B 130.45, B 138.25 ms | +0.128 | A 344.54, A 208.72, B 382.71, B 226.85 ms | +0.248 |
+
+    - The last pass of a cycle is the slowest in both conditions, with
+      either tree in it. ABBA alone puts it on A and BAAB alone on B; the
+      mean of both orders cancels it.
+    - Recreating the containers does not explain it alone: positions 1, 2
+      and 4 each follow a switch (`--force-recreate`) and a warm-up, and
+      position 3 does not, yet 2 is close to 1 and only 4 stands out.
+    - The database that is never restarted does not explain it either.
+      Over the 56 passes of the four runs (32 measured, 24 warm-ups, each
+      with its own seed), the `public` tables the seed
+      rewrites were autovacuumed 55 times each, about once a pass, and had
+      no dead rows at the end. `auth.sessions`, `auth.refresh_tokens` and
+      `auth.mfa_amr_claims` stay steady at about 75 live rows, with at
+      most one seed's dead rows (75) between autovacuums (55 each).
+      `auth.audit_log_entries` grows all the time (8,425 rows at the end,
+      insert-only, 3.2 MB), but that does not explain that
+      position 1 of the next cycle recovers on the same database: 141.63
+      to 95.68 ms (ABBA, no limit) and 344.54 to 174.88 ms (ABBA, 1 CPU).
+    - The CPU shared with k6 adds noise to every position alike: the load
+      is the same in every pass, and the effect shows with web capped at 1
+      CPU and without a cap.
+    - It is left open, with no new runs for it. It looks like D56's stack
+      bias in shape (the last `main` pass against the first), but in CI
+      each `main` pass starts on a new database, and the transition's
+      ln(`main-2`/`main-1`) has no sign of its own (−0.136, −0.041,
+      +0.076 and +0.183 in the four rows of the watch rule's table below).
+      Nothing shows they share a cause.
+    - In CI, `main-2` takes the 4th position, so if the effect existed there
+      it would favor the PR: the opposite of the residual bias that was
+      accepted (+0.072, stricter with the PR).
+- **Result:**
+  - **No CPU limit, the criterion:** the mean ln r of ABBA+BAAB is −0.025,
+    at most +0.05 (the threshold the user set for this investigation on
+    2026-11-27, with the 95 % interval), and +0.266 (attempt 1) is
+    outside its 95 % interval
+    (−0.152 to +0.102). The local measurement rules out a regression the
+    size of attempt 1.
+  - **1 CPU, support only:** the smallest effect it can tell from 0 is
+    0.630 (half the width of its interval), larger than +0.266, so it can
+    neither show nor rule out a regression of that size. Its mean
+    (−0.108) does not point to one.
+  - **The run with only supabase-js back at 2.119.0 was not made:** step 4
+    asked for it only if a difference showed, and none did.
+  - **Proposed closing:** runner noise, no regression of the code:
+    supabase-js unchanged on the per-page path, attempt 1 with a slow
+    window of the runner that follows the clock, attempt 2 within the
+    limit, and the local A/B with no effect. The limit of 1.20 does not
+    change.
+  - The closing waits for the user's decision, as D36 asks (an
+    investigation closes when its cause is written in D36 or the user
+    accepts it).
+- **Watch rule** (**How the watch rule is applied**): #84 and #85 did not
+  write ln r or the count in their verification tables. They are written
+  here, and from the next pull request on each verification table carries
+  this count on:
+  - Pull requests counted: 2 of 10. #84 ln r +0.011 (attempt 1, r
+    1.0107), #85 ln r −0.021 (attempt 1, r 0.9792). Red attempts 1 so far:
+    0.
+  - `main` runs of the transition: 3 of 5, each with ln(`main-2`/`main-1`)
+    and ln(`pr-2`/`pr-1`) and no bound:
+
+    | Push | Attempt | CPU | ln r | ln(`main-2`/`main-1`) | ln(`pr-2`/`pr-1`) |
+    |---|---|---|---|---|---|
+    | b43484c | 1 | Intel Xeon 6975P-C | −0.043 | −0.136 | −0.039 |
+    | fb94ed1 | 1 | Intel Xeon 6975P-C | −0.040 | −0.041 | +0.060 |
+    | 65b4fa7 | 1 | AMD EPYC 7763 | +0.266 | +0.076 | +0.044 |
+    | 65b4fa7 | 2 (extra measurement) | Intel Xeon 6975P-C | +0.096 | +0.183 | +0.075 |
+
+    Attempt 2 of 65b4fa7 is listed but does not add a `main` run: the
+    transition counts one run per commit.
+- **Closed by the user on 2026-11-26:** runner noise, no regression of the
+  code. supabase-js is unchanged on the per-page path; attempt 1 had a slow
+  window of the runner (AMD EPYC 7763, 21:24–21:30) that follows the clock,
+  not the code; attempt 2 is within the limit (r 1.1007); and the local A/B
+  with no CPU limit gives ln r −0.025 (95 % interval −0.152 to +0.102),
+  which rules out +0.266. The limit of 1.20 does not change. The position
+  effect stays an open observation, with no new runs. The closing is also
+  written in D36.
 
 ---
 
