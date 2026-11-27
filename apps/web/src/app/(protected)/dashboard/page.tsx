@@ -108,6 +108,10 @@ export default async function DashboardPage() {
         )}
       </div>
 
+      {/* 9c PR 6d: the dashboard grid. Information and goals side by side when
+          two 26rem columns and the gap fit, one column below that (1.4.10).
+          Columns in rem (D44). */}
+      <div data-dashboard-grid="" className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,26rem),1fr))] items-start gap-6">
       {/* Profile Summary */}
       <section className="rounded-xl border border-line bg-surface p-6">
         <h2 className="mb-4 text-lg font-semibold text-fg">
@@ -154,6 +158,7 @@ export default async function DashboardPage() {
           </p>
         )}
       </section>
+      </div>
     </div>
   );
 }
