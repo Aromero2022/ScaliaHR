@@ -2198,6 +2198,27 @@ machine):**
         - Attempt 2: within the limit (r 1.1007).
         - Local A/B with no CPU limit: ln r −0.025 (95 % interval −0.152 to
           +0.102), which rules out +0.266.
+      - Open investigation, the full run at the close of 9c (2026-11-27):
+        the full local run that closes each phase (`docs/RUNBOOK.md`,
+        section 9) did not pass. Two runs gave a page p95 in the steady
+        state of 1.23 s and 2.0 s, against 217 ms at the close of 9b (D36,
+        **Results** table, row "After, workload model") and the ceiling of
+        500 ms.
+        - Same workload as the D36 model: 1,150 users, 20–40 s between
+          pages, about 34.5 requests/s, 0 % failed, 100 % of checks, and no
+          page with another tenant's employees.
+        - Same spec as the 9b run (4 vCPU, 15 GB, the stack and k6 on the
+          same machine): a container with an Intel Xeon at 2.30 GHz, over
+          the tree of #88 (42bf78d plus the changes of D57). The CPU model of the 9b run is
+          not recorded.
+        - Probably related to the level shift of +96 % noted above
+          (94e2020, D43). That shift was measured in the short CI run, so the
+          link is not measured yet. The comparison that
+          confirms or rules it out: the tree of the 9b close (ae25e87)
+          against the tree of #88, on the same machine.
+        - It is investigated in its own pull request, and Phase 9c does not
+          close until then and the user decides (ROADMAP, Fase 9c,
+          **Estado**).
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.
