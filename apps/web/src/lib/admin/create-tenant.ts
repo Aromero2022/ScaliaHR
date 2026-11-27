@@ -189,9 +189,10 @@ export async function createTenant(input: CreateTenantInput) {
       `);
 
       const ownerEmail = user.email ?? `${user.id}@placeholder.local`;
+      // D57: stored as lower(btrim(email)), the same expression as the CHECK users_email_normalized.
       const newUser = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
         INSERT INTO public.users (tenant_id, auth_uid, email, first_name, last_name, status)
-        VALUES (${tid}::uuid, ${user.id}::uuid, ${ownerEmail}, '', '', 'ACTIVE')
+        VALUES (${tid}::uuid, ${user.id}::uuid, lower(btrim(${ownerEmail})), '', '', 'ACTIVE')
         RETURNING id
       `);
 

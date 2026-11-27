@@ -169,7 +169,8 @@ describe("anonymize_user() — suppression", () => {
     expect(user.employee_id).toBe("EMP-IT-001");
     expect(user.first_name).toMatch(/^ANON-[0-9a-f]{8}$/);
     expect(user.last_name).toBe("ANONIMIZADO");
-    expect(user.email).toBe(`${user.first_name}@removed.local`);
+    // D57: the same token, in lower case, as the stored email.
+    expect(user.email).toBe(`${user.first_name.toLowerCase()}@removed.local`);
     expect(user.is_anonymized).toBe(true);
     expect(user.status).toBe("TERMINATED");
     expect(user.deleted_at).not.toBeNull();

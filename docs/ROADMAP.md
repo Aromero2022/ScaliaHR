@@ -24,6 +24,7 @@
 | 8 | TIH (Talent Intelligence Hub) | Completada |
 | 9a | Infraestructura local | Completada (PR #45, #48, #49 y #50; criterio de cierre verificado abajo) |
 | 9b | Seguridad y rendimiento local | Completada (PR #51, #52, #53, #54 y #57; criterio de cierre verificado abajo) |
+| 9c | Sistema de diseño y responsividad | Completada el 2026-11-27 (PR #60, #61, #62, #63, #64, #65, #67, #68, #69, #71, #72 y #87; criterio de cierre verificado abajo; la corrida completa de k6 al cerrar la fase no pasó en local y queda pendiente de decisión del usuario) |
 
 ---
 
@@ -33,7 +34,7 @@
 |------|--------|---------|
 | 9a | Infraestructura local (completada) | Dockerfile, /api/health, worker pg-boss en docker-compose, lib/email con React Email probado en Mailpit, middleware de tenant con *.localhost, db-remote-sync con reset bloqueado, export por tenant, prueba de restauración local y runbook. Todo corre gratis en local. |
 | 9b | Seguridad y rendimiento local (completada) | Rate limiting activo, CSP sin unsafe-eval, server-only, caching por tenant, índices, paginación, logs estructurados en JSON, prueba de carga k6 contra Docker, Dependabot y escaneo de secretos. Errores genéricos con request id, sin rutas de debug, redacción de datos sensibles en logs, bitácora de solo inserción y zod en todas las Server Actions. |
-| 9c | Sistema de diseño y responsividad | Design tokens, layout y navegación responsive, búsqueda global ⌘K, reglas UX, accesibilidad WCAG 2.2 AA y biblioteca base de componentes, con axe y capturas en 3 breakpoints en CI. Todos los módulos siguientes se construyen sobre ella. |
+| 9c | Sistema de diseño y responsividad (completada) | Design tokens, layout y navegación responsive, búsqueda global ⌘K, reglas UX, accesibilidad WCAG 2.2 AA y biblioteca base de componentes, con axe y capturas en 3 breakpoints en CI. Todos los módulos siguientes se construyen sobre ella. |
 | 10 | Workflows y Notificaciones | Motor de workflows configurable, notificaciones push/email/in-app, eventos de ciclo de vida del empleado; push por adaptador (local/prueba). Consume el correo y worker de la Fase 9a. |
 | 11 | Admin Center base | CRUD de RBP, DPCS, Picklist Center, Import Employee Data, configuración de empresa con Theme Manager por tenant, permiso "Ver dato sensible", reporte de auditoría, política de login y reseteo de contraseña por RH. |
 | 12 | Consola de plataforma y suscripciones | Catálogo de planes, alta de clientes, facturación por adaptador (local/prueba), consola del proveedor, acceso de soporte, tenants sandbox, canales de release y conversión demo → cliente. |
@@ -241,6 +242,14 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 
 **Criterio de cierre:** axe sin errores en las pantallas existentes y las 3 capturas aprobadas. axe sin errores quedó verificado en CI con el PR 5 (D44), y sus capturas quedaron aprobadas (`docs/capturas/9c-pr5/`). Las del PR 6d (los tres pasos de "Actualizar información personal" y el inicio con su grid, a 360, 768 y 1280 px, en claro y oscuro) están en `docs/capturas/9c-pr6d/`.
 
+**Estado: completada** el 2026-11-27 por decisión del usuario (PR #60, #61, #62, #63, #64, #65, #67, #68, #69, #71, #72 y #87). Actualización de estado, anotada con D57: el push de #87 a `main` (42bf78d, run 46033928243) pasó en verde, con la razón D56 en 1.0090. La corrida completa de k6 que D36 pide al cerrar cada fase no pasó en local (última fila) y queda pendiente de decisión del usuario.
+
+| Punto del criterio | Evidencia |
+|--------------------|-----------|
+| axe sin errores en las pantallas existentes | El e2e del job Docker corre axe en cada PR y en cada push a `main` contra la imagen de producción, y falla con cualquier violación de wcag2a, wcag2aa, wcag21a, wcag21aa y wcag22aa (D44): 73/73 en el push de 42bf78d. En la corrida local del PR 6d, 161 escaneos sin violaciones |
+| Las 3 capturas aprobadas | `docs/capturas/9c-pr5/` (PR 5, D44) y `docs/capturas/9c-pr6d/` (PR 6d, D51), aprobadas con el merge de cada PR |
+| Corrida completa de k6 al cerrar la fase (D36, `docs/RUNBOOK.md` sección 9) | No pasó. Dos corridas el 2026-11-27 con los valores del RUNBOOK (1,150 usuarios, 20–40 s entre páginas) sobre el árbol de D57 (42bf78d más este PR), en un contenedor de 4 vCPU (Intel Xeon a 2.30 GHz) y 15 GB con la pila y k6 en la misma máquina, como la referencia de D36: p95 de las páginas en estado estable de 1.23 s y 2.0 s contra el límite de 500 ms, con unas 34.5 peticiones/s, 0 % de fallos, 100 % de checks y ninguna página con empleados de otro tenant. Al cerrar 9b, en una máquina de 4 vCPU, D36 midió 217 ms. Queda pendiente de decisión del usuario: abrir la investigación de D36 (comparar en la misma máquina con el árbol del cierre de 9b, que coincide con el cambio de nivel de +96 % de D43 aún sin investigar) antes del siguiente PR de fase |
+
 ---
 
 ## Fase 10 — Workflows y Notificaciones
@@ -263,6 +272,8 @@ CRUD de RBP (roles, grupos y asignaciones), DPCS (aviso de privacidad versionado
 - Crear rol de verdad: hoy el diálogo "Crear Nuevo Rol" es una simulación que no guarda nada y su toast lo dice (D43).
 - El formulario de límites de solicitudes pasa a `Field` y `Button` (D43), con áreas táctiles de 44 px (hoy 28–30 px).
 - Cada Server Action del CRUD de RBP debe llamar `writeAuditLog()` con la acción correspondiente: `ROLE_CREATED`, `ROLE_UPDATED`, `ROLE_DELETED`, `PERMISSION_GRANTED`, `PERMISSION_REVOKED`, `GROUP_MEMBER_ADDED`, `GROUP_MEMBER_REMOVED`. Las entradas deben incluir `entity_id` (UUID del recurso) y `diff` (campos modificados) para trazabilidad completa.
+- Desde D57: activación por tenant del acceso a otras apps Scalia (la primera, Nexo) en Admin Center, con un permiso de RBP; la licencia la otorga la plataforma (D12, Fase 12) y la otra app la lee con una consulta de licencia firmada, sin precios.
+- Desde D57 (LFPDPPP): definir si Scalia es encargado (el cliente es el responsable) o responsable. Si es encargado, el flujo de datos de HR a Nexo va en el contrato de encargo y en el aviso de privacidad del cliente; si es responsable, lo cubre el DPCS. Validar con asesoría legal.
 
 ### Theme Manager (D18)
 
@@ -321,6 +332,7 @@ Catálogo de planes y módulos, alta de clientes por autoservicio con periodo de
 - Facturación y cobro por adaptador (local/prueba): la activación y suspensión por pago se prueban con la implementación de prueba; el proveedor real se contrata en la Fase 23.
 - El e2e del alta por autoservicio (registro → crear tenant → MFA obligatorio) llega con esta fase. El `onboarding.spec.ts` que lo intentaba recorría rutas que la app no tiene (`/signup`, `/app/onboarding`) y se borró en el PR 5 de la 9c (D44); el alta obligatoria de MFA ya la cubre `mfa-enroll.spec.ts`.
 - Al prender o apagar un módulo, llamar revalidateTag(moduleFlagsTag(tenantId)); al suspender un tenant, llamar tenantAccessCache().invalidate(tenantId). Sin esto, un módulo apagado sigue visible hasta 60 s y un tenant suspendido entra hasta 5 s (D35).
+- Desde D57: la licencia de otras apps Scalia por tenant vive en la consola de la plataforma (D12), y la otra app la consulta firmada, sin precios. Precios y planes de esas apps quedan fuera de D57.
 
 ---
 
@@ -333,6 +345,9 @@ Catálogo de planes y módulos, alta de clientes por autoservicio con periodo de
 - Documentación OpenAPI y colección de Postman.
 - Primeras entidades: empleados, organización/posiciones, ausencias y tiempo.
 - Integraciones con sistemas de terceros por adaptador (local/prueba); los proveedores reales se conectan en la Fase 23.
+- Desde D57: proveedor de identidad para otras apps Scalia (Nexo) por OIDC con PKCE, aparte de las credenciales de cliente de la API. `sub` = `auth_uid`; `tenant_id` y `slug` como claims aparte; el correo y el número de empleado son claims informativos, solo con el scope autorizado. La otra app vincula por `sub` (con `tenant_id`), nunca por correo. Nunca cookies en el dominio padre (D21).
+- Desde D57: evaluar primero el OAuth 2.1/OIDC Server de Supabase Auth (beta; PKCE, ID tokens y JWKS; sus usuarios cuentan como MAUs), con un cliente OIDC estándar del lado de Nexo (Node, sin Supabase); un proveedor propio solo si no cubre. Revisar si corre el hook de claims, si los ID tokens llevan claims propios, si el CLI fijado lo corre en local y el prefijo `__Host-` de las cookies de HR.
+- Desde D57: webhook firmado de baja y de anonimización hacia la otra app, y "Vincular mi cuenta" (sus correos ligan al dominio de HR, D20).
 
 ---
 
@@ -359,6 +374,7 @@ Depende de: Workflows (10), Admin Center (11), worker y lib/email (9a), API (13)
 - Baja en EC con motivo y fecha efectiva.
 - Tareas de devolución de equipo y revocación de accesos (sesiones, LMS, integraciones).
 - Desde D34 un JWT revocado sigue pasando el middleware hasta que expira (jwt_expiry 900 s). La baja debe cortar el acceso de inmediato: marca de revocación por usuario leída en el middleware (cacheable como D35) o jwt_expiry menor, con prueba de que un usuario dado de baja recibe 401/redirect en el siguiente request.
+- Desde D57: el empleado que sale pierde el acceso a las otras apps Scalia (Nexo) al momento, en cuanto llega el aviso de baja de la Fase 13, que cierra su sesión allá y revoca su refresh token. Un token que HR ya emitió vive hasta 900 s (jwt_expiry, D34) mientras no exista la marca de revocación de la viñeta anterior, así que la otra app revisa el estado de la persona antes de una acción sensible.
 - Entrevista de salida y transferencia de conocimiento.
 - Datos de finiquito hacia nómina vía API; integración con nómina por adaptador (local/prueba).
 - Tarea de baja en IMSS.
@@ -473,6 +489,9 @@ Depende de: worker y lib/email (9a), Admin Center con "Ver dato sensible" y el r
 
 - app.scaliahr.com y subdominios por tenant (<cliente>.scaliahr.com) con SSL comodín.
 - Assets con cache inmutable y CDN (Cloudflare) delante de Railway.
+- Desde D57: dominio por confirmar (se asume scalia.mx).
+- Desde D57: certificado `*.hr.<dominio>`. Con Cloudflare en configuración completa, Universal SSL solo cubre un nivel. Opciones: Let's Encrypt con DNS-01 sin proxy (sin costo; esos hosts pierden la CDN y el proxy que escribe la IP del cliente que lee D28), zona en configuración CNAME (requiere plan Business o Enterprise) o Advanced Certificate Manager (de pago).
+- Desde D57: la liberación 2 de Nexo, con inicio de sesión por la cuenta de HR, necesita HR en producción (Principio 8).
 
 ### Ambientes
 
@@ -560,9 +579,12 @@ Contratar PITR y encender su export por tenant:
 | Movimiento reducido | 9c (D40, D43, D51) | Cumple: las duraciones de transición son tokens que pasan a 0 con `prefers-reduced-motion: reduce` (D40). Desde D51, `motion/react` con `useReducedMotion` y `MotionConfig reducedMotion="user"`: el toast y cada paso nuevo de "Actualizar información personal" entran sin moverse ni desvanecerse con movimiento reducido, y el indicador de carga de los botones solo gira sin él (`motion-safe:animate-spin`, D43). El e2e lo prueba en la imagen de producción, con y sin movimiento reducido, muestreando sus cuadros |
 | LFPDPPP 2025: aviso de privacidad | 11 (DPCS visible en todos los temas) | Pendiente: DPCS todavía no existe |
 | LFPDPPP 2025: derechos ARCO | 20 | Parcial: el admin procesa solicitudes y la supresión existe (D10); faltan autoservicio y bloqueo (Known Risk registrado) |
+| Flujo de datos a otras apps Scalia cubierto (contrato de encargo o aviso de privacidad) | 11 (D57) | ⏳ Pendiente: la Fase 11 define si Scalia es encargado o responsable. Como encargado, el flujo de HR a Nexo va en el contrato de encargo y en el aviso de privacidad del cliente; como responsable, lo cubre el DPCS. Validar con asesoría legal |
 | Licencias de fuentes e íconos | 9c (D40, D44) + 11 (OFL, Lucide/Phosphor/Tabler) | Parcial: Inter (SIL OFL 1.1) autohospedada con su licencia en `src/fonts/inter/OFL.txt`, origen y SHA-256 documentados; los presets solo eligen fuentes de una lista cerrada. `@axe-core/playwright` y `axe-core` 4.14.0 (MPL-2.0) son dependencias de desarrollo, solo para las pruebas y sin modificar; `check:prod-build` y el job Docker confirman que no entran al bundle ni a la imagen de producción (D44). `motion` 14.14.0 y sus dependencias `framer-motion` 14.14.0, `motion-dom` 14.14.0 y `motion-utils` 14.7.0 (MIT) entran al bundle del navegador sin modificar (D51). Faltan los paquetes de íconos (Fase 11) |
 | Theme Manager usable por administradores sin experiencia técnica | 9c (base, D40) + 11 | Pendiente: la base existe desde D40 (presets como datos, alto contraste derivado, `themeCss()` que valida cada valor y `ensureContrast()` para ajustar colores); el asistente y los 5 presets restantes llegan en la Fase 11 |
 | Aislamiento de tenant por subdominio o código de empresa | 9a (D21) + 9b (D34, D35) + 23 (dominio real) | Cumple en local: el middleware solo deja pasar al tenant del token y activo; otro tenant, uno inexistente y uno suspendido reciben el mismo 404, y los anónimos la misma redirección al login. Un tenant suspendido sale de los tokens nuevos (hook). Probado con el middleware real contra Supabase local. Desde D35 el middleware recuerda 5 s un par permitido (tenant pedido, tenant del token), así que un tenant suspendido queda fuera a más tardar 5 s después; los rechazos nunca se guardan. Las cachés entre peticiones llevan el tenant del token en la llave y el RBP no se cachea entre peticiones. La prueba de carga revisa en cada página que no aparezcan empleados de otro tenant (D36) |
+| Correo normalizado en la base | D57 | Cumple: `public.users.email` se guarda como `lower(btrim(email))`, con el CHECK `users_email_normalized`; `UNIQUE (tenant_id, email)` sigue por tenant. La migración se detiene sin tocar nada si dos usuarios de un tenant quedarían con el mismo correo (nunca fusiona ni borra). Las rutas que escriben el correo (alta de tenant, `link-owner.sh`, anonimización ARCO) guardan esa forma. Probado contra la base local: mayúsculas o espacios rechazados, duplicado por mayúsculas rechazado, el mismo correo en dos tenants permitido, el correo igual al de `auth.users` para cada usuario cuyo `auth_uid` tiene cuenta, y los pasos de la migración (la detención ante duplicados sin tocar nada, la normalización y el CHECK) corridos en una transacción que se deshace |
+| Proveedor de identidad para apps Scalia (OIDC) | 13 (D57) | ⏳ Pendiente: OIDC con PKCE, `sub` = `auth_uid`, `tenant_id` y `slug` como claims aparte, correo y número de empleado informativos con el scope autorizado; nunca cookies en el dominio padre (D21). Primero se evalúa el OAuth 2.1/OIDC Server de Supabase Auth (beta); un proveedor propio solo si no cubre |
 | Correo transaccional | 9a (D20) + 23 (Resend, SPF/DKIM/DMARC) | Cumple en local: el worker envía por el adaptador SMTP a Mailpit; enlaces solo al dominio de la app y sus subdominios; marca validada (logo `http(s)`, color con contraste 4.5:1); sin direcciones en los logs; trabajos borrados al día. Desde D53, tampoco hay direcciones en los errores del worker: un rechazo SMTP que cita al destinatario se registra como `[EMAIL]`, con test unitario. Cada plantilla se prueba en Mailpit |
 | Migraciones seguras en producción | 9a (D7, D22) + 23 (staging → producción) | Cumple en local: el modo producción de db-remote-sync solo aplica migraciones pendientes, en orden y sin reparar el historial; reset y repair-push se rechazan para producción y en cualquier base con la marca de producción, antes de tocarla. Probado contra Supabase local, sin proyectos remotos. La regla expand/contract está documentada (D22); hoy se revisa a mano en cada PR |
 | Respaldos y restauración | 9a local (D23, D24) + 23 producción | Cumple en local: export por tenant ejecutado por el worker (solo filas de ese tenant, SHA-256 y versión de esquema), restauración por tenant sin tocar a los demás y respaldo completo restaurable en sitio en una transacción, probados en CI contra Supabase local; runbook en `docs/RUNBOOK.md`. Los respaldos tienen datos personales: quedan fuera de git y de las imágenes. Pendiente para la Fase 23: respaldos diarios y PITR del plan Pro, exports diarios a almacenamiento cifrado y restauración sobre bases hospedadas |

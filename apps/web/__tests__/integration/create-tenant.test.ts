@@ -44,8 +44,9 @@ let existingTenantId: string;
 
 beforeAll(async () => {
   authUser = await world.createAuthUser();
+  // D57: an email in another case and with spaces must still be stored in one form.
   mockGetUser.mockResolvedValue({
-    data: { user: { id: authUser.authId, email: authUser.email } },
+    data: { user: { id: authUser.authId, email: ` ${authUser.email.toUpperCase()} ` } },
     error: null,
   });
 
@@ -145,6 +146,16 @@ describe("createTenant() produces same structure as seed.sql demo tenant", () =>
     );
     expect(grants).toHaveLength(4);
   }, 30_000);
+
+  it("D57: stores the owner's email trimmed and in lower case, equal to auth.users", async () => {
+    const { rows } = await db.query(
+      `SELECT u.email, au.email AS auth_email
+       FROM public.users u JOIN auth.users au ON au.id = u.auth_uid
+       WHERE u.tenant_id = $1 AND u.auth_uid = $2::uuid`,
+      [createdTenantId, authUser.authId],
+    );
+    expect(rows).toEqual([{ email: authUser.email, auth_email: authUser.email }]);
+  });
 
   it("D42: writes platform.timezone and platform.locale, so the zone needs no fallback", async () => {
     if (!createdTenantId) throw new Error("createTenant did not produce a tenant");

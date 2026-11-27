@@ -15,7 +15,7 @@ bash "$(dirname "${BASH_SOURCE[0]}")/require-demo-tenant.sh" "$DB_URL"
 
 echo "Looking up auth.users for: $OWNER_EMAIL"
 OWNER_ID="$(psql "$DB_URL" -t -A -v ON_ERROR_STOP=1 -v email="$OWNER_EMAIL" <<'SQL'
-SELECT id FROM auth.users WHERE lower(email) = lower(:'email') LIMIT 1;
+SELECT id FROM auth.users WHERE lower(email) = lower(btrim(:'email')) LIMIT 1;
 SQL
 )"
 if [ -z "$OWNER_ID" ]; then
@@ -28,12 +28,13 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -1 \
   -v owner_id="$OWNER_ID" -v tenant="$TENANT_ID" -v email="$OWNER_EMAIL" <<'SQL'
 -- An unclaimed employee of the tenant with the same email becomes the owner.
 UPDATE public.users SET auth_uid = :'owner_id'::uuid, status = 'ACTIVE', updated_at = now()
-WHERE tenant_id = :'tenant'::uuid AND lower(email) = lower(:'email') AND auth_uid IS NULL
+WHERE tenant_id = :'tenant'::uuid AND lower(email) = lower(btrim(:'email')) AND auth_uid IS NULL
   AND NOT EXISTS (SELECT 1 FROM public.users WHERE auth_uid = :'owner_id'::uuid);
 
 -- Generate employee_id if the tenant has a sequence-based convention.
+-- D57: the email is stored trimmed and in lower case (a CHECK enforces it).
 INSERT INTO public.users (auth_uid, tenant_id, email, first_name, last_name, status, hire_date, employee_id, department_id)
-SELECT au.id, :'tenant'::uuid, :'email',
+SELECT au.id, :'tenant'::uuid, lower(btrim(:'email')),
        coalesce(nullif(au.raw_user_meta_data->>'first_name', ''), 'Owner'),
        coalesce(nullif(au.raw_user_meta_data->>'last_name', ''), 'Account'),
        'ACTIVE', now(),
