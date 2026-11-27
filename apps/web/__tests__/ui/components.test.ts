@@ -240,6 +240,8 @@ describe("Toast (D43)", () => {
   }
   const send = () => act(async () => container.querySelector<HTMLButtonElement>("#send")!.click());
   const toast = () => container.querySelector<HTMLElement>("[data-toast]");
+  // The surface the pointer is over: the toast's motion wrapper (D51) holds no handlers.
+  const surface = () => toast()!.firstElementChild!;
 
   it("announces in a polite status region and closes by itself after TOAST_MS", async () => {
     vi.useFakeTimers();
@@ -260,12 +262,12 @@ describe("Toast (D43)", () => {
     await render(createElement(ToastProvider, null, createElement(Sender)));
     await send();
     await act(async () => {
-      toast()!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+      surface().dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
     });
     await act(async () => vi.advanceTimersByTime(TOAST_MS * 3));
     expect(toast()).not.toBeNull();
     await act(async () => {
-      toast()!.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
+      surface().dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
     });
     await act(async () => vi.advanceTimersByTime(TOAST_MS));
     expect(toast()).toBeNull();

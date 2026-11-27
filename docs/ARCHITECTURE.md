@@ -985,8 +985,8 @@ loads over 400 ms.
 - Visible focus.
 - Full keyboard navigation.
 - 200% zoom without breaking the layout.
-- `prefers-reduced-motion` respected: animations go through framer-motion with
-  `useReducedMotion` (framer-motion is added in Phase 9c).
+- `prefers-reduced-motion` respected: animations go through `motion/react` with
+  `useReducedMotion` (D51).
 
 **Base components:** button, input, stat card, table, modal, toast, skeleton,
 and a day/time scheduler that shows the tenant's time zone and carries
@@ -3621,7 +3621,7 @@ still said "Cambio de Puesto / Job Change"). Now:
 **Decision (9c PR 6b):** the hand-made menus and lists of the shell follow
 the ARIA patterns they look like, with the keyboard alone, and the icon-only
 navigation works with the root font size at 200 %, which D44 had left open.
-The `motion/react` license goes in D51, with PR 6d (6c became the privacy of searches: D27, D38 and this decision).
+The `motion/react` license is in D51 (PR 6d); 6c became the privacy of searches: D27, D38 and this decision.
 
 **"Tomar Acción", a menu button:** the dropdown was a list of buttons under a
 button with no state.
@@ -3822,13 +3822,171 @@ request that repeats these removals and edits.
 the build, `check:forbidden` and gitleaks over the whole history, all at zero.
 Outside `.claude/`, only this document and `docs/ROADMAP.md` change.
 
+## D51 — motion/react With Reduced Motion, the Dashboard Grid and Long Forms in Steps
+
+**Decision (9c PR 6d):** animations in React go through `motion/react`, only
+in client components and only through `m.*` from `motion/react-m`, under one
+`MotionProvider` in the protected layout. Its animation features load with
+`import()` after the page, so they stay out of the initial JS. The same pull
+request gives the dashboard its grid and splits "Actualizar información
+personal" into steps. D49 and D52 had kept this number for it.
+
+**Package and license:** `motion` 14.14.0, a dependency of `apps/web`, brings
+`framer-motion` 14.14.0, `motion-dom` 14.14.0 and `motion-utils` 14.7.0. All
+four are MIT, ship in the browser bundle and are not modified. The lockfile
+adds only those four packages.
+
+**Initial JS:** `check:prod-build` now measures, for each page, the gzip size
+(level 9) of the JS its first load needs: the build manifest's
+`rootMainFiles` plus the chunks of the page and of every layout, template,
+loading, error and not-found segment above it, each file once. Next's "First
+Load JS" table leaves out the layout chunks, which is where the provider
+lives.
+- It prints the largest page, and `--json <file>` writes every page's size.
+- With `--baseline <json>` (an earlier `--json`) it also prints the largest
+  growth and a `::warning::` for each page that grows more than 30 kB, the
+  budget the ROADMAP set.
+- The initial JS never fails the build. An unreadable baseline is reported
+  as "not measured"; a flag without its file, or an unknown flag, is a usage
+  error (exit 2).
+- CI runs it without a baseline: comparing with `main` needs a build of
+  `main`, so a pull request that adds client code measures it by hand, as this
+  one did.
+
+Measured on this pull request's final tree against `main` at 3a624f6:
+- Protected pages: +18.6 to +18.8 kB (191.9 → 210.5 kB on `/dashboard`).
+  `/employees/[id]`, which also carries the steps, grows 20.3 kB (197.2 →
+  217.5 kB).
+- `/login`, `/` and not-found: +0.1 to +0.3 kB, with no provider.
+- The features chunk (`domAnimation`, with the animation and exit code) is
+  18.8 kB gzip and loads after the page.
+
+**Reduced motion, and features that have not loaded:**
+- `MotionConfig reducedMotion="user"` turns transforms off with
+  `prefers-reduced-motion: reduce`, and the provider sets every transition to
+  0 s when `useReducedMotion()` is true, as the D40 tokens do in CSS.
+- The provider also gives `useMotionOn()`: true once the features have loaded
+  and reduce is off. Components use a start or exit state only when it is true
+  (otherwise `initial={false}` and no `exit`), so the element is painted in its
+  final state in its first frame. With reduce nothing moves or fades.
+- Before the features load, or if their chunk fails, an `m.*` element cannot
+  animate. Without this flag a start state such as `opacity: 0` would stay on
+  screen, and the toast or the next step would be invisible.
+- Durations and easing are the D40 tokens (`MOTION_SECONDS`, `EASE_STANDARD`).
+  A unit test keeps them equal to `globals.css`.
+
+**Where it is used:**
+- The toast (D43) fades in and slides 8 px down, then fades out, inside
+  `AnimatePresence`. Its `m.div` only animates; the pause on hover and focus
+  and Esc stay on the plain `div` inside it.
+- Each new step of the personal information form fades in and slides 8 px up.
+- The native `<dialog>` (D43) opens and closes without animation, so its focus
+  trap, Esc and focus return stay the browser's.
+
+**CSP:** unchanged. motion writes styles through the CSSOM, and the start state
+that server rendering puts in a `style` attribute is already allowed by
+`style-src 'self' 'unsafe-inline'` (D29).
+
+**Long forms in steps:** "Actualizar información personal" has 14 fields and
+now has three steps, Nombre, Contacto, and Domicilio y motivo
+(`PERSONAL_INFO_STEPS`).
+- Each step has an `h3`, "Paso N de 3: …", with `tabIndex={-1}`. It takes the
+  focus when the step changes, forward or with "Anterior", not when the dialog
+  opens.
+- Every step stays mounted (the others `hidden`), so what was typed is kept
+  and the last submit reads the whole form.
+- Going forward checks only the visible step, with the browser's validity
+  (required field left empty, malformed email). Errors show next to each field
+  (`aria-invalid`, `aria-describedby`), a count ("Revisa 1 campo de este
+  paso.") is announced in a `role="alert"` that is always in the page, and the
+  focus goes to the first invalid field.
+- The last step sends the whole object once. The Server Action keeps its order
+  (rate limit, zod over the whole object, actor, permission, RPC). When zod
+  fails on form fields it returns the errors by field (`fieldErrors`, only the
+  schema's messages, never internal ones, D27) with "Revisa los campos
+  marcados.", and the
+  form goes back to the first step with an error and focuses its title. An
+  error that no field shows (the employee's id) keeps the earlier single
+  message, and it is left out of `fieldErrors` when fields fail too.
+- Any other failure shows in a second `role="alert"`: the action's message,
+  or "No se pudieron guardar los cambios. Intenta de nuevo." when the action
+  throws (network failure, server crash). A request that never answers has no
+  timeout: the button stays loading. The saved message uses a
+  `role="status"`. All three regions are always in the page and only their
+  text changes, so screen readers announce it.
+- After a save nothing more is sent during the saved message's 1.2 s, and a
+  dialog closed in that time does not close a later one.
+- "Anterior" clears the error count, which only describes the step it was
+  shown on.
+- One primary button whose label changes ("Siguiente", then "Guardar cambios"),
+  so the one-primary rule of D43 holds.
+- The job change and compensation forms are short and keep one step.
+
+**Dashboard grid:** "Mi Información" and "Mis Objetivos (PMGM)" sit in a grid of
+`repeat(auto-fit, minmax(min(100%, 26rem), 1fr))`: side by side at 1280 px and
+in one column at 768 and 360 px. Columns are in `rem`, as D44 asks of grids.
+With two widgets the grid has one or two columns; more columns come with more
+widgets.
+
+**Known limits:**
+- No layout animations, `popLayout` or shared-element transitions: they need
+  more features. No motion in the login, which has no provider, or in server
+  components (the static test requires `"use client"`).
+- Every protected page downloads the features chunk after hydration, even
+  when nothing animates on it.
+- If the features chunk fails to load, nothing animates and LazyMotion's
+  promise, which has no catch, is reported in the browser console. The page
+  works without motion.
+- The dialog opens without the employee's current personal data
+  (`action-menu.tsx` passes `currentPersonal={null}`, as before this PR).
+- In the image build, `turbo prune` leaves out `apps/mobile` and its
+  `@types/react` 18, the copy that motion's types resolve at the root. There
+  motion's props are untyped, so a handler on an `m.*` element gets an
+  implicit `any` and the build fails; handlers go on plain elements. The local
+  and CI typecheck, with the full install, type them.
+- The buttons' loading indicator (D43) is CSS (`motion-safe:animate-spin`), not
+  motion/react.
+
+**Tests:**
+- Static: `motion-imports.test.ts` (`"use client"`, no `framer-motion` and no
+  `motion.*`, one provider, the tokens equal to `globals.css`), with a negative
+  control.
+- Unit: every field in exactly one step, `firstStepWithError`, `toFieldErrors`;
+  the action returns the errors by field without reaching the actor or the
+  RPC, keeps the single message for the employee's id, and saves a valid
+  object with one RPC; the initial JS of `check:prod-build` (layouts counted,
+  each file once, CSS and polyfills left out, growth and warning, CLI).
+- Static: the features load only through `import()` in `motion.tsx`, nothing
+  else imports them or `domAnimation`, and the protected layout wraps the
+  toasts in `MotionProvider`.
+- DOM (jsdom): the focus on a step change only, the alert and `aria-invalid`,
+  a server error back to its step, a failure no field explains and an action
+  that throws, nothing sent after a save, no `onDone` after unmount, the count
+  cleared by "Anterior", and the saved message before closing.
+- e2e on the production image: the steps with the keyboard at 360, 768 and
+  1280 px, with axe in light and dark on each step and on the server's error,
+  and captures (`captures/pasos/`); with and without
+  `prefers-reduced-motion`, frame sampling of the new step and of the toast
+  (with reduce no frame moves or fades) and the spinner of "Tomar Acción"
+  (`spin` without reduce, `none` with it); the dashboard grid at the three
+  widths.
+
+**Checks:** eslint and tsc in `apps/web`, `packages/email` and `apps/worker`
+at zero (`@scaliahr/mobile` keeps its one earlier warning), and tsc of
+`apps/web` also without the root `@types/react`, as in the image. Unit tests:
+web 1593, worker 46, email 34. `next build`, `check:prod-build`,
+`check:forbidden` and `check-turbo-version` at zero. The full e2e (73 tests,
+161 axe scans, no violation) against the production image on Supabase local,
+and no axe or Playwright in the image. The captures of the steps and of the
+dashboard at 360, 768 and 1280 px are in `docs/capturas/9c-pr6d/`.
+
 ## D52 — ECC Agents in the Loops: One Stage Each, Reviewers Only Report
 
 **Decision:** `CLAUDE.md` has a section, "Agentes ECC en los loops
 (.claude/agents)", that gives each of the 28 agents D50 kept a stage in the
 loop, or says it runs only when the user asks, or not at all. It also lists the
 ECC commands and skills that are not used. That section is the rule; this entry
-records why and its limits. D51 is reserved for `motion/react` (9c PR 6d).
+records why and its limits. D51 is `motion/react` (9c PR 6d).
 
 **Precedence:** `CLAUDE.md` prevails over every ECC agent, skill, command and
 rule (D50). A suggestion that contradicts it is dropped and written in the

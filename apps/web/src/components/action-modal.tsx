@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { Dialog } from "@/components/ui/dialog";
+import { PersonalInfoSteps } from "@/components/personal-info-steps";
 import {
   createJobChange,
   createCompensationChange,
-  createPersonalInfoChange,
 } from "@/app/(protected)/employees/[id]/actions";
 
 type SelectOption = { id: string; label: string };
@@ -129,36 +129,6 @@ function ActionForm({
     });
   }
 
-  async function handlePersonalSubmit(form: FormData) {
-    if (loadError) return;
-    setFeedback(null);
-    startTransition(async () => {
-      const result = await createPersonalInfoChange({
-        userId: employeeId,
-        startDate: form.get("startDate") as string,
-        firstName: (form.get("firstName") as string) || currentPersonal?.firstName || "",
-        lastName: (form.get("lastName") as string) || currentPersonal?.lastName || "",
-        middleName: (form.get("middleName") as string) || undefined,
-        phone: (form.get("phone") as string) || undefined,
-        personalEmail: (form.get("personalEmail") as string) || undefined,
-        addressLine1: (form.get("addressLine1") as string) || undefined,
-        city: (form.get("city") as string) || undefined,
-        state: (form.get("state") as string) || undefined,
-        postalCode: (form.get("postalCode") as string) || undefined,
-        country: (form.get("country") as string) || "MX",
-        emergencyContactName: (form.get("emergencyContactName") as string) || undefined,
-        emergencyContactPhone: (form.get("emergencyContactPhone") as string) || undefined,
-        eventReason: form.get("eventReason") as string,
-      });
-      if (result.success) {
-        setFeedback({ ok: true, msg: "Datos personales actualizados" });
-        setTimeout(onDone, 1200);
-      } else {
-        setFeedback({ ok: false, msg: result.error });
-      }
-    });
-  }
-
   return (
     <>
       {loadError && (
@@ -226,29 +196,8 @@ function ActionForm({
       )}
 
       {action === "personal" && (
-        <form action={handlePersonalSubmit} className="space-y-4">
-          <InputField name="startDate" label="Fecha Efectiva" type="date" defaultValue={today} required />
-          <div className="grid grid-cols-2 gap-3">
-            <InputField name="firstName" label="Nombre" defaultValue={currentPersonal?.firstName} required />
-            <InputField name="lastName" label="Apellido" defaultValue={currentPersonal?.lastName} required />
-          </div>
-          <InputField name="middleName" label="Segundo Nombre" defaultValue={currentPersonal?.middleName} />
-          <InputField name="phone" label="Teléfono" defaultValue={currentPersonal?.phone} />
-          <InputField name="personalEmail" label="Email Personal" type="email" defaultValue={currentPersonal?.personalEmail} />
-          <InputField name="addressLine1" label="Dirección" defaultValue={currentPersonal?.addressLine1} />
-          <div className="grid grid-cols-2 gap-3">
-            <InputField name="city" label="Ciudad" defaultValue={currentPersonal?.city} />
-            <InputField name="state" label="Estado" defaultValue={currentPersonal?.state} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <InputField name="postalCode" label="C.P." defaultValue={currentPersonal?.postalCode} />
-            <InputField name="country" label="País" defaultValue={currentPersonal?.country ?? "MX"} />
-          </div>
-          <InputField name="emergencyContactName" label="Contacto de Emergencia" defaultValue={currentPersonal?.emergencyContactName} />
-          <InputField name="emergencyContactPhone" label="Tel. Emergencia" defaultValue={currentPersonal?.emergencyContactPhone} />
-          <InputField name="eventReason" label="Motivo" required />
-          <SubmitButton pending={isPending} blocked={!!loadError} label="Guardar Cambios" />
-        </form>
+        // 9c PR 6d: a long form, in steps (D51).
+        <PersonalInfoSteps employeeId={employeeId} today={today} current={currentPersonal} blocked={!!loadError} onDone={onDone} />
       )}
     </>
   );

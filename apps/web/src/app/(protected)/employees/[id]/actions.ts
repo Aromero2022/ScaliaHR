@@ -9,6 +9,8 @@ import { safeError } from "@/lib/errors/safe-error";
 import { limitRead, limitWrite } from "@/lib/rate-limit";
 import { firstError } from "@/lib/errors/query-error";
 import { messages } from "@/lib/i18n/es-MX";
+import { isPersonalInfoField, type PersonalInfoFieldErrors } from "@/lib/personal-info-steps";
+import { toFieldErrors } from "@/lib/validations/field-errors";
 
 // D46: guid, not uuid. The seed's ids (e0000000-…, 5c000000-…, aa100000-…) are
 // not RFC 4122, and z.uuid() refused them, so nothing could be saved on demo data.
@@ -233,11 +235,14 @@ export async function createCompensationChange(
 
 // ─── Personal Information Change ───────────────────────────────────
 
+// 9c PR 6d: the form sends this object at the end of its steps, and this
+// schema validates all of it; its messages are shown next to each field.
+const personalForm = messages.personalInfoForm;
 const personalInfoSchema = z.object({
   userId: idSchema,
   startDate: dateSchema,
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
+  firstName: z.string().min(1, personalForm.required),
+  lastName: z.string().min(1, personalForm.required),
   middleName: z.string().optional(),
   dateOfBirth: dateSchema.optional(),
   gender: z.string().optional(),
@@ -246,7 +251,7 @@ const personalInfoSchema = z.object({
   nationalId: z.string().optional(),
   taxId: z.string().optional(),
   phone: z.string().optional(),
-  personalEmail: z.string().email().optional(),
+  personalEmail: z.string().email(personalForm.invalidEmail).optional(),
   addressLine1: z.string().optional(),
   addressLine2: z.string().optional(),
   city: z.string().optional(),
@@ -258,15 +263,25 @@ const personalInfoSchema = z.object({
   eventReason: z.string().min(1, "Motivo requerido"),
 });
 
+/** 9c PR 6d: a failed validation also says which fields failed, so the form can show them. */
+export type PersonalInfoResult =
+  | ActionResult<{ id: string }>
+  | { success: false; error: string; fieldErrors: PersonalInfoFieldErrors };
+
 export async function createPersonalInfoChange(
   input: z.input<typeof personalInfoSchema>
-): Promise<ActionResult<{ id: string }>> {
+): Promise<PersonalInfoResult> {
   const limited = await limitWrite();
   if (limited) return { success: false, error: limited };
 
   const parsed = personalInfoSchema.safeParse(input);
   if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0].message };
+    const byField = toFieldErrors(parsed.error.issues);
+    const fieldErrors: PersonalInfoFieldErrors = {};
+    for (const [field, message] of Object.entries(byField)) if (isPersonalInfoField(field)) fieldErrors[field] = message;
+    // An error the form cannot show next to a field (the employee's id, say) keeps the earlier answer.
+    if (Object.keys(fieldErrors).length === 0) return { success: false, error: parsed.error.issues[0].message };
+    return { success: false, error: personalForm.fixFields, fieldErrors };
   }
 
   const ctx = await getActorContext();
