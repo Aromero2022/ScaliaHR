@@ -5161,6 +5161,9 @@ Supabase starts.
   passes" gave r 1.3042 (ln r +0.266), "regresión ya mergeada", on an AMD
   EPYC 7763 runner. The same tree (f947d74) gave r 0.9792 in #85's own run
   (45893240080, attempt 1, Intel Xeon 6975P-C).
+  - f947d74 is the tree, not a commit: `git rev-parse` gives it for both
+    #85's head (a5e4d83) and the squash 65b4fa7, so the two runs measured
+    the same files.
   - As **Verdicts** ("Push to `main`") and D36 say, the red push opens this
     investigation, and the phase's next pull request (9c PR 6d), by the
     user's instruction, does not open until the user has reviewed it (D36
@@ -5213,7 +5216,7 @@ Supabase starts.
     container) are not slower on the PR side (p50 73–76 ms in all seven
     passes).
   - The timeline of attempt 1 shows where the difference is. The PR's own
-    warm-up, 90 s before `pr-1`, was as fast as `main-1`, and `main`'s
+    warm-up, 90 s before `pr-1`, was about as fast as `main-1`, and `main`'s
     warm-up, after `pr-2`, was the slowest pass of the job:
 
     | Start of the steady phase (UTC) | Pass | Tree | p50 | p95 |
@@ -5280,7 +5283,8 @@ Supabase starts.
       mean 0.030, 95 % interval with Student's t (df 2, 4.303): −0.152 to
       +0.102.
     - Per route (ABBA, the eight routes): ln of B over A from −0.130 to
-      +0.092, −0.061 for all pages; no route stands out. Sign-ins: 71 in
+      +0.092, −0.061 for all pages (the samples of the four passes of each
+      tree pooled); no route stands out. Sign-ins: 71 in
       the ramp and 4 in the steady phase in every pass, no retries, no
       steady page other than 200.
   - Web and worker at 1 CPU:
@@ -5327,7 +5331,8 @@ Supabase starts.
       and 4 each follow a switch (`--force-recreate`) and a warm-up, and
       position 3 does not, yet 2 is close to 1 and only 4 stands out.
     - The database that is never restarted does not explain it either.
-      Over the 56 passes of the four runs, the `public` tables the seed
+      Over the 56 passes of the four runs (32 measured, 24 warm-ups, each
+      with its own seed), the `public` tables the seed
       rewrites were autovacuumed 55 times each, about once a pass, and had
       no dead rows at the end. `auth.sessions`, `auth.refresh_tokens` and
       `auth.mfa_amr_claims` stay steady at about 75 live rows, with at
@@ -5347,7 +5352,8 @@ Supabase starts.
       Nothing shows they share a cause.
 - **Result:**
   - **No CPU limit, the criterion:** the mean ln r of ABBA+BAAB is −0.025,
-    at most +0.05, and +0.266 (attempt 1) is outside its 95 % interval
+    at most +0.05 (the user's threshold), and +0.266 (attempt 1) is
+    outside its 95 % interval
     (−0.152 to +0.102). The local measurement rules out a regression the
     size of attempt 1.
   - **1 CPU, support only:** the smallest effect it can tell from 0 is
