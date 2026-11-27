@@ -2176,6 +2176,11 @@ machine):**
         outliers are excluded: removing them would lower the band by hand.
       - An investigation closes when its cause is written in D36, or when
         the user accepts the new level with a decision noted in D36.
+      - Since D56, a push to `main` with "regresión ya mergeada" opens an
+        investigation under this rule too (D56, **Verdicts**). The first
+        one, the push of 65b4fa7 (#85, 2026-11-26), is open: D56,
+        **Investigation of 65b4fa7**. Its cause and its closing are written
+        here once the user has decided.
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.
