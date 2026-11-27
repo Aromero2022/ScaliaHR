@@ -2181,6 +2181,14 @@ machine):**
         one, the push of 65b4fa7 (#85, 2026-11-26), is open: D56,
         **Investigation of 65b4fa7**. Its cause and its closing are written
         here once the user has decided.
+        - Closed by the user's decision on 2026-11-26: runner noise, no
+          regression of the code. The limit of 1.20 does not change.
+        - supabase-js: unchanged on the per-page path.
+        - Attempt 1: a slow window of the runner (AMD EPYC 7763, 21:24–21:30)
+          that follows the clock, not the code.
+        - Attempt 2: within the limit (r 1.1007).
+        - Local A/B with no CPU limit: ln r −0.025 (95 % interval −0.152 to
+          +0.102), which rules out +0.266.
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.
@@ -5350,6 +5358,9 @@ Supabase starts.
       ln(`main-2`/`main-1`) has no sign of its own (−0.136, −0.041,
       +0.076 and +0.183 in the four rows of the watch rule's table below).
       Nothing shows they share a cause.
+    - In CI, `main-2` takes the 4th position, so if the effect existed there
+      it would favor the PR: the opposite of the residual bias that was
+      accepted (+0.072, stricter with the PR).
 - **Result:**
   - **No CPU limit, the criterion:** the mean ln r of ABBA+BAAB is −0.025,
     at most +0.05 (the threshold the user set for this investigation on
@@ -5390,6 +5401,14 @@ Supabase starts.
 
     Attempt 2 of 65b4fa7 is listed but does not add a `main` run: the
     transition counts one run per commit.
+- **Closed by the user on 2026-11-26:** runner noise, no regression of the
+  code. supabase-js is unchanged on the per-page path; attempt 1 had a slow
+  window of the runner (AMD EPYC 7763, 21:24–21:30) that follows the clock,
+  not the code; attempt 2 is within the limit (r 1.1007); and the local A/B
+  with no CPU limit gives ln r −0.025 (95 % interval −0.152 to +0.102),
+  which rules out +0.266. The limit of 1.20 does not change. The position
+  effect stays an open observation, with no new runs. The closing is also
+  written in D36.
 
 ---
 
