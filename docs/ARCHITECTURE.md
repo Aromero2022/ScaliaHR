@@ -5161,9 +5161,9 @@ Supabase starts.
   passes" gave r 1.3042 (ln r +0.266), "regresión ya mergeada", on an AMD
   EPYC 7763 runner. The same tree (f947d74) gave r 0.9792 in #85's own run
   (45893240080, attempt 1, Intel Xeon 6975P-C).
-  - f947d74 is the tree, not a commit: `git rev-parse` gives it for both
-    #85's head (a5e4d83) and the squash 65b4fa7, so the two runs measured
-    the same files.
+  - f947d74 is the tree, not a commit: `git rev-parse <commit>^{tree}`
+    gives it for both #85's head (a5e4d83) and the squash 65b4fa7, so the
+    two runs measured the same files.
   - As **Verdicts** ("Push to `main`") and D36 say, the red push opens this
     investigation, and the phase's next pull request (9c PR 6d), by the
     user's instruction, does not open until the user has reviewed it (D36
@@ -5352,7 +5352,8 @@ Supabase starts.
       Nothing shows they share a cause.
 - **Result:**
   - **No CPU limit, the criterion:** the mean ln r of ABBA+BAAB is −0.025,
-    at most +0.05 (the user's threshold), and +0.266 (attempt 1) is
+    at most +0.05 (the threshold the user set for this investigation on
+    2026-11-27, with the 95 % interval), and +0.266 (attempt 1) is
     outside its 95 % interval
     (−0.152 to +0.102). The local measurement rules out a regression the
     size of attempt 1.
