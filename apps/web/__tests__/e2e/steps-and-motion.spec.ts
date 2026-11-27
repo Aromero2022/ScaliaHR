@@ -32,7 +32,24 @@ async function openPersonal(page: Page, whileBusy?: (trigger: Locator) => Promis
 
 const stepTitle = (dialog: Locator, n: number, title: string) => dialog.getByRole("heading", { level: 3, name: STEP(n, title) });
 
-async function axeAndCapture(page: Page, scan: string, capture: string) {
+/**
+ * Waits for the visible step to finish its entrance (opacity 1, no transform).
+ * Mid-fade, axe measures the labels' colors through the step's opacity: CI
+ * once saw #475569 (7.58:1) as #707a8a (4.33:1), that color at opacity 0.78.
+ */
+async function stepSettled(dialog: Locator) {
+  await expect
+    .poll(() =>
+      dialog.locator("[data-step]:not([hidden])").evaluate((el) => {
+        const style = getComputedStyle(el);
+        return style.opacity === "1" && (style.transform === "none" || style.transform === "matrix(1, 0, 0, 1, 0, 0)");
+      }),
+    )
+    .toBe(true);
+}
+
+async function axeAndCapture(page: Page, dialog: Locator, scan: string, capture: string) {
+  await stepSettled(dialog);
   for (const theme of THEMES) {
     await setTheme(page, theme);
     await expectNoWcagViolations(page, `${scan} (${theme})`);
@@ -56,7 +73,7 @@ test.describe("formulario por pasos (9c PR 6d)", () => {
       // Step 1 opens with the focus inside the dialog, not moved to the title.
       await expect(stepTitle(dialog, 1, "Nombre")).toBeVisible();
       await expect.poll(() => focusInside(dialog)).toBe(true);
-      await axeAndCapture(page, `pasos 1 ${width}px`, `paso-1-${width}`);
+      await axeAndCapture(page, dialog, `pasos 1 ${width}px`, `paso-1-${width}`);
 
       // The dialog opens with no current data (action-menu passes none). With the
       // last name typed and the name left empty, the step does not go on, and
@@ -74,14 +91,14 @@ test.describe("formulario por pasos (9c PR 6d)", () => {
 
       // Step 2 takes the focus on its title.
       await expect(stepTitle(dialog, 2, "Contacto")).toBeFocused();
-      await axeAndCapture(page, `pasos 2 ${width}px`, `paso-2-${width}`);
+      await axeAndCapture(page, dialog, `pasos 2 ${width}px`, `paso-2-${width}`);
       // "a@b" passes the browser's check but not the server's schema.
       const email = field(dialog, "Correo personal");
       await email.fill("a@b");
       await email.press("Enter");
 
       await expect(stepTitle(dialog, 3, "Domicilio y motivo")).toBeFocused();
-      await axeAndCapture(page, `pasos 3 ${width}px`, `paso-3-${width}`);
+      await axeAndCapture(page, dialog, `pasos 3 ${width}px`, `paso-3-${width}`);
       await field(dialog, "Motivo").fill("Prueba e2e de pasos");
       await field(dialog, "Motivo").press("Enter");
 
@@ -90,6 +107,7 @@ test.describe("formulario por pasos (9c PR 6d)", () => {
       await expect(dialog.getByRole("alert").first()).toHaveText("Revisa los campos marcados.");
       await expect(email).toHaveAttribute("aria-invalid", "true");
       await expect(dialog.getByText("Escribe un correo válido, como nombre@dominio.com")).toBeVisible();
+      await stepSettled(dialog);
       await expectNoWcagViolations(page, `pasos error del servidor ${width}px`);
 
       // "Anterior" goes back with the focus on the title; Esc closes and gives the focus back to the button.
