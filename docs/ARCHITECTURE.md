@@ -2470,6 +2470,90 @@ machine):**
             D42's 32.0 ms and 1.32 at D43's 38.1 ms, against the 113–125 % that the web
             process reached in the slow passes. That fits D42 being at the
             edge (its 523 ms pass) and D43 over it.
+          - **Confirmation with the full run** (`scripts/perf/full-ab.sh`,
+            ABBA and then BAAB, the method of the A/B above): A is 94e2020
+            as is, B is 94e2020 with each row rendered once by `Table`
+            (`exp/d43-table-once`, bc1fe11). Web CPU and memory are taken
+            over k6's hold (2 to 6 min of k6's clock, after the seed), by
+            `scripts/perf/pass-stats.mjs`.
+
+            | Pass | Tree | p95 steady | Requests/s | Failed | Checks | k6 exit | Web CPU | Web memory |
+            |---|---|---|---|---|---|---|---|---|
+            | 1 | A | 8.71 s | 31.18 | 0 % | 100 % | 99 | 119 % | 3,589 |
+            | 2 | B | 468 ms | 34.78 | 0 % | 100 % | 0 | 100 % | 1,511 |
+            | 3 | B | 1.32 s | 34.56 | 0 % | 100 % | 99 | 119 % | 1,223 |
+            | 4 | A | 6.64 s | 32.97 | 0 % | 100 % | 99 | 117 % | 3,594 |
+            | 5 | B | 346 ms | 34.80 | 0 % | 100 % | 0 | 95 % | 1,466 |
+            | 6 | A | 1.61 s | 34.64 | 0 % | 100 % | 99 | 110 % | 2,192 |
+            | 7 | A | 1.66 s | 34.55 | 0 % | 100 % | 99 | 110 % | 3,680 |
+            | 8 | B | 218 ms | 34.88 | 0 % | 100 % | 0 | 88 % | 861 |
+
+            - ln(B/A) of each adjacent pair: −2.924 (ABBA, A first), −1.613
+              (ABBA, B first), −1.539 (BAAB, B first), −2.034 (BAAB, A
+              first). Mean **−2.027** (B about 0.13 times A); SD pooled
+              within the two orders of a pair, A first (−2.924, −2.034) and
+              B first (−1.613, −1.539): 0.447 (2 degrees of freedom), SE
+              0.223; 95 % interval with Student's t (df 2, 4.303): **−2.988
+              to −1.067** (B 0.05 to 0.34 times A). The interval does not
+              reach 0.
+            - Every page answered 200 and none showed another tenant's
+              employees (isolation 100 % in all 8). k6 exited 0 on three B
+              passes (2, 5 and 8) and 99, the p95 threshold, on the other
+              five. B served the whole load (34.6 to 34.9 requests/s) in
+              its four passes; A, 31.2 to 34.6.
+            - Both trees came out faster in the BAAB half (A 1.61 and
+              1.66 s against 8.71 and 6.64 s; B 346 and 218 ms against 468
+              ms and 1.32 s): a drift of the machine, which the ABBA then
+              BAAB order cancels in the mean.
+            - B's web memory stays lower (0.9 to 1.5 GiB against 2.2 to
+              3.7), as in the fast passes of the A/B above.
+            - This machine's container restarted at 10:53 UTC, after pass 6
+              was written. Pass 7 ran again from its start, after a switch
+              and a warm-up (the resume of `full-ab.sh`). The images were
+              the same: only a label with the tree's commit was added (same
+              layers), so the web image id changed.
+            - All 8 passes ran with the earlier CPU window of `full-ab.sh`,
+              counted from before the seed (about 20 to 30 s early). Their
+              web CPU and memory were recomputed over k6's hold from the
+              saved samples; the k6 fields do not change. The A/B above
+              used that earlier window too (2:10 to 6:00 of the pass, seed
+              included); its p95 is k6's own and does not change.
+          - **Cause (2026-11-28): isolated.** D43's per-page cost is mostly
+            the double row render of `Table` on /employees, and it is what
+            the full run responds to.
+            - Per route at 15 requests/s: 73 % of D43's increase on
+              /employees and 62 % of the mix's. `(protected)/loading.tsx`
+              is the second part (36 % of the mix's), measured per route
+              only. The rest of the page rewrite adds about 0.4 ms to the
+              mix; `ToastProvider` and the es-MX dictionary, nothing
+              measurable.
+            - On the full run, rendering each row once takes the p95 from
+              1.6–8.7 s to 218 ms–1.32 s (ln −2.03, interval −2.99 to
+              −1.07). Three of the four B passes are under the limit of
+              500 ms and one is above it: the web process is still close
+              to saturation, with D40 to D42's 4 to 7 % and `loading.tsx`
+              on top of the 9b close.
+            - With the cause written here, this investigation closes under
+              the rule above. Phase 9c does not: its closing criterion (the
+              full run under 500 ms) is still pending, and closing it is
+              the user's decision.
+          - **Proposed pull request, for the user's decision** (not in
+            this one; in Phase 9c, before it closes): "D43: `Table` renders
+            each row once".
+            1. `Table` renders each row once for both layouts, instead of a
+               table row and a card per row. Two ways, for the user to
+               choose: one markup that is a row from `md` up and a card
+               below it, by CSS, with explicit table roles so assistive
+               technology still reads a table; or the table alone at every
+               width, inside its scroll container, without the cards. Either
+               keeps the 9c rules: axe in the e2e (D44) and the captures at
+               360, 768 and 1280 px, approved again.
+            2. Measured like here: per-route CPU (`scripts/perf/route-cpu.sh`)
+               against D42 and 94e2020, then the full run as an A/B against
+               main (`scripts/perf/full-ab.sh`, ABBA then BAAB).
+            3. If a pass of the full run is still above 500 ms, the next
+               part is `(protected)/loading.tsx`, measured the same way, in
+               that pull request or the next.
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.
