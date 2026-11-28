@@ -1,1 +1,3 @@
 label	tag	rev	route	rate	requests	seconds	cpu_us	us_per_request	us_per_request_idle_corrected	idle_us_per_s	p50_ms	p95_ms	status_200_pct	dropped	mem_current_mib	mem_peak_mib	machine
+d43-variants	94e2020-r2	94e2020	/dashboard	15	900	63.3	30223360	33582	33329	3592	29.9	45.8	100.00	0	138	147	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	94e2020-r2	94e2020	/employees	15	901	63.3	43961711	48792	48540	3592	49.3	66.8	100.00	0	244	250	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
