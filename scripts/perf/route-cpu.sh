@@ -22,6 +22,7 @@ TSV="$PERF_REPO/scripts/perf/results/$LABEL.tsv"
 HEADER="label	tag	rev	route	rate	requests	seconds	cpu_us	us_per_request	us_per_request_idle_corrected	idle_us_per_s	p50_ms	p95_ms	status_200_pct	dropped	mem_current_mib	mem_peak_mib	machine"
 [ -f "$TSV" ] || printf '%s\n' "$HEADER" > "$TSV"
 K6_IMAGE="$(sed -n 's/^K6_IMAGE="\([^"]*\)".*/\1/p' "$PERF_REPO/scripts/load-test.sh")"
+[ -n "$K6_IMAGE" ] || perf_die "no K6_IMAGE in scripts/load-test.sh"
 OUTDIR="$PERF_REPO/load/.out"; mkdir -p "$OUTDIR/perf"
 
 k6run() { # k6run <route> <duration> <summary file>; fails when k6 fails or writes no summary
@@ -54,7 +55,8 @@ for spec in "$@"; do
     read -r c0 _ _ <<<"$(perf_cgroup)"; t0=$(date +%s.%N)
     k6run "$route" "$DURATION" "$name.json"
     read -r c1 mem peak <<<"$(perf_cgroup)"; t1=$(date +%s.%N)
-    perf_need_num "$c0" "$c1"; (( c1 > c0 )) || perf_die "the web container's CPU counter went back (restarted?)"
+    perf_need_num "$c0" "$c1" "$mem"; [ "$peak" = NA ] || perf_need_num "$peak"
+    (( c1 > c0 )) || perf_die "the web container's CPU counter went back (restarted?)"
     line="$(node -e '
       const [file, c0, c1, t0, t1, idle, mem, peak] = process.argv.slice(1);
       const m = require(file).metrics;

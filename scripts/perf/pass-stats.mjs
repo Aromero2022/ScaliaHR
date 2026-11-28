@@ -5,8 +5,11 @@
 // The hold is k6's own: from RAMP to RAMP + HOLD on the test's clock, as load/pages.js
 // tags it. That clock starts at the summary's time minus k6's run time (its last
 // "running (…)" line), so the seed before k6 is left out. Fails instead of printing a
-// number it cannot back: no steady-state metric, no run time, fewer than 10 cgroup
-// samples in the hold, or a CPU counter that goes back (the container restarted).
+// number it cannot back: no steady-state metric, no run time, 1 % or more of the pages
+// failed, checks at 99 % or less, another tenant's employees on a page, a cgroup line
+// that is not three numbers, samples that do not cover the hold (gaps over 30 s or
+// ends more than 20 s inside it), or a CPU counter that goes back (the container
+// restarted).
 //   node scripts/perf/pass-stats.mjs <summary.json> <k6 output.txt> <cgroup samples.txt>
 import { readFileSync, statSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -22,14 +25,22 @@ export function passStats(summaryFile, k6File, samplesFile, ramp = process.env.R
   const p = m["http_req_duration{kind:page,phase:steady}"];
   if (!p) throw new Error(`${summaryFile}: no steady-state page metric`);
   const f = m["http_req_failed{kind:page}"], iso = m["checks{check:no other tenant's employees}"];
+  if (!f || f.value >= 0.01) throw new Error(`${summaryFile}: ${f ? (100 * f.value).toFixed(2) : "no"} % of the pages failed`);
+  if (!(m.checks?.value > 0.99)) throw new Error(`${summaryFile}: checks at ${(100 * (m.checks?.value ?? 0)).toFixed(2)} %`);
+  if (!iso || iso.value !== 1) throw new Error(`${summaryFile}: the isolation check is ${iso ? (100 * iso.value).toFixed(3) + " %" : "missing"}`);
   const runs = [...readFileSync(k6File, "utf8").matchAll(/running \((?:(\d+)h)?(\d+)m([\d.]+)s\)/g)];
   if (!runs.length) throw new Error(`${k6File}: no "running (…)" line`);
   const [, h, min, sec] = runs.at(-1);
   const start = statSync(summaryFile).mtimeMs / 1000 - (Number(h ?? 0) * 3600 + Number(min) * 60 + Number(sec));
   const from = start + seconds(ramp), to = from + seconds(hold);
-  const rows = readFileSync(samplesFile, "utf8").trim().split("\n").map((l) => l.split(" ").slice(0, 3).map(Number));
-  const inHold = rows.filter((r) => r.every(Number.isFinite) && r[0] >= from && r[0] <= to);
+  const lines = readFileSync(samplesFile, "utf8").trim().split("\n");
+  const bad = lines.find((l) => !/^\d+ \d+ \d+( |$)/.test(l));
+  if (bad !== undefined) throw new Error(`${samplesFile}: a cgroup line is not three numbers: '${bad}'`);
+  const rows = lines.map((l) => l.split(" ").slice(0, 3).map(Number));
+  const inHold = rows.filter((r) => r[0] >= from && r[0] <= to);
   if (inHold.length < 10) throw new Error(`${samplesFile}: only ${inHold.length} cgroup samples in the hold`);
+  const gap = Math.max(...inHold.slice(1).map((r, i) => r[0] - inHold[i][0]));
+  if (inHold[0][0] > from + 20 || inHold.at(-1)[0] < to - 20 || gap > 30) throw new Error(`${samplesFile}: the samples do not cover the hold`);
   for (let i = 1; i < inHold.length; i++) if (inHold[i][1] < inHold[i - 1][1]) throw new Error(`${samplesFile}: the CPU counter went back`);
   const a = inHold[0], b = inHold.at(-1);
   const cpu = (100 * (b[1] - a[1])) / ((b[0] - a[0]) * 1e6);

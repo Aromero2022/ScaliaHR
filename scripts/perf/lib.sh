@@ -47,6 +47,7 @@ perf_tree() {
   local rev=$1 short dir
   short="$(git -C "$PERF_REPO" rev-parse --short "$rev")"; dir="$PERF_WORK/trees/$short"
   [ -d "$dir" ] || git -C "$PERF_REPO" worktree add -f --detach "$dir" "$rev" >/dev/null 2>&1
+  [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" = "$(git -C "$PERF_REPO" rev-parse "$rev^{commit}")" ] || perf_die "the worktree $dir is not at $rev"
   printf '%s' "$dir"
 }
 

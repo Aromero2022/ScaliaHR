@@ -32,7 +32,9 @@ pass() { # pass <name> <arm> <tag> <measured 0|1>
   SAMPLER=$!
   (cd "$PERF_REPO" && LOAD_SUMMARY="summary-$LABEL-$name.json" bash scripts/load-test.sh > "$OUTDIR/k6-$name.txt" 2>&1) || code=$?
   kill "$SAMPLER" 2>/dev/null || true; wait "$SAMPLER" 2>/dev/null || true; SAMPLER=""
-  # 0 passes, 99 is the p95 threshold of load/pages.js; anything else is a failure.
+  # 0: every threshold of load/pages.js held; 99: one was crossed (the p95 one is
+  # expected near saturation; pass-stats.mjs refuses failed pages, failed checks and
+  # isolation). Anything else is a failure.
   [ "$code" = 0 ] || [ "$code" = 99 ] || perf_die "pass $name: load-test.sh exited $code (see $OUTDIR/k6-$name.txt)"
   mv "$PERF_REPO/load/.out/summary-$LABEL-$name.json" "$summary" || perf_die "pass $name wrote no summary"
   local line; line="$(node "$PERF_REPO/scripts/perf/pass-stats.mjs" "$summary" "$OUTDIR/k6-$name.txt" "$samples")" || perf_die "pass $name: see the error above"
@@ -50,7 +52,8 @@ done
 # Resume: the measured passes already in the TSV for this label are skipped, so
 # a series cut short (a restart of the machine) goes on from the next pass. Each
 # line kept must be the pass the sequence expects there, with the same tag.
-mapfile -t KEPT < <(awk -F'\t' -v l="$LABEL" 'NR > 1 && $1 == l {print $2 "\t" $4}' "$TSV")
+mapfile -t KEPT < <(awk -F'\t' -v l="$LABEL" 'NR > 1 && $1 == l {print (NF == 15 ? $2 "\t" $4 : "incomplete line")}' "$TSV")
+(( ${#KEPT[@]} <= ${#SEQ} )) || perf_die "$TSV has ${#KEPT[@]} passes for $LABEL, more than the sequence's ${#SEQ}"
 for (( i=0; i<${#KEPT[@]}; i++ )); do
   arm=${SEQ:$i:1}
   [ "${KEPT[$i]}" = "p$((i+1))-$arm	${TAG[$arm]}" ] || perf_die "line $((i+1)) of $TSV is '${KEPT[$i]}', not p$((i+1))-$arm of ${TAG[$arm]}: use another label"

@@ -51,7 +51,11 @@ node scripts/perf/analyze-ab.mjs scripts/perf/results/<label>.tsv
   section 9 (1,150 users, 20–40 s between pages). Each switch of tree has one
   unmeasured warm-up.
 - The web container's CPU and memory are sampled every 10 s and taken over k6's
-  hold (2 to 6 min of k6's clock, after the seed), by `pass-stats.mjs`.
+  hold (2 to 6 min of k6's clock, after the seed), by `pass-stats.mjs`. The p95 is
+  k6's steady phase (from 2 min to the end, ramp-down included) and requests/s is
+  over the whole run.
+- Memory is the cgroup's usage, page cache included: read it as a level, not as the
+  process's heap.
 - A pass that fails stops the run and writes no line.
 - The analysis pairs adjacent passes, takes d = ln(p95 B) − ln(p95 A) per
   pair, and gives the mean with a Student t interval. With ABBA then BAAB

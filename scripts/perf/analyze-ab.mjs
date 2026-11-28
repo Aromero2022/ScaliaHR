@@ -10,16 +10,20 @@ import { fileURLToPath } from "node:url";
 const T975 = { 1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228 };
 
 // Refuses what would give a wrong interval silently: pass numbers that are not
-// exactly 1..n, a p95 that is not a positive number, a pass that showed another
-// tenant's employees, more pairs in one order than in the other (the mean would
-// keep the position effect), or no degrees of freedom left.
+// exactly 1..n, a p95 that is not a positive number, a pass with failed pages,
+// checks under 100 %, isolation not at 100 % or a k6 exit other than 0 and 99 (99:
+// a threshold of load/pages.js was crossed), more pairs in one order than in the
+// other (the mean would keep the position effect), or no degrees of freedom left.
 export function analyze(rows) {
   const passes = rows.filter((r) => /^p\d+-/.test(r.pass)).sort((a, b) => parseInt(a.pass.slice(1)) - parseInt(b.pass.slice(1)));
   if (passes.length < 4 || passes.length % 2) throw new Error(`need an even number of measured passes, got ${passes.length}`);
   passes.forEach((r, i) => {
     if (parseInt(r.pass.slice(1)) !== i + 1) throw new Error(`pass numbers must be 1..${passes.length}; found ${r.pass} at position ${i + 1}`);
     if (!(Number(r.p95_ms) > 0)) throw new Error(`${r.pass}: p95 is not a positive number (${r.p95_ms})`);
-    if (r.isolation_pct !== undefined && r.isolation_pct !== "NA" && Number(r.isolation_pct) !== 100) throw new Error(`${r.pass}: isolation ${r.isolation_pct} %`);
+    if (Number(r.isolation_pct) !== 100) throw new Error(`${r.pass}: isolation ${r.isolation_pct} %`);
+    if (r.failed_pct !== undefined && Number(r.failed_pct) !== 0) throw new Error(`${r.pass}: ${r.failed_pct} % of the pages failed`);
+    if (r.checks_pct !== undefined && Number(r.checks_pct) !== 100) throw new Error(`${r.pass}: checks at ${r.checks_pct} %`);
+    if (r.k6_exit !== undefined && !["0", "99"].includes(r.k6_exit)) throw new Error(`${r.pass}: k6 exited ${r.k6_exit}`);
   });
   const pairs = [];
   for (let i = 0; i < passes.length; i += 2) {
