@@ -2249,8 +2249,10 @@ machine):**
             - ln(B/A) of each adjacent pair: +3.798 (ABBA, A first), +2.911
               (ABBA, B first), +3.981 (BAAB, B first), +3.385 (BAAB, A
               first). Mean **+3.519** (B about 34 times A); SD pooled within
-              the two orders 0.574 (2 degrees of freedom), SE 0.287; 95 %
-              interval with Student's t (df 2, 4.303): **+2.284 to +4.753**.
+              the two orders of a pair, A first (+3.798, +3.385) and B first
+              (+2.911, +3.981), so a position effect stays out of the noise:
+              0.574 (2 degrees of freedom), SE 0.287; 95 % interval with
+              Student's t (df 2, 4.303): **+2.284 to +4.753**.
             - A stays under 500 ms on this machine in all four passes, so
               the machine alone does not explain the failure.
           - **Bisection, with the same full run** (one warm-up and two
