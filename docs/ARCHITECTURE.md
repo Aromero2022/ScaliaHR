@@ -2371,6 +2371,11 @@ machine):**
             2. Or a decision on the full run's setup (one web process,
                1,150 users at 20–40 s), which this investigation does not
                change.
+        - **The user's decision (2026-11-27): option 1.** D43's per-page
+          cost is isolated in a pull request of its own, in Phase 9c. The
+          full run's setup (one web process, 1,150 users at 20–40 s between
+          pages) does not change. Phase 9c keeps its closing criterion
+          pending.
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.
