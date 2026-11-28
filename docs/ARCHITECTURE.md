@@ -2621,6 +2621,13 @@ machine):**
             3. If a pass of the full run is still above 500 ms, the next
                part is `(protected)/loading.tsx`, measured the same way, in
                that pull request or the next.
+          - **The user's decisions (2026-11-28):**
+            - The fix takes the first way: one markup that is a table row
+              from `md` up and a card below it, by CSS, with explicit table
+              roles (`table`, `rowgroup`, `row`, `columnheader`, `cell`) so
+              that the change of `display` does not take the semantics away.
+            - This investigation stays open until the fix's full run passes
+              (the four passes of the fix with a steady p95 under 500 ms).
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.

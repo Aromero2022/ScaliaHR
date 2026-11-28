@@ -1,9 +1,14 @@
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-// D43: a table from 768 px; under 768 px the same rows as cards, one <dl> per
-// row (each label above its value), so a 320 px page never scrolls sideways (WCAG 1.4.10). The variant that
-// does not fit is display:none and out of the accessibility tree. Columns
-// marked `action` (a link per row) go at the foot of each card.
+// D43: each row is rendered once, in one markup for both layouts (D36, the
+// user's decision of 2026-11-28). From 768 px it lays out as a table
+// (display: table-*); under 768 px each row is a card with each label above
+// its value, so a 320 px page never scrolls sideways (WCAG 1.4.10). The roles
+// are explicit (table, rowgroup, row, columnheader, cell) because a change of
+// display can take the native table semantics away. The header row stays in
+// the accessibility tree at every width (visually hidden under 768 px); the
+// label shown above each value in a card is aria-hidden, as the column header
+// already names the cell. Columns marked `action` (a link per row) go last.
 
 export type Column<Row> = {
   key: string;
@@ -26,63 +31,44 @@ export function Table<Row>({
   rowKey: (row: Row) => string;
   empty: ReactNode;
 }) {
-  const fields = columns.filter((c) => !c.action);
-  const actions = columns.filter((c) => c.action);
-
   if (rows.length === 0) {
     return <p className="px-6 py-12 text-center text-sm text-fg-subtle">{empty}</p>;
   }
 
   return (
-    <>
-      {/* relative: visually hidden text (absolute) stays inside the scroller instead of widening the page. */}
-      <div className="relative hidden overflow-x-auto md:block">
-        <table className="w-full text-left text-sm">
-          <caption className="sr-only">{caption}</caption>
-          <thead>
-            <tr className="border-b border-line text-xs font-medium uppercase tracking-wider text-fg-subtle">
-              {columns.map((c) => (
-                <th key={c.key} scope="col" className="px-6 py-3">
-                  {c.action ? <span className="sr-only">{c.header}</span> : c.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {rows.map((row) => (
-              <tr key={rowKey(row)} className="transition hover:bg-surface-hover">
-                {columns.map((c) => (
-                  <td key={c.key} className={c.className ?? "px-6 py-4 text-fg-muted"}>
-                    {c.cell(row)}
-                  </td>
-                ))}
-              </tr>
+    // relative: visually hidden text (absolute) stays inside the scroller instead of widening the page.
+    <div className="relative md:overflow-x-auto">
+      <div role="table" aria-label={caption} className="w-full text-left text-sm md:table md:border-collapse">
+        <div role="rowgroup" className="sr-only md:not-sr-only md:table-header-group">
+          <div role="row" className="text-xs font-medium uppercase tracking-wider text-fg-subtle md:table-row md:border-b md:border-line">
+            {columns.map((c) => (
+              <div key={c.key} role="columnheader" className="md:table-cell md:px-6 md:py-3 md:align-middle">
+                {c.action ? <span className="sr-only">{c.header}</span> : c.header}
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
-      <ul className="divide-y divide-line md:hidden" aria-label={caption}>
-        {rows.map((row) => (
-          <li key={rowKey(row)} className="relative px-4 py-4">
-            {/* Each label above its value, full width: at 320 px a side column of labels leaves no room for the values. */}
-            <dl className="space-y-3 text-sm">
-              {fields.map((c) => (
-                <div key={c.key}>
-                  <dt className="text-xs font-medium uppercase tracking-wider text-fg-subtle">{c.header}</dt>
-                  <dd className="mt-1 min-w-0 break-words text-fg-muted">{c.cell(row)}</dd>
+          </div>
+        </div>
+        <div role="rowgroup" className="divide-y divide-line md:table-row-group">
+          {rows.map((row) => (
+            <div key={rowKey(row)} role="row" className="relative space-y-3 px-4 py-4 md:table-row md:p-0 md:transition md:hover:bg-surface-hover">
+              {columns.map((c) => (
+                <div
+                  key={c.key}
+                  role="cell"
+                  className={`block min-w-0 break-words md:table-cell md:align-middle ${c.className ?? "px-6 py-4 text-fg-muted"} max-md:p-0 max-md:text-left`}
+                >
+                  {!c.action && (
+                    <span aria-hidden="true" className="mb-1 block text-xs font-medium uppercase tracking-wider text-fg-subtle md:hidden">
+                      {c.header}
+                    </span>
+                  )}
+                  {c.cell(row)}
                 </div>
               ))}
-            </dl>
-            {actions.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-3">
-                {actions.map((c) => (
-                  <Fragment key={c.key}>{c.cell(row)}</Fragment>
-                ))}
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-    </>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
