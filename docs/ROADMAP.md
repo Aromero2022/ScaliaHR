@@ -36,7 +36,7 @@
 | 9c | Sistema de diseño y responsividad (criterio de cierre pendiente: corrida completa de k6, D36) | Design tokens, layout y navegación responsive, búsqueda global ⌘K, reglas UX, accesibilidad WCAG 2.2 AA y biblioteca base de componentes, con axe y capturas en 3 breakpoints en CI. Todos los módulos siguientes se construyen sobre ella. |
 | 10 | Workflows y Notificaciones | Motor de workflows configurable, notificaciones push/email/in-app, eventos de ciclo de vida del empleado; push por adaptador (local/prueba). Consume el correo y worker de la Fase 9a. |
 | 11 | Admin Center base | CRUD de RBP, DPCS, Picklist Center, Import Employee Data, configuración de empresa con Theme Manager por tenant, permiso "Ver dato sensible", reporte de auditoría, política de login y reseteo de contraseña por RH. |
-| 12 | Consola de plataforma y suscripciones | Catálogo de planes, alta de clientes, facturación por adaptador (local/prueba), consola del proveedor, acceso de soporte, tenants sandbox, canales de release y conversión demo → cliente. |
+| 12 | Consola de plataforma y suscripciones | Catálogo de planes, alta de clientes, facturación por adaptador (local/prueba), consola del proveedor, acceso de soporte, ambientes del cliente (DEV, TEST y PRD) con refresh y transporte de configuración, canales y calendario de releases, y conversión demo → cliente. |
 | 13 | API pública e integraciones | API REST versionada, API keys, OAuth2, webhooks salientes, documentación OpenAPI. Integraciones con terceros por adaptador (local/prueba). |
 | 14 | Onboarding y Offboarding | Alta y preboarding, captura de datos fiscales, firma electrónica por adaptador (local/prueba), tareas por responsable, offboarding con revocación de accesos. |
 | 15 | JPB + realineación de TIH | Job Profile Builder: biblioteca de atributos, escalas, tags, Growth Portfolio. Realineación de TIH como capa de skills. |
@@ -329,13 +329,54 @@ La "configuración de empresa (logo, tema...)" se resuelve con un Theme Manager 
 Catálogo de planes y módulos, alta de clientes por autoservicio con periodo de prueba y alta asistida, activación y suspensión por pago, facturación por adaptador (local/prueba). Consola del proveedor separada del Admin Center del cliente. Subdominio o código de empresa por tenant. Acceso de soporte del proveedor (temporal, auditado, autorizado por el cliente).
 
 - Acceso de soporte del proveedor otorgado por el cliente desde Admin Center, temporal, solo lectura por defecto, con break-glass con motivo obligatorio, banner "Modo soporte", MFA obligatorio y registro en la bitácora del cliente.
-- Tenants sandbox ligados al tenant de producción, con refresh y datos anonimizados (LFPDPPP).
-- Canales de release con flags (universales, opt-in, por módulo D12) y clientes preview.
+- Ambientes del cliente (DEV, TEST y PRD) ligados a su tenant de producción, con refresh y datos anonimizados (LFPDPPP) y transporte de configuración: ver las secciones de abajo.
+- Canales de release con flags (universales, opt-in, por módulo D12) y clientes preview: ver "Releases a clientes".
 - Conversión de demo a cliente con licencia: activa el export por tenant y los compromisos de RPO/RTO del contrato.
 - Facturación y cobro por adaptador (local/prueba): la activación y suspensión por pago se prueban con la implementación de prueba; el proveedor real se contrata en la Fase 23.
 - El e2e del alta por autoservicio (registro → crear tenant → MFA obligatorio) llega con esta fase. El `onboarding.spec.ts` que lo intentaba recorría rutas que la app no tiene (`/signup`, `/app/onboarding`) y se borró en el PR 5 de la 9c (D44); el alta obligatoria de MFA ya la cubre `mfa-enroll.spec.ts`.
 - Al prender o apagar un módulo, llamar revalidateTag(moduleFlagsTag(tenantId)); al suspender un tenant, llamar tenantAccessCache().invalidate(tenantId). Sin esto, un módulo apagado sigue visible hasta 60 s y un tenant suspendido entra hasta 5 s (D35).
 - Desde D57: la licencia de otras apps Scalia por tenant vive en la consola de la plataforma (D12), y la otra app la consulta firmada, sin precios. Precios y planes de esas apps quedan fuera de D57.
+
+### Ambientes del cliente (DEV, TEST y PRD)
+
+Equivalente a las instancias de SuccessFactors de un mismo cliente. No son ambientes de la plataforma (esos son DEV local, staging y producción, Fase 23): los tres viven en la plataforma de producción como tenants hermanos.
+
+- PRD en `<slug>.hr.<dominio>`, TEST en `<slug>-test.hr.<dominio>` y DEV en `<slug>-dev.hr.<dominio>`. Los cubre el mismo certificado `*.hr` y comparten Supabase; RLS aísla cada uno como a cualquier tenant.
+- `tenants.environment` (`prd`, `test` o `dev`) y `tenants.parent_tenant_id`, que apunta al PRD. Suspender el PRD suspende sus ambientes.
+- Slugs reservados: nadie registra un slug que termine en `-test` o `-dev`, salvo los ambientes de su propio PRD.
+- TEST y DEV muestran la banda "Ambiente de pruebas", solo envían correo a direcciones que autoriza el cliente y tienen sus propios límites de usuarios y almacenamiento.
+- El catálogo de planes (D12) define qué ambientes incluye cada plan y cuáles se venden aparte.
+
+### Refresh entre ambientes
+
+- Copia PRD → TEST, PRD → DEV o TEST → DEV del mismo cliente. Lo pide el cliente desde Admin Center y lo programa el proveedor desde la consola.
+- Lo ejecuta el worker sobre el export por tenant de la Fase 9a: reemplaza todo el tenant destino y nunca escribe en PRD.
+- Datos personales anonimizados (LFPDPPP): nombres, correos, CURP, RFC, NSS, CLABE, salario y documentos. No se copian contraseñas, sesiones, factores MFA ni API keys; las cuentas del destino se regeneran.
+- Ventana programada, aviso a los usuarios del destino, acceso bloqueado mientras corre y registro en la bitácora de ambos tenants.
+
+**Criterio de cierre del refresh:** contra la base local, el destino queda con los mismos conteos que el origen, sin ningún dato personal real, y el origen no cambia.
+
+### Transporte de configuración
+
+Equivalente a Instance Sync: mueve configuración, nunca datos de empleados.
+
+- Orden DEV → TEST → PRD. Hacia atrás solo con permiso explícito.
+- Qué viaja: roles, grupos y permisos de RBP, picklists, plantillas y formularios, workflows, configuración de empresa y tema, Job Profiles y configuración de módulos. Nunca empleados, cuentas ni secretos.
+- Paquete versionado: el administrador elige los objetos, ve la comparación contra el destino (qué se crea, cambia o borra) y lo simula antes de aplicarlo.
+- Se aplica en una sola transacción: si un objeto falla, no cambia nada. Las referencias se resuelven por llave de negocio (código), no por id.
+- Antes de aplicar se respalda la configuración del destino, con reversa en un paso.
+- Permiso RBP propio, "Transportar configuración", con AAL2. Solo entre ambientes con el mismo `parent_tenant_id`. Cada transporte queda en la bitácora de ambos tenants con el contenido del paquete.
+
+**Criterio de cierre del transporte:** un paquete de DEV aplicado en TEST deja la misma configuración en los dos; uno que falla a la mitad no cambia nada; un paquete hacia el tenant de otro cliente se rechaza.
+
+### Releases a clientes
+
+- Calendario publicado de releases mayores (por ejemplo, trimestral) y parches cuando hagan falta. Cada release lleva versión, notas en español en la consola y en Admin Center, y correo a los administradores del cliente.
+- Los tres ambientes del cliente corren el mismo código, así que la ventana preview se da con flags: lo nuevo se enciende primero en DEV y TEST de todos los clientes, semanas antes que en PRD. Por eso las migraciones siguen siendo compatibles hacia atrás (expand/contract, D15).
+- Tipos de cambio: universal (se enciende para todos en la fecha publicada), opt-in (el cliente lo enciende desde Admin Center, primero en DEV o TEST) y por módulo (D12). Un opt-in puede volverse universal en un release posterior, con aviso previo.
+- Las deprecaciones se anuncian al menos un release antes.
+- El despliegue a PRD ocurre en una ventana de mantenimiento publicada en la página de estado.
+- Rollback: primero se apaga el flag, sin redesplegar; si no basta, se vuelve al tag anterior con el runbook de la Fase 23.
 
 ---
 
@@ -510,6 +551,8 @@ Depende de: worker y lib/email (9a), Admin Center con "Ver dato sensible" y el r
 ### CI/CD
 
 - main despliega a staging; un tag o release despliega a producción. El CI actual es requisito para desplegar.
+- Ambientes de la plataforma: DEV en local (Fase 9a), TEST en staging (`hr-test.<dominio>` y `*.hr-test.<dominio>`) y PRD en producción (`hr.<dominio>` y `*.hr.<dominio>`). Los ambientes del cliente (Fase 12) viven todos en PRD.
+- Flujo de un release: PR con CI verde → merge a main → despliegue a staging → humo, e2e y k6 en staging → tag de versión → despliegue a producción en la ventana de mantenimiento → flags según el calendario de releases de la Fase 12.
 - Preview por Pull Request contra Supabase staging.
 - El runbook de la Fase 9a se completa con el rollback en Railway.
 
