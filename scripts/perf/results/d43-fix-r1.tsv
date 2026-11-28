@@ -2,3 +2,6 @@ label	tag	rev	route	rate	requests	seconds	cpu_us	us_per_request	us_per_request_i
 d43-fix-r1	e8459db	e8459db	/dashboard	15	901	64.7	37650498	41787	41558	3196	41.9	61.7	100.00	0	176	184	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-fix-r1	e8459db	e8459db	/employees	15	901	65.3	39417372	43748	43517	3196	50.8	96.3	100.00	0	245	253	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-fix-r1	e8459db	e8459db	/employees?page=2	15	900	64.4	38749703	43055	42826	3196	48.5	85.5	100.00	0	303	310	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-fix-r1	e8459db	e8459db	/employees?q=Empleado%201	15	901	64.4	37422148	41534	41306	3196	59.8	94.7	100.00	0	304	312	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-fix-r1	e8459db	e8459db	/org-chart	15	901	64.2	27270135	30267	30039	3196	31.8	48.1	100.00	0	303	310	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-fix-r1	e8459db	e8459db	/performance	15	900	64.4	31411306	34901	34673	3196	35.8	56.8	100.00	0	302	312	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
