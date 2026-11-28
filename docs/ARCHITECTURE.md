@@ -2304,8 +2304,9 @@ machine):**
           - **Separated effects:**
             - **D43 (94e2020)** is where the full run jumps, from 0.3–0.5 s
               to 8.5–9.8 s, and no later tree measured comes back to the
-              0.3–0.5 s level (D44 and main stay at 4.5–7.6 s). (A variant of
-              94e2020 that renders each row once does, in three of its four
+              0.3–0.5 s level (D44 and main stay at 4.5–7.6 s). ("Later tree" means a
+              later commit of main. A variant of 94e2020 that renders each row
+              once, which is not one, does come back in three of its four
               passes: see "Isolating D43's per-page cost" below.) It tips a margin that was already
               eroded at D42 (e8459db): 298 ms and 523 ms, so one of its two
               passes already exceeded 500 ms, against 137–308 ms for the 9b
@@ -2377,7 +2378,8 @@ machine):**
             2. Or a decision on the full run's setup (one web process,
                1,150 users at 20–40 s), which this investigation does not
                change.
-        - **The user's decision (2026-11-27): option 1.** D43's per-page
+        - **The user's decision (2026-11-27, the user's date; the options
+          above are dated 2026-11-28 in UTC): option 1.** D43's per-page
           cost is to be isolated in a pull request of its own, in Phase 9c
           (the one that wrote what follows). The
           full run's setup (one web process, 1,150 users at 20–40 s between
@@ -2411,7 +2413,8 @@ machine):**
             - Every request answered 200 and none was dropped (about 900
               per route). "Mix" weighs the routes as `load/pages.js` does:
               14 in all, 6 of them /employees (3 plain, 1 `?page=2`, 2
-              `?q=Empleado%201`).
+              `?q=Empleado%201`). "/employees (3)" is the mean of those three
+              routes with the same weights.
           - **By tree:**
 
             | Tree | /dashboard | /employees | ?page=2 | ?q= | /org-chart | /performance | /skills-hub | /profile | /employees (3) | Mix |
@@ -2432,7 +2435,7 @@ machine):**
 
             - D40 to D42 add 4 to 7 % to the mix over the 9b close; D43
               adds 19 % over D42 (+6.1 ms), almost all of it on /employees
-              (+37 %, +13.3 ms). The other routes move −1 to +4 %.
+              (3) (+37 %, +13.3 ms). The other routes move −1 to +4 %.
           - **94e2020 without each candidate.** Branches `exp/d43-*` over
             94e2020, never merged; their patches are in
             `scripts/perf/experiments/`. The series opens and closes with
