@@ -2222,7 +2222,7 @@ machine):**
           close until then and the user decides (ROADMAP, Fase 9c,
           **Estado**). The first such pull request recorded the result
           below; the investigation is still open. (Updated below: the
-          second pull request, on 2026-11-28, isolated its main part.)
+          second pull request, on 2026-11-28, identified its main part.)
         - **Result of the investigation (2026-11-28): narrowed to the
           code.** On this
           machine the code separates the trees (the A/B below). One earlier
@@ -2232,7 +2232,7 @@ machine):**
           migrations. The investigation stays open: the
           cause is narrowed to the code but not isolated, and its next step
           is for the user's decision (below). Memory in the tables is in
-          MiB. (Updated below: on 2026-11-28 the main part was isolated,
+          MiB. (Updated below: on 2026-11-28 the main part was identified,
           in "Isolating D43's per-page cost".)
           - **Method.** All local, in the container this investigation ran
             in: Intel(R) Xeon(R)
@@ -2304,7 +2304,9 @@ machine):**
           - **Separated effects:**
             - **D43 (94e2020)** is where the full run jumps, from 0.3–0.5 s
               to 8.5–9.8 s, and no later tree measured comes back to the
-              0.3–0.5 s level (D44 and main stay at 4.5–7.6 s). It tips a margin that was already
+              0.3–0.5 s level (D44 and main stay at 4.5–7.6 s). (A variant of
+              94e2020 that renders each row once does, in three of its four
+              passes: see "Isolating D43's per-page cost" below.) It tips a margin that was already
               eroded at D42 (e8459db): 298 ms and 523 ms, so one of its two
               passes already exceeded 500 ms, against 137–308 ms for the 9b
               close. D40 and D41 were not measured on their own.
@@ -2350,7 +2352,7 @@ machine):**
               cause (D43 allocating more, and the garbage collector's CPU)
               or an effect (the queue's requests in flight) is not
               measured.
-          - **Which part, not isolated yet.** (Isolated later, below, for
+          - **Which part, not isolated yet.** (Identified later, below, for
             its main part.) Candidates from D43's diff:
             `Table` renders every row twice (the table and the cards under
             768 px, one of them hidden), and `/employees` is 6 of the 14
@@ -2470,10 +2472,9 @@ machine):**
               the rest from /org-chart and /performance; /dashboard does not
               drop.
             - **`ToastProvider`:** not seen to lower the CPU in one run, and
-              not measured again. It comes out above both runs as is (+3,117 on /employees,
-              +2,263 on the mix), more than the drift between them and
-              within what a single run can vary here; not explained
-              further.
+              not measured again. It comes out above both runs as is
+              (+3,117 on /employees (3), +2,263 on the mix), more than the
+              0.2 % and 1.1 % drift between them; not explained further.
             - **The rewritten pages and the es-MX dictionary:** the pages
               and components D43 rewrote (14 files), back to D42, take
               9,923 off /employees
@@ -2578,9 +2579,9 @@ machine):**
               −2.03, interval −2.99 to −1.07). Three of the four B passes
               are under the limit of 500 ms. The fourth, at 1.32 s, ran at
               119 % web CPU like the slow A passes: the web process is still
-              near the load it can serve. What else keeps it there is not
-              separated here (`loading.tsx`, and D40 to D42's 4 to 7 % on the
-              mix).
+              near the load it can serve. The other parts are not separated
+              on the full run: `(protected)/loading.tsx` (indicative, per
+              route only) and D40 to D42's 4 to 7 % on the mix.
             - Not measured here: the full run of B against D42 or main (it
               compares 94e2020 with and without the double render), D42 in
               the same series as the variants, and

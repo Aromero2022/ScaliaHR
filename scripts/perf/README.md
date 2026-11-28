@@ -62,8 +62,8 @@ node scripts/perf/analyze-ab.mjs scripts/perf/results/<label>.tsv
   process's heap.
 - A pass whose k6 run exits other than 0 or 99, or that has failed pages,
   failed checks, another tenant's employees, cgroup samples that do not cover the
-  hold or a CPU counter that goes back, stops the run and writes no line. A p95 over 500 ms (exit 99) is a measured pass and is
-  written.
+  hold or a CPU counter that goes back, stops the run and writes no line.
+- A p95 over 500 ms (exit 99) is a measured pass and is written.
 - The analysis pairs adjacent passes, takes d = ln(p95 B) − ln(p95 A) per
   pair, and gives the mean with a Student t interval. With ABBA then BAAB
   (`ABBABAAB`, 8 passes), the SD is pooled within the two orders of a pair
