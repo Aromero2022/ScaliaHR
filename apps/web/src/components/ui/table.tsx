@@ -3,12 +3,19 @@ import type { ReactNode } from "react";
 // D43: each row is rendered once, in one markup for both layouts (D36, the
 // user's decision of 2026-11-28). From 768 px it lays out as a table
 // (display: table-*); under 768 px each row is a card with each label above
-// its value, so a 320 px page never scrolls sideways (WCAG 1.4.10). The roles
-// are explicit (table, rowgroup, row, columnheader, cell) because a change of
-// display can take the native table semantics away. The header row stays in
-// the accessibility tree at every width (visually hidden under 768 px); the
-// label shown above each value in a card is aria-hidden, as the column header
-// already names the cell. Columns marked `action` (a link per row) go last.
+// its value, meant to keep a 320 px page from scrolling sideways (WCAG 1.4.10;
+// the e2e checks it). The roles are explicit (table, rowgroup, row,
+// columnheader, cell) because a change of display can take the native table
+// semantics away.
+// - The header row stays in the accessibility tree at every width: visually
+//   hidden under 768 px, visible from 768 px.
+// - Each card shows its labels under 768 px, readable in a linear reading
+//   too; from 768 px they are display:none and the header row names the cells.
+// - Columns marked `action` (a link per row) get a header for screen readers
+//   only and no card label. Table keeps the order of `columns`: declare them
+//   last so they sit at the foot of each card.
+// - A column's `className` is for the table layout: under 768 px its padding
+//   and text alignment are reset for the card.
 
 export type Column<Row> = {
   key: string;
@@ -36,7 +43,7 @@ export function Table<Row>({
   }
 
   return (
-    // relative: visually hidden text (absolute) stays inside the scroller instead of widening the page.
+    // relative: visually hidden text (absolute) is contained here instead of widening the page; the scroller exists from 768 px.
     <div className="relative md:overflow-x-auto">
       <div role="table" aria-label={caption} className="w-full text-left text-sm md:table md:border-collapse">
         <div role="rowgroup" className="sr-only md:not-sr-only md:table-header-group">
@@ -55,12 +62,10 @@ export function Table<Row>({
                 <div
                   key={c.key}
                   role="cell"
-                  className={`block min-w-0 break-words md:table-cell md:align-middle ${c.className ?? "px-6 py-4 text-fg-muted"} max-md:p-0 max-md:text-left`}
+                  className={`block md:table-cell md:align-middle ${c.className ?? "px-6 py-4 text-fg-muted"} max-md:min-w-0 max-md:break-words max-md:p-0 max-md:text-left max-md:empty:hidden`}
                 >
                   {!c.action && (
-                    <span aria-hidden="true" className="mb-1 block text-xs font-medium uppercase tracking-wider text-fg-subtle md:hidden">
-                      {c.header}
-                    </span>
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-fg-subtle md:hidden">{c.header}</span>
                   )}
                   {c.cell(row)}
                 </div>

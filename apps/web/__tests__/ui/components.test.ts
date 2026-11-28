@@ -209,33 +209,44 @@ describe("Table (D43)", () => {
     { key: "link", header: "Acciones", action: true, cell: (r: { id: string; name: string }) => createElement("a", { href: `/e/${r.id}` }, "Ver perfil") },
   ];
 
-  it("renders each row once: a table from 768 px and a card under it, with explicit table roles", async () => {
-    await render(createElement(Table<{ id: string; name: string }>, { caption: "Empleados", columns, rows: [{ id: "1", name: "Ana" }, { id: "2", name: "Luis" }], rowKey: (r) => r.id, empty: "Nadie" }));
-    // One markup for both layouts (D36, 2026-11-28): no second copy of the rows.
+  // Classes and roles only: jsdom applies no CSS, so the layout at each width is checked in the e2e (table.spec.ts).
+  it("renders each row once, in one markup with the table and card classes and explicit table roles", async () => {
+    const withClass = [...columns.slice(0, 1), { key: "number", header: "Número", className: "px-6 py-4 text-right", cell: (r: { id: string; name: string }) => `E-${r.id}` }, ...columns.slice(1)];
+    await render(createElement(Table<{ id: string; name: string }>, { caption: "Empleados", columns: withClass, rows: [{ id: "1", name: "Ana" }, { id: "2", name: "Luis" }], rowKey: (r) => r.id, empty: "Nadie" }));
+    // One markup for both layouts (D36, 2026-11-28): no native table or list markup, and each row's text once.
     expect(container.querySelector("table, ul, li, dl")).toBeNull();
     expect(container.textContent!.split("Ana")).toHaveLength(2);
+    expect(container.querySelectorAll("a")).toHaveLength(2);
 
     const table = container.querySelector("[role='table']")!;
     expect(table.getAttribute("aria-label")).toBe("Empleados");
     expect(table.className.split(" ")).toEqual(expect.arrayContaining(["md:table"]));
 
     const [head, body] = [...table.querySelectorAll(":scope > [role='rowgroup']")];
-    // The header row stays in the accessibility tree at every width, hidden from view under 768 px.
+    // The header row keeps sr-only under md and the table layout from md (its visibility is checked in the e2e).
     expect(head.className.split(" ")).toEqual(expect.arrayContaining(["sr-only", "md:not-sr-only", "md:table-header-group"]));
+    expect(head.querySelector("[role='row']")!.className).toContain("md:table-row");
     const headers = [...head.querySelectorAll("[role='row'] > [role='columnheader']")];
-    expect(headers.map((h) => h.textContent)).toEqual(["Empleado", "Acciones"]);
-    expect(headers[1].querySelector(".sr-only")!.textContent).toBe("Acciones");
+    expect(headers.map((h) => h.textContent)).toEqual(["Empleado", "Número", "Acciones"]);
+    expect(headers.every((h) => h.className.includes("md:table-cell"))).toBe(true);
+    expect(headers[2].querySelector(".sr-only")!.textContent).toBe("Acciones");
 
+    expect(body.className).toContain("md:table-row-group");
     const rows = [...body.querySelectorAll(":scope > [role='row']")];
     expect(rows).toHaveLength(2);
-    const [name, action] = [...rows[0].querySelectorAll(":scope > [role='cell']")];
-    expect(name.className.split(" ")).toEqual(expect.arrayContaining(["block", "md:table-cell", "break-words"]));
-    // The card's label is for sight only: the column header already names the cell.
-    const label = name.querySelector("[aria-hidden='true']")!;
+    expect(rows.every((r) => r.className.includes("md:table-row"))).toBe(true);
+    const [employee, number, action] = [...rows[0].querySelectorAll(":scope > [role='cell']")];
+    expect(employee.className.split(" ")).toEqual(expect.arrayContaining(["block", "md:table-cell", "max-md:break-words"]));
+    // Each card shows its label under md (hidden from md, where the header row names the cell).
+    const label = employee.querySelector("span")!;
     expect(label.textContent).toBe("Empleado");
     expect(label.className).toContain("md:hidden");
-    expect(name.textContent).toBe("EmpleadoAna");
-    expect(action.querySelector("[aria-hidden='true']")).toBeNull();
+    expect(label.getAttribute("aria-hidden")).toBeNull();
+    expect(employee.textContent).toBe("EmpleadoAna");
+    // A column's className is for the table layout; the card resets its padding and alignment.
+    expect(number.className.split(" ")).toEqual(expect.arrayContaining(["px-6", "py-4", "text-right", "max-md:p-0", "max-md:text-left"]));
+    expect(action.querySelector("span:not(.sr-only)")).toBeNull();
+    expect(action.className).toContain("max-md:empty:hidden");
     expect(action.querySelector("a")!.getAttribute("href")).toBe("/e/1");
   });
 
