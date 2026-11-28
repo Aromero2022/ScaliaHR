@@ -1,1 +1,3 @@
 label	tag	rev	route	rate	requests	seconds	cpu_us	us_per_request	us_per_request_idle_corrected	idle_us_per_s	p50_ms	p95_ms	status_200_pct	dropped	mem_current_mib	mem_peak_mib	machine
+d43-fix-r2	c24fcac	c24fcac	/dashboard	15	900	63.7	29911362	33235	32978	3627	32.3	44.8	100.00	0	167	177	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-fix-r2	c24fcac	c24fcac	/employees	15	900	63.7	35900339	39889	39633	3627	42.6	57.7	100.00	0	227	229	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
