@@ -2215,101 +2215,150 @@ machine):**
           (94e2020, D43). That shift was measured in the short CI run, so the
           link is not measured yet. The comparison that
           confirms or rules it out: the tree of the 9b close (ae25e87)
-          against the tree of #88, on the same machine.
+          against the tree of #88, on the same machine. Done on 2026-11-28,
+          against main (2b7a677, the same code as #88): see the result
+          below.
         - It is investigated in its own pull request, and Phase 9c does not
           close until then and the user decides (ROADMAP, Fase 9c,
-          **Estado**).
+          **Estado**). The first such pull request recorded the result
+          below; the investigation is still open.
         - **Result of the investigation (2026-11-28): the code, not the
-          machine.** The full run, with the RUNBOOK's values (1,150 users,
-          20–40 s between pages, a 2 min ramp and 4 min at full load), all
-          local and in one container: Intel(R) Xeon(R) Processor @ 2.10GHz,
-          4 vCPU, 15.7 GiB (16,473,316 kB), with the stack and k6 on it. Each
-          tree ran on its own database (`supabase db reset` with its own
-          migrations) and its own web and worker images, with main's k6
-          harness (since ae25e87 `load/` changed only tags and thresholds,
-          not the pages or the seed), and one unmeasured warm-up with the
-          same values after every switch of tree.
+          machine.** The investigation stays open: the cause is narrowed to
+          the code, and its next step is for the user's decision (below).
+          - **Method.** All local, in one container: Intel(R) Xeon(R)
+            Processor @ 2.10GHz, 4 vCPU, 15.7 GiB (16,473,316 kB), with the
+            stack and k6 on it.
+            - Each pass is `npm run load:test` with the RUNBOOK's defaults
+              (`LOAD_BIG_USERS=1000`, `LOAD_SMALL_USERS=50`,
+              `LOAD_VUS=1000`, `SMALL_VUS=50`, `RAMP=2m`, `HOLD=4m`,
+              `THINK_MIN=20`, `THINK_MAX=40`), which seeds again before
+              every pass. The k6 harness is always main's (`load/` at
+              2b7a677): since ae25e87 `load/` changed only its diagnostics,
+              tags and thresholds, not the pages or the seed's data.
+            - Each tree runs on its own web and worker images, built with
+              its own Dockerfiles, and on its own database. On every switch
+              of tree: the containers down, `supabase db reset` with that
+              tree's migrations, the role passwords, the containers up with
+              that tree's compose file, the health check, and one unmeasured
+              warm-up with the same values.
+            - p95 is the summary's `http_req_duration{kind:page,phase:steady}`.
+              Web CPU and memory come from `docker stats` of the web
+              container every 10 s: the CPU is the mean, and the memory the
+              median, of the samples from 2 min 10 s to 6 min after the pass
+              starts (the time at full load).
+            - The warm-up before pass 2 overlapped a local lint, typecheck
+              and build (01:03–01:05 UTC). It is not measured, and pass 2,
+              right after it, is in line with the other B passes.
           - **A/B, ABBA and then BAAB:** A is the tree of the 9b close
             (ae25e87), B is main (2b7a677).
 
-            | Pass | Tree | p95 steady | Requests/s | Failed | Checks | Web CPU | Web memory, peak |
+            | Pass | Tree | p95 steady | Requests/s | Failed | Checks | Web CPU | Web memory |
             |---|---|---|---|---|---|---|---|
-            | 1 | A | 149 ms | 34.85 | 0 % | 100 % | 80 % | 966 MiB |
-            | 2 | B | 6.65 s | 32.61 | 0 % | 100 % | 115 % | 3,486 MiB |
-            | 3 | B | 5.66 s | 32.87 | 0 % | 100 % | 115 % | 3,597 MiB |
-            | 4 | A | 308 ms | 34.80 | 0 % | 100 % | 91 % | 917 MiB |
-            | 5 | B | 7.33 s | 32.38 | 0 % | 100 % | 125 % | 3,646 MiB |
-            | 6 | A | 137 ms | 34.84 | 0 % | 100 % | 77 % | 788 MiB |
-            | 7 | A | 258 ms | 34.88 | 0 % | 100 % | 106 % | 786 MiB |
-            | 8 | B | 7.62 s | 32.26 | 0 % | 100 % | 115 % | 3,612 MiB |
+            | 1 | A | 149 ms | 34.85 | 0 % | 100 % | 80 % | 511 MiB |
+            | 2 | B | 6.65 s | 32.61 | 0 % | 100 % | 115 % | 3,426 MiB |
+            | 3 | B | 5.66 s | 32.87 | 0 % | 100 % | 115 % | 3,557 MiB |
+            | 4 | A | 308 ms | 34.80 | 0 % | 100 % | 91 % | 912 MiB |
+            | 5 | B | 7.33 s | 32.38 | 0 % | 100 % | 125 % | 3,607 MiB |
+            | 6 | A | 137 ms | 34.84 | 0 % | 100 % | 77 % | 568 MiB |
+            | 7 | A | 258 ms | 34.88 | 0 % | 100 % | 106 % | 360 MiB |
+            | 8 | B | 7.62 s | 32.26 | 0 % | 100 % | 115 % | 3,564 MiB |
 
             - Every page answered 200 and none showed another tenant's
               employees (the isolation check at 100 % in all 8). k6 exited 0
               on every A pass and 99 on every B pass (the p95 threshold).
+            - The four B passes are all above 5.6 s and the four A passes
+              all below 310 ms: a complete separation.
             - ln(B/A) of each adjacent pair: +3.798 (ABBA, A first), +2.911
               (ABBA, B first), +3.981 (BAAB, B first), +3.385 (BAAB, A
               first). Mean **+3.519** (B about 34 times A); SD pooled within
               the two orders of a pair, A first (+3.798, +3.385) and B first
               (+2.911, +3.981), so a position effect stays out of the noise:
               0.574 (2 degrees of freedom), SE 0.287; 95 % interval with
-              Student's t (df 2, 4.303): **+2.284 to +4.753**.
-            - A stays under 500 ms on this machine in all four passes, so
-              the machine alone does not explain the failure.
+              Student's t (df 2, 4.303): **+2.284 to +4.753**. The ratio is
+              not a constant of the code: past the limit the queue grows
+              with the time at full load, so it says "much worse", not how
+              much.
+            - A stays under 500 ms on this machine in all four passes.
           - **Bisection, with the same full run** (one warm-up and two
-            measured passes per tree):
+            measured passes per tree, run once each in commit order, not
+            counterbalanced):
 
-            | Tree | p95 steady | Requests/s | Web CPU | Web memory, peak |
+            | Tree | p95 steady | Requests/s | Web CPU | Web memory |
             |---|---|---|---|---|
-            | e8459db (D42, the parent of 94e2020) | 298 ms; 523 ms | 34.83; 34.81 | 89 %; 104 % | 908; 974 MiB |
-            | 94e2020 (D43) | 8.52 s; 9.80 s | 31.86; 30.10 | 117 %; 113 % | 3,655; 982 MiB |
-            | a9c4365 (D44) | 4.48 s; 7.63 s | 33.53; 32.29 | 117 %; 114 % | 3,668; 984 MiB |
+            | e8459db (D42, the parent of 94e2020) | 298 ms; 523 ms | 34.83; 34.81 | 89 %; 104 % | 783; 581 MiB |
+            | 94e2020 (D43) | 8.52 s; 9.80 s | 31.86; 30.10 | 117 %; 113 % | 3,613; 2,305 MiB |
+            | a9c4365 (D44) | 4.48 s; 7.63 s | 33.53; 32.29 | 117 %; 114 % | 3,635; 2,195 MiB |
 
             All passes: 0 % failed and 100 % of checks; k6 exited 0 on
             e8459db's first pass and 99 on the rest (p95 over 500 ms).
           - **Separated effects:**
-            - **D43 (94e2020)** is the step: from 0.3–0.5 s to 8.5–9.8 s,
-              and nothing after it brings the level back down (D44 and main
-              stay at 4.5–7.6 s). Before D43 the trees were already near the
-              limit: e8459db (D42) gave 298 and 523 ms, against 137–308 ms
-              for the 9b close.
-            - **D44 (a9c4365)** has no visible effect of its own on the full
-              run: it stays at D43's level. Its "e2e before k6" happens only
-              in the CI `docker` job; the local full run has no e2e before
-              it, so that part of D44 can only touch the short CI run (the
-              +96 % level shift above mixes it with D43).
-            - **The machine** sets how far past the limit the queue goes,
-              not whether it fails. The same main tree gave 1.23 s and 2.0 s
-              on the container with an Intel Xeon at 2.30 GHz (2026-11-27)
-              and 5.7–7.6 s on this one at 2.10 GHz; the 9b tree stays under
-              500 ms on both.
+            - **D43 (94e2020)** is where the full run jumps, from 0.3–0.5 s
+              to 8.5–9.8 s, and no later tree measured comes back down (D44
+              and main stay at 4.5–7.6 s). It tips a margin that was already
+              eroded: D42 (e8459db) gave 298 ms and 523 ms, and its second
+              pass already failed the 500 ms threshold, against 137–308 ms
+              for the 9b close. D40, D41 and D42 were not bisected one by
+              one.
+            - **D44 (a9c4365)** gave 4.48 s and 7.63 s against D43's 8.52 s
+              and 9.80 s: lower in both passes, but within the spread of two
+              passes per tree, so an effect of its own is neither shown nor
+              ruled out. Its
+              "e2e before k6" happens only in the CI `docker` job; the local
+              full run has no e2e before it, so that part of D44 can only
+              touch the short CI run (the +96 % level shift above mixes it
+              with D43). The commits between a9c4365 and main were not
+              measured one by one.
+            - **The machine** changes how far past the limit the queue goes.
+              The same code as main (the tree of #88, whose code is
+              2b7a677's) gave 1.23 s and 2.0 s on a container with an Intel
+              Xeon at 2.30 GHz (2026-11-27) and 5.7–7.6 s on this one at
+              2.10 GHz: one pair of machines, on different days. The 9b
+              tree ran only on this machine; at the 9b close D36 measured
+              217 ms on a 4 vCPU machine whose CPU model is not recorded.
           - **Mechanism:** the single web process saturates. From D43 on,
             it serves about 30–33.5 requests/s against the 34.8 the workload
-            asks for, its CPU stays at 113–127 %, and the queue makes the
+            asks for, its CPU stays at 113–125 %, and the queue makes the
             p95 grow to seconds; before D43 it keeps up at 34.8 requests/s
-            with 77–106 %. At low load (4 users, 1 s between pages, no
-            queue) the median per page is about the same in every tree
-            (46–54 ms), and the web CPU per request goes from about 34 ms
-            (9b close) to 42 ms (D42), 47 ms (D43) and 49 ms (main); these
-            low-load CPU figures are rough (`docker stats` every 5 s). The
-            web memory peak (0.8–3.7 GiB) follows the queue and is not the
-            driver: 94e2020's second pass gave 9.80 s with a 982 MiB peak.
-          - **Which part of D43, not isolated yet.** Candidates, from its
-            diff: `Table` renders every row twice (the table and the cards
-            under 768 px, one of them hidden), and `/employees` is 6 of the
-            14 weights of the page mix; `(protected)/loading.tsx` puts every
+            with 77–106 %.
+            - At low load (4 users, 1 s between pages, 2 min after a 1 min
+              warm-up, no queue) the median per page is about the same in
+              every tree (46–54 ms). The web CPU per request at low load
+              (mean CPU over requests per second) is about 34 ms (9b), 42
+              ms (D42), 47 ms (D43) and 49 ms (main); a warm-up and a
+              measured pass of one tree differ by up to 20 %, so these
+              figures only say the cost grew across 9c, not by how much
+              each step.
+            - The web memory at full load is 0.4–0.9 GiB in the fast passes
+              and 2.2–3.6 GiB in the slow ones, and it falls after a major
+              collection (94e2020's second pass dropped from 3.6 GiB to
+              0.66 GiB 78 s in, with no failed request). Whether that is a
+              cause (D43 allocating more, and the garbage collector's CPU)
+              or an effect (the queue's requests in flight) is not
+              measured.
+          - **Which part, not isolated yet.** Candidates from D43's diff:
+            `Table` renders every row twice (the table and the cards under
+            768 px, one of them hidden), and `/employees` is 6 of the 14
+            weights of the page mix; `(protected)/loading.tsx` puts every
             protected page behind a Suspense boundary (streamed response);
-            and `ToastProvider` wraps the protected layout.
-          - **Status:** the investigation closes with this cause (an
-            investigation closes when its cause is written in D36): the
-            code, D43. What follows is for the user's decision, and Phase
-            9c stays with its closing criterion pending (ROADMAP, Fase 9c,
-            **Estado**). Proposed: (1) isolate the part of D43 with the same
-            full run, a 94e2020 build without each candidate; (2) a pull
-            request of its own that brings the per-page cost back and
-            reruns the full run; or (3) a decision on the full run's setup
-            (one web process, 1,150 users), which this investigation does
-            not change. The limit of 500 ms, the D56 gate and the tests do
+            `ToastProvider` wraps the protected layout; and the rewritten
+            pages (dashboard, employees, the employee's page, performance)
+            with the larger `es-MX` dictionary. Between ae25e87 and 94e2020
+            the compose file only gained the D41 demo-login variable, unset
+            here.
+          - **Status and proposal, for the user's decision:** Phase 9c stays
+            with its closing criterion pending (ROADMAP, Fase 9c,
+            **Estado**); the limit of 500 ms, the D56 gate and the tests do
             not change.
+            1. A pull request of its own, in Phase 9c before it closes,
+               that isolates the part: per-route CPU at a fixed arrival
+               rate, read from the web container's cgroup `cpu.stat`, on
+               e8459db and 94e2020 (and D40–D42), then a 94e2020 build
+               without each candidate, and one ABBA full run to confirm.
+               Then a pull request that brings the per-page cost back and
+               reruns the full run.
+            2. Or a decision on the full run's setup (one web process,
+               1,150 users at 20–40 s), which this investigation does not
+               change.
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.
