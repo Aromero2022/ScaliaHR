@@ -13,11 +13,13 @@ so after a series the local database holds the last tree's seed.
 
 - `supabase start` running from this checkout, and Docker.
 - The host's cgroup files readable from where the scripts run
-  (`/sys/fs/cgroup/unified/docker/<id>` or `system.slice/docker-<id>.scope` for
-  CPU, `memory/docker/<id>` for memory on cgroup v1).
+  (`/sys/fs/cgroup/unified/docker/<id>`, `system.slice/docker-<id>.scope` or
+  `docker/<id>` for CPU; `memory/docker/<id>` for memory on cgroup v1).
 - Optional: `NODE_IMAGE` (base image for the builds) and `BUILD_PROXY` (an HTTPS
   proxy for the builds) when the network needs them.
-- Work files go to `PERF_WORK` (default `load/.out/perf`, git-ignored).
+- Trees, build, reset and seed logs go to `PERF_WORK` (default
+  `load/.out/perf`, git-ignored). The k6 summaries and the full-run passes stay
+  under `load/.out`, where `scripts/load-test.sh` writes them.
 
 ## Per-route CPU at a fixed rate
 
@@ -35,10 +37,10 @@ node scripts/perf/summarize-routes.mjs scripts/perf/results/<label>.tsv
   before the routes.
 - The summary gives µs per request per route, `/employees` (its three routes)
   apart, and the average weighted by the page mix. A route with any answer other
-  than 200 or a dropped iteration is written but shows as NA, and so do the
-  averages of its tree.
-- A failed k6 run, a missing summary or a cgroup counter that goes back stops the
-  script without writing the line.
+  than 200 or a dropped iteration is written but shows as NA; so does the mix of
+  its tree, and the /employees average when the route is one of its three.
+- A failed k6 run, a missing summary or a cgroup counter that does not grow
+  stops the script without writing the line.
 
 ## A/B with the full run
 
@@ -56,7 +58,10 @@ node scripts/perf/analyze-ab.mjs scripts/perf/results/<label>.tsv
   over the whole run.
 - Memory is the cgroup's usage, page cache included: read it as a level, not as the
   process's heap.
-- A pass that fails stops the run and writes no line.
+- A pass whose k6 run exits other than 0 or 99, or that has failed pages,
+  failed checks, another tenant's employees or too few cgroup samples, stops the
+  run and writes no line. A p95 over 500 ms (exit 99) is a measured pass and is
+  written.
 - The analysis pairs adjacent passes, takes d = ln(p95 B) − ln(p95 A) per
   pair, and gives the mean with a Student t interval. With ABBA then BAAB
   (`ABBABAAB`, 8 passes), the SD is pooled within the two orders of a pair
@@ -67,8 +72,10 @@ node scripts/perf/analyze-ab.mjs scripts/perf/results/<label>.tsv
 
 ## Experiments
 
-`experiments/*.patch` are the D43 candidates removed one at a time over
-94e2020, for branches that are never merged:
+`experiments/*.patch` are the D43 candidates, one at a time over 94e2020, for
+branches that are never merged: two removals (`loading.tsx`, `ToastProvider`),
+one rewrite (`Table` renders each row once) and one revert (the pages and
+components D43 rewrote, back to D42).
 
 ```bash
 git worktree add -b exp/d43-table-once ../exp/d43-table-once 94e2020
@@ -81,6 +88,6 @@ and are built again when it does not match.
 
 ## Results
 
-`results/*.tsv` holds every measured line, with the machine (CPU model, MHz,
-vCPU and memory) on each one. D36 in `docs/ARCHITECTURE.md` records what they
-mean.
+`results/*.tsv` holds every line these scripts measured, with the machine (CPU
+model, MHz, vCPU and memory) on each one. D36 in `docs/ARCHITECTURE.md` records
+what they mean; its earlier runs (before these tools) are recorded there only.

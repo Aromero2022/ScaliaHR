@@ -2,7 +2,8 @@
 // (idle-corrected) per route and tree, /employees (its three routes) apart, and
 // the average weighted by the load test's page mix (load/pages.js).
 // A route is valid only if every request got 200, no iteration was dropped and its
-// value is a number; otherwise it shows as NA, and so do the averages of its tag.
+// value is a number; otherwise it shows as NA, and so does the mix of its tag (and
+// the /employees average, when the route is one of its three).
 // The same tag and route twice in one file is an error.
 //   node scripts/perf/summarize-routes.mjs scripts/perf/results/<label>.tsv [tag ...]
 import { readFileSync, realpathSync } from "node:fs";

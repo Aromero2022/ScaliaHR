@@ -31,6 +31,8 @@ export const options = {
   thresholds: { "http_req_duration{kind:page}": ["max>=0"], "http_reqs{kind:page}": ["count>=0"], "checks{check:status 200}": ["rate>=0"] },
 };
 
+// The session cookie as @supabase/ssr writes it: chunks of 3180 characters, as
+// load/pages.js does.
 function sessionCookies(session) {
   const value = `base64-${encoding.b64encode(JSON.stringify(session), "rawurl")}`;
   if (value.length <= 3180) return { [COOKIE]: value };

@@ -96,7 +96,7 @@ perf_switch() {
 # The web container's cgroup counters, read on the host: CPU used in µs
 # (usage_usec of cpu.stat, cgroup v2 or the unified hierarchy of a hybrid
 # host), and memory now and at its peak in bytes. perf_cgroup_reset_peak starts
-# a new peak.
+# a new peak (on cgroup v1; see it for v2).
 perf_cgroup_dirs() {
   local id; id="$(docker inspect -f '{{.Id}}' scaliahr-web-1)"
   CG_CPU=""; CG_MEM=""

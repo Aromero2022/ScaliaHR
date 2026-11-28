@@ -10,6 +10,8 @@
 // that is not three numbers, samples that do not cover the hold (gaps over 30 s or
 // ends more than 20 s inside it), or a CPU counter that goes back (the container
 // restarted).
+// The p95 is k6's steady phase (from RAMP to the end, ramp-down included); CPU and
+// memory cover the hold only.
 //   node scripts/perf/pass-stats.mjs <summary.json> <k6 output.txt> <cgroup samples.txt>
 import { readFileSync, statSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";

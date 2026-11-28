@@ -37,7 +37,7 @@ export function analyze(rows) {
   if (groups.length !== 2 || groups[0].length !== groups[1].length) throw new Error("the pairs must be as many with A first as with B first (e.g. ABBABAAB)");
   const ss = groups.reduce((s, g) => { const m = g.reduce((x, y) => x + y, 0) / g.length; return s + g.reduce((x, y) => x + (y - m) ** 2, 0); }, 0);
   const df = pairs.length - groups.length;
-  if (!T975[df]) throw new Error(`no t value for ${df} degrees of freedom (needs 1 to 10: 8 to 24 passes)`);
+  if (!T975[df]) throw new Error(`no t value for ${df} degrees of freedom (needs an even df from 2 to 10: 8 to 24 passes)`);
   const sd = Math.sqrt(ss / df), se = sd / Math.sqrt(pairs.length), t = T975[df];
   return { pairs, mean, sd, se, df, t, low: mean - t * se, high: mean + t * se };
 }
