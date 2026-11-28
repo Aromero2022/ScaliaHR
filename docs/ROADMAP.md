@@ -246,6 +246,7 @@ Base visual y de interacción sobre la que se construyen todos los módulos desd
 - Máquina: un contenedor de 4 vCPU (Intel Xeon a 2.30 GHz) y 15 GB, con la pila y k6 en la misma máquina. Es la misma especificación que la corrida del cierre de 9b (4 vCPU y 15 GB); D36 no anota el modelo de CPU de aquella.
 - Sus límites: k6, Postgres y Docker compiten por los mismos 4 vCPU con el proceso web, que a unas 34.5 peticiones/s está cerca de su capacidad (D36 cita unas 40 páginas/s con p95 < 500 ms). Las dos corridas idénticas difieren en 0.8 s, así que una corrida en esta máquina no separa el código del ruido de la máquina.
 - La fase se cierra cuando la investigación abierta en D36 tenga resultado y el usuario decida el cierre. Según la regla de D36, una investigación se cierra cuando su causa queda escrita en D36 o cuando el usuario acepta el nivel nuevo con una decisión anotada allí.
+- Resultado de la investigación (D36, 2026-11-28): la causa es el código, no la máquina. En una A/B en la misma máquina (ABBA y BAAB, con la corrida completa del RUNBOOK), el árbol del cierre de 9b (ae25e87) dio p95 de 137 a 308 ms y main (2b7a677) de 5.7 a 7.6 s; ln de la razón +3.52, con intervalo al 95 % de +2.28 a +4.75 (t de Student, 2 grados de libertad). La bisección pone el salto en D43 (94e2020): el proceso web se satura y deja de atender las peticiones que pide la carga. Qué parte de D43 lo causa y qué hacer queda para decisión del usuario; la fase sigue con su criterio de cierre pendiente.
 
 | Punto del criterio | Evidencia |
 |--------------------|-----------|
