@@ -2222,7 +2222,8 @@ machine):**
           close until then and the user decides (ROADMAP, Fase 9c,
           **Estado**). The first such pull request recorded the result
           below; the investigation is still open.
-        - **Result of the investigation (2026-11-28): the code.** On this
+        - **Result of the investigation (2026-11-28): narrowed to the
+          code.** On this
           machine the code separates the trees (the A/B below). One earlier
           pair of runs on another machine suggests that the machine changes
           how large the gap is, but that pair is not an A/B. "The code" is
@@ -2231,7 +2232,8 @@ machine):**
           cause is narrowed to the code but not isolated, and its next step
           is for the user's decision (below). Memory in the tables is in
           MiB.
-          - **Method.** All local, in one container: Intel(R) Xeon(R)
+          - **Method.** All local, in the container this investigation ran
+            in: Intel(R) Xeon(R)
             Processor @ 2.10GHz, 4 vCPU, 15.7 GiB (16,473,316 kB), with the
             stack and k6 on it.
             - Each pass is `npm run load:test` with the RUNBOOK's defaults
@@ -2301,11 +2303,11 @@ machine):**
             - **D43 (94e2020)** is where the full run jumps, from 0.3–0.5 s
               to 8.5–9.8 s, and no later tree measured comes back to the
               0.3–0.5 s level (D44 and main stay at 4.5–7.6 s). It tips a margin that was already
-              eroded at D42 (e8459db): 298 ms and 523 ms, and its second
-              pass already failed the 500 ms threshold, against 137–308 ms
-              for the 9b close. D40 and D41 were not measured on their own.
+              eroded at D42 (e8459db): 298 ms and 523 ms, so one of its two
+              passes already exceeded 500 ms, against 137–308 ms for the 9b
+              close. D40 and D41 were not measured on their own.
             - **D44 (a9c4365)** gave 4.48 s and 7.63 s: below D43's 8.52 s
-              and 9.80 s, and inside main's four passes (5.66–7.62 s), so
+              and 9.80 s, and near main's four passes (5.66–7.62 s), so
               with two passes per tree no effect of D44 of its own can be
               separated. Its "e2e before k6" happens only in the CI `docker`
               job; the local full run has no e2e before it, so that part of
@@ -2313,7 +2315,8 @@ machine):**
               above mixes it with D43, and that CI series stays
               uninvestigated: the full run does not measure it). The commits between a9c4365 and main were not
               measured one by one.
-            - **The machine** changes how far past the limit the queue goes.
+            - **The machine**, as far as one unpaired comparison suggests,
+              changes how far past the limit the queue goes.
               The same code as main (the tree of #88, whose code is
               2b7a677's) gave 1.23 s and 2.0 s on a container with an Intel
               Xeon at 2.30 GHz (2026-11-27) and 5.7–7.6 s on this one at
@@ -2337,8 +2340,9 @@ machine):**
             - The web memory at full load is 0.35–0.9 GiB in the fast
               passes and 2.1–3.6 GiB in the slow ones, and it falls after a
               major collection, as far as the samples show (94e2020's
-              second pass began with the heap its warm-up left, 3.6 GiB, and
-              dropped to 0.66 GiB within one 11 s sample, 78 s in, with no
+              second pass began with the heap its warm-up left, about
+              3,550 MiB, and dropped to 658 MiB within one 11 s sample, 78 s
+              in, with no
               failed request; the collection itself was not measured). Whether that is a
               cause (D43 allocating more, and the garbage collector's CPU)
               or an effect (the queue's requests in flight) is not
