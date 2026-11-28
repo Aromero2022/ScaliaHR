@@ -40,7 +40,7 @@ function anonymizeUser(user: UserRecord, personalRecords: PersonalInfo[]) {
     ...user,
     first_name: token,
     last_name: "ANONIMIZADO",
-    email: `${token}@removed.local`,
+    email: `${token.toLowerCase()}@removed.local`,
     is_anonymized: true,
     deleted_at: new Date().toISOString(),
     status: "TERMINATED",

@@ -14,6 +14,10 @@ describe("link-owner.sh completeness", () => {
     expect(script).toMatch(/INSERT INTO public\.users/);
   });
 
+  it("D57: stores the email trimmed and in lower case, as the CHECK requires", () => {
+    expect(script).toMatch(/INSERT INTO public\.users \([^)]*\)\s+SELECT au\.id, :'tenant'::uuid, lower\(btrim\(:'email'\)\),/);
+  });
+
   it("creates user_tenant_memberships with app_role owner", () => {
     expect(script).toContain("user_tenant_memberships");
     expect(script).toContain("'owner'");

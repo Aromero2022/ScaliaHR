@@ -32,14 +32,14 @@ function deterministicEmployeeId(authId: string): string {
 async function linkOwnerSql(ownerId: string, email: string): Promise<void> {
   await db.query(
     `UPDATE public.users SET auth_uid = $1::uuid, status = 'ACTIVE', updated_at = now()
-     WHERE tenant_id = $3::uuid AND lower(email) = lower($2) AND auth_uid IS NULL
+     WHERE tenant_id = $3::uuid AND lower(email) = lower(btrim($2)) AND auth_uid IS NULL
        AND NOT EXISTS (SELECT 1 FROM public.users WHERE auth_uid = $1::uuid)`,
     [ownerId, email, DEMO_TENANT],
   );
 
   await db.query(
     `INSERT INTO public.users (auth_uid, tenant_id, email, first_name, last_name, status, hire_date, employee_id, department_id)
-     SELECT au.id, $2::uuid, $3,
+     SELECT au.id, $2::uuid, lower(btrim($3)),
             coalesce(nullif(au.raw_user_meta_data->>'first_name', ''), 'Owner'),
             coalesce(nullif(au.raw_user_meta_data->>'last_name', ''), 'Account'),
             'ACTIVE', now(),

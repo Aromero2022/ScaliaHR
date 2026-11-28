@@ -315,6 +315,8 @@ irreversible suppression step** of an ARCO cancellation, not its first step.
   subject (`entity_id`) and `arco_request_id`. No re-identification map exists.
 - Kept: `users.id`, `auth_uid`, `employee_id`, `ec_job_information` (reporting
   line), all other ids and audit rows.
+- Since D57 the email is the token in lower case, `anon-xxxxxxxx@removed.local`,
+  because `public.users.email` is stored as `lower(btrim(email))`.
 
 **Pendiente — Fase 20 (DRTM):** bloqueo previo a la supresión según la LFPDPPP 2025 y
 plazos de conservación de LFT art. 804, LSS art. 15 y CFF. Validar plazos con
@@ -686,6 +688,8 @@ entities is a single tenant with multiple `legal_entities` (future table).
 1. Each access account (`auth.users`) and its business profile (`public.users`)
    belong to exactly one tenant. `users.auth_uid UNIQUE` is global by design.
    A person who works at two customers has two separate accounts.
+   Since D57 `auth_uid` is also the key between Scalia apps (`sub` in OIDC),
+   and `public.users.email` is stored as `lower(btrim(email))`.
 
 2. `createTenant()` only accepts auth users **without** an existing
    `public.users` row. If the auth user already has a business profile in
@@ -1092,6 +1096,8 @@ nothing; security tests for `email_enqueuer` and `email_branding`.
 the app host itself, with the company code chosen at login. The middleware
 lets a signed-in user through only when that tenant is the one in their token
 and it is not suspended. Phase 9a, PR 2.
+Since D57 another Scalia app signs in through OIDC with PKCE, never with
+cookies on the parent domain, so each tenant's subdomain keeps its own session.
 
 **Resolution (`apps/web/src/lib/tenant/host.ts`):**
 - The app host comes from `APP_BASE_URL` (default `http://localhost:3000`).
@@ -1223,6 +1229,9 @@ against the new schema during the deploy, and a rollback to the previous image
 - pg-boss upgrades (D17) follow the same rule.
 
 The rule is checked by review in each PR; there is no automated check yet.
+Since D57 a CHECK added in one release is allowed when no write path of the
+running or the previous image produces a value it rejects; the migration's
+header says why (D57's email CHECK is the first case).
 
 ---
 
@@ -2189,6 +2198,27 @@ machine):**
         - Attempt 2: within the limit (r 1.1007).
         - Local A/B with no CPU limit: ln r −0.025 (95 % interval −0.152 to
           +0.102), which rules out +0.266.
+      - Open investigation, the full run at the close of 9c (2026-11-27):
+        the full local run that closes each phase (`docs/RUNBOOK.md`,
+        section 9) did not pass. Two runs gave a page p95 in the steady
+        state of 1.23 s and 2.0 s, against 217 ms at the close of 9b (D36,
+        **Results** table, row "After, workload model") and the ceiling of
+        500 ms.
+        - Same workload as the D36 model: 1,150 users, 20–40 s between
+          pages, about 34.5 requests/s, 0 % failed, 100 % of checks, and no
+          page with another tenant's employees.
+        - Same spec as the 9b run (4 vCPU, 15 GB, the stack and k6 on the
+          same machine): a container with an Intel Xeon at 2.30 GHz, over
+          the tree of #88 (42bf78d plus the changes of D57). The CPU model of the 9b run is
+          not recorded.
+        - Probably related to the level shift of +96 % noted above
+          (94e2020, D43). That shift was measured in the short CI run, so the
+          link is not measured yet. The comparison that
+          confirms or rules it out: the tree of the 9b close (ae25e87)
+          against the tree of #88, on the same machine.
+        - It is investigated in its own pull request, and Phase 9c does not
+          close until then and the user decides (ROADMAP, Fase 9c,
+          **Estado**).
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.
@@ -5567,6 +5597,146 @@ Supabase starts.
   which rules out +0.266. The limit of 1.20 does not change. The position
   effect stays an open observation, with no new runs. The closing is also
   written in D36.
+
+---
+
+## D57 — Identity Between Scalia Apps: `auth_uid` as the Key and the Email in One Form
+
+**Decision (2026-11-27):** Scalia Nexo ships before Scalia HR. In Nexo's
+release 2, Scalia HR users will sign in to Nexo with their HR account. This
+decision only prepares the ground: one migration stores `public.users.email` in
+one form, and the rules below are what later phases build. The app has no code
+or reference to Nexo, and nothing here sets prices or plans.
+
+**The email in one form (`20261127010000_d57_email_normalized.sql`):**
+- It first looks for users of one tenant whose emails differ only in case or
+  surrounding spaces (`tenant_id`, `lower(btrim(email))`), soft-deleted and
+  anonymized rows included, since the UNIQUE covers every row. If there is
+  any, it stops and changes nothing; it never merges or deletes. The message
+  names the tenants and the user ids, never the emails (D27, D53).
+- It sets `email = lower(btrim(email))` where it is not, and adds
+  `CHECK (email = lower(btrim(email)))` as `users_email_normalized`.
+  `UNIQUE (tenant_id, email)` stays. `btrim` removes spaces, not tabs or line
+  breaks, so an email with those would pass the CHECK as it is; no write path
+  takes such text today.
+- Every write path stores that form, so the CHECK never rejects a valid
+  insert:
+  - `anonymize_user()` (D10) writes `anon-xxxxxxxx@removed.local`; the token
+    keeps `ANON-` in the names. The migration redefines it before adding the
+    CHECK, with `CREATE OR REPLACE` and the same body otherwise, so its owner
+    and grants stay (EXECUTE for `authenticated` and `prisma_app`, none for
+    `anon`).
+  - `createTenant()` inserts `lower(btrim(email))`, in SQL, the same
+    expression as the CHECK.
+  - `scripts/link-owner.sh` inserts and looks up `lower(btrim(:'email'))`.
+  - `supabase/seed.sql`, the demo employees in the migrations, `load/seed.mjs`
+    and the integration helpers already write lower-case emails without
+    spaces; `scripts/e2e-accounts.mjs` writes only `auth_uid`.
+  - No trigger copies from `auth.users` (there is no `handle_new_user`): none
+    in the migrations, and `pg_trigger` has none on `auth.users` after
+    `supabase db reset`. The access token hook (D9, D21) writes no email.
+- **D22:** a CHECK narrows a constraint, which D22 counts as a contract step.
+  It ships in one release because no write path of the running or the
+  previous image produces another form: GoTrue stores a new account's email in
+  lower case (tested), `createTenant()` copied that value, and
+  `anonymize_user()` changes in the same migration, before the CHECK. The
+  backfill is one `UPDATE`; `users` has one row per employee.
+- In `auth.users` the email is unique in the whole instance; in `public.users`
+  it is unique per tenant. Since D13 a person at two customers has two
+  accounts, so those two accounts need two different emails.
+- `public.users.email` and `auth.users.email` are not synced; they are equal
+  by construction for users with an `auth_uid`. Two exceptions: an anonymized
+  user (D10 rewrites `public.users`, and `auth.users` keeps the address) and,
+  while an e2e run lasts, the demo employees linked to the e2e accounts (D44).
+  Before Nexo's release 2, an anonymization and an offboarding must also block
+  the auth account (ban or delete it) and revoke its sessions: D10 does not
+  touch `auth.users`, and the hook does not read `users.status`.
+
+**Identity between apps (rules for Phase 13 on):**
+- The key between apps is `auth_uid`. In OIDC, `sub` = `auth_uid`;
+  `tenant_id` and `slug` go as separate claims; the email and the employee
+  number are informative claims, sent only with the scope that authorizes
+  them. An app links an account by `sub`, never by email.
+  - Support access (D13) can bring the same `sub` with another `tenant_id`, so
+    the other app keys on `sub` and `tenant_id` together.
+  - The hook sets `tenant_id` to `''` when the person has no active tenant;
+    the other app refuses that. It emits no slug today; adding it is a
+    `CREATE OR REPLACE` that keeps EXECUTE for `supabase_auth_admin` only.
+  - The email claim comes from `public.users`, not `auth.users`, which keeps
+    the address after an anonymization.
+- Shared sign-in only through OIDC with PKCE. Never cookies on the parent
+  domain: that would break D21, where each tenant's subdomain holds its own
+  session. If the other app shares the registrable domain it is same-site with
+  HR, and today HR's cookies (`sb-…-auth-token`, `scalia_company`) have no
+  `__Host-` prefix; Phase 13 reviews that, with `Secure` and `SameSite`.
+- OIDC hygiene: redirect URIs registered exactly (no wildcards), `state` and
+  `nonce`, the client validates `iss`, `aud` and expiry, a return URL only from
+  an allow-list, and HR's own access token is never handed to the other app.
+- Per tenant:
+  - Activation in Admin Center, behind an RBP permission. The license itself
+    belongs to the platform (D12, the console of Phase 12), and the other app
+    reads it through a signed license lookup, without prices.
+  - Offboarding notice: an employee who leaves loses access to Nexo at once.
+    The offboarding webhook of Phase 13 (signed, with a timestamp, protected
+    against replay and handled idempotently) makes the other app end the
+    session and revoke its refresh token. An ID or access token HR already
+    issued lasts at most `jwt_expiry` (900 s, D34) until Phase 14 adds the
+    revocation mark, so the other app also checks the person's status before
+    a sensitive action. An anonymization (D10) sends a notice too.
+  - "Vincular mi cuenta", for a person who already has an account in the other
+    app. Ownership is proved by signing in to both accounts at that moment,
+    never by an email claim (sent with `email_verified`, informative only).
+    The emails it sends link only to HR's domain and its tenant subdomains
+    (D20).
+- Provider, evaluated in Phase 13 and not chosen now: first Supabase Auth's
+  OAuth 2.1/OIDC Server (beta; PKCE, ID tokens, JWKS; its users count as
+  MAUs), with a standard OIDC client on Nexo's side (Node, without Supabase).
+  A provider of our own only if that does not cover. Phase 13 checks whether
+  the server runs the access token hook and whether ID tokens carry custom
+  claims (else userinfo), whether the pinned Supabase CLI runs it locally,
+  and that a remote sync with the hook disabled (D9) also stops the other
+  app's sign-in.
+- Nexo's release 2 needs HR's hosted Auth, which exists from Phase 23
+  (Principle 8).
+- Certificate `*.hr.<domain>`: with Cloudflare in full setup, Universal SSL
+  covers one level of subdomain only. Options, to decide in Phase 23:
+  - Let's Encrypt with DNS-01, without the proxy (no cost). Those hosts lose
+    the CDN and the proxy that writes the client IP that D28 reads.
+  - The zone in CNAME setup (Business or Enterprise plan).
+  - Advanced Certificate Manager (paid).
+- LFPDPPP: Phase 11 defines whether Scalia is the encargado (the customer is
+  the responsable) or the responsable. As encargado, the HR → Nexo flow goes in
+  the processing contract and in the customer's privacy notice; as
+  responsable, the DPCS covers it. To be validated with legal counsel.
+- Domain to be confirmed (`scalia.mx` assumed). As of D57, D15, D21 and the
+  ROADMAP use `scaliahr.com` as the example.
+
+**Tests (against the local database, `email-normalized.test.ts`):**
+- An email with upper case or surrounding spaces is rejected by the CHECK.
+- Two users of one tenant cannot share an email that differs only in case:
+  the CHECK rejects the variant and the UNIQUE the normalized duplicate.
+- The same email in two tenants is still allowed.
+- `public.users.email` equals `auth.users.email` for every user whose
+  `auth_uid` has its auth account. Left out, and counted in the output: users
+  without `auth_uid`, users whose `auth_uid` no longer has an account (fixtures
+  other suites leave in the demo tenant), and anonymized users.
+- GoTrue stores a new account's email in lower case.
+- The migration's collision check, run inside a rolled-back transaction with
+  the CHECK dropped, stops with the tenant and the user ids and changes no
+  row.
+- The migration's backfill and CHECK, run the same way on a row written in
+  another form, normalize it and leave the other rows untouched.
+- Also: `create-tenant.test.ts` signs up with the email in upper case and with
+  spaces and finds it stored in one form; `anonymize-user.test.ts` expects the
+  lower-case placeholder; `integration/link-owner.test.ts` mirrors the script's
+  SQL, and `scripts/link-owner.test.ts` checks that the script's INSERT
+  normalizes the email.
+
+**Checks:** `supabase db reset` at zero; RLS on `users` still ENABLE + FORCE;
+`npm run db:sync` without changes to `schema.prisma` (Prisma does not model
+CHECK constraints). `turbo.json` gains the `db:sync` task, which the root
+script needed and was missing, with `DATABASE_URL` and `DIRECT_URL` passed
+through.
 
 ---
 
