@@ -2381,7 +2381,8 @@ machine):**
           2.10GHz (2,100 MHz), 4 vCPU, 15.7 GiB (16,473,316 kB). The tools
           are in `scripts/perf/` (its README says how to repeat each step)
           and every measured line, with the machine, is in
-          `scripts/perf/results/`. CPU is in µs per request; memory in MiB.
+          `scripts/perf/results/`. CPU is in µs per request; memory in MiB,
+          as the cgroup counts it (page cache included).
           - **Method** (`scripts/perf/route-cpu.sh`). Each tree on its own
             images and database, as above, with the full run's seed
             (`load/seed.mjs`: 1,000 + 3 × 50 employees). Then each route of
