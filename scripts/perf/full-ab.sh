@@ -55,9 +55,13 @@ for arm in A B; do
   spec=${!arm}; TAG[$arm]="$(spec_tag "$spec")"; DIR[$arm]="$(perf_tree "$(spec_rev "$spec")")"
   perf_build "${DIR[$arm]}" "${TAG[$arm]}"
 done
+# Resume: the measured passes already in the TSV for this label are skipped, so
+# a series cut short (a restart of the machine) goes on from the next pass.
+done_n="$(awk -F'\t' -v l="$LABEL" 'NR > 1 && $1 == l' "$TSV" | wc -l)"
 prev="" n=0 w=0
 for (( i=0; i<${#SEQ}; i++ )); do
   arm=${SEQ:$i:1}
+  if (( n < done_n )); then n=$((n+1)); prev=""; continue; fi
   if [ "$arm" != "$prev" ]; then
     perf_switch "${DIR[$arm]}" "${TAG[$arm]}"; w=$((w+1)); pass "w$w-$arm" "$arm" "${TAG[$arm]}" 0
   fi

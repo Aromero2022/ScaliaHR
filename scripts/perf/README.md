@@ -47,8 +47,11 @@ node scripts/perf/analyze-ab.mjs scripts/perf/results/<label>.tsv
   section 9 (1,150 users, 20–40 s between pages). Each switch of tree has one
   unmeasured warm-up.
 - The analysis pairs adjacent passes, takes d = ln(p95 B) − ln(p95 A) per
-  pair, and gives the mean with a Student t interval. With ABBA, the SD is
-  pooled within the two orders of a pair (2 degrees of freedom, t = 4.303).
+  pair, and gives the mean with a Student t interval. With ABBA then BAAB
+  (`ABBABAAB`, 8 passes), the SD is pooled within the two orders of a pair
+  (2 degrees of freedom, t = 4.303).
+- Run it again with the same label to resume: the measured passes already in
+  the TSV are skipped, and the next one starts with a switch and a warm-up.
 
 ## Experiments
 
