@@ -209,21 +209,34 @@ describe("Table (D43)", () => {
     { key: "link", header: "Acciones", action: true, cell: (r: { id: string; name: string }) => createElement("a", { href: `/e/${r.id}` }, "Ver perfil") },
   ];
 
-  it("is a table with a caption and column headers from 768 px, and cards under it", async () => {
+  it("renders each row once: a table from 768 px and a card under it, with explicit table roles", async () => {
     await render(createElement(Table<{ id: string; name: string }>, { caption: "Empleados", columns, rows: [{ id: "1", name: "Ana" }, { id: "2", name: "Luis" }], rowKey: (r) => r.id, empty: "Nadie" }));
-    const table = container.querySelector("table")!;
-    expect(table.parentElement!.className.split(" ")).toEqual(expect.arrayContaining(["hidden", "md:block"]));
-    expect(table.querySelector("caption")!.textContent).toBe("Empleados");
-    expect([...table.querySelectorAll("th")].map((th) => th.getAttribute("scope"))).toEqual(["col", "col"]);
-    expect(table.querySelector("th:last-child .sr-only")!.textContent).toBe("Acciones");
+    // One markup for both layouts (D36, 2026-11-28): no second copy of the rows.
+    expect(container.querySelector("table, ul, li, dl")).toBeNull();
+    expect(container.textContent!.split("Ana")).toHaveLength(2);
 
-    const cards = container.querySelector("ul")!;
-    expect(cards.className).toContain("md:hidden");
-    expect(cards.getAttribute("aria-label")).toBe("Empleados");
-    const first = cards.querySelector("li")!;
-    expect([...first.querySelectorAll("dt")].map((d) => d.textContent)).toEqual(["Empleado"]);
-    expect(first.querySelector("dd")!.className).toContain("break-words");
-    expect(first.querySelector("a")!.getAttribute("href")).toBe("/e/1");
+    const table = container.querySelector("[role='table']")!;
+    expect(table.getAttribute("aria-label")).toBe("Empleados");
+    expect(table.className.split(" ")).toEqual(expect.arrayContaining(["md:table"]));
+
+    const [head, body] = [...table.querySelectorAll(":scope > [role='rowgroup']")];
+    // The header row stays in the accessibility tree at every width, hidden from view under 768 px.
+    expect(head.className.split(" ")).toEqual(expect.arrayContaining(["sr-only", "md:not-sr-only", "md:table-header-group"]));
+    const headers = [...head.querySelectorAll("[role='row'] > [role='columnheader']")];
+    expect(headers.map((h) => h.textContent)).toEqual(["Empleado", "Acciones"]);
+    expect(headers[1].querySelector(".sr-only")!.textContent).toBe("Acciones");
+
+    const rows = [...body.querySelectorAll(":scope > [role='row']")];
+    expect(rows).toHaveLength(2);
+    const [name, action] = [...rows[0].querySelectorAll(":scope > [role='cell']")];
+    expect(name.className.split(" ")).toEqual(expect.arrayContaining(["block", "md:table-cell", "break-words"]));
+    // The card's label is for sight only: the column header already names the cell.
+    const label = name.querySelector("[aria-hidden='true']")!;
+    expect(label.textContent).toBe("Empleado");
+    expect(label.className).toContain("md:hidden");
+    expect(name.textContent).toBe("EmpleadoAna");
+    expect(action.querySelector("[aria-hidden='true']")).toBeNull();
+    expect(action.querySelector("a")!.getAttribute("href")).toBe("/e/1");
   });
 
   it("shows the empty text without a table", async () => {
