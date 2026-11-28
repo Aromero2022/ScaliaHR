@@ -2222,9 +2222,12 @@ machine):**
           close until then and the user decides (ROADMAP, Fase 9c,
           **Estado**). The first such pull request recorded the result
           below; the investigation is still open.
-        - **Result of the investigation (2026-11-28): the code, not the
-          machine.** The investigation stays open: the cause is narrowed to
-          the code, and its next step is for the user's decision (below).
+        - **Result of the investigation (2026-11-28): the code.** On the
+          same machine the code separates the trees, and the machine only
+          changes how large the gap is. The investigation stays open: the
+          cause is narrowed to the code but not isolated, and its next step
+          is for the user's decision (below). Memory in the tables is in
+          MiB.
           - **Method.** All local, in one container: Intel(R) Xeon(R)
             Processor @ 2.10GHz, 4 vCPU, 15.7 GiB (16,473,316 kB), with the
             stack and k6 on it.
@@ -2295,18 +2298,17 @@ machine):**
             - **D43 (94e2020)** is where the full run jumps, from 0.3–0.5 s
               to 8.5–9.8 s, and no later tree measured comes back down (D44
               and main stay at 4.5–7.6 s). It tips a margin that was already
-              eroded: D42 (e8459db) gave 298 ms and 523 ms, and its second
+              eroded at D42 (e8459db): 298 ms and 523 ms, and its second
               pass already failed the 500 ms threshold, against 137–308 ms
-              for the 9b close. D40, D41 and D42 were not bisected one by
-              one.
-            - **D44 (a9c4365)** gave 4.48 s and 7.63 s against D43's 8.52 s
-              and 9.80 s: lower in both passes, but within the spread of two
-              passes per tree, so an effect of its own is neither shown nor
-              ruled out. Its
-              "e2e before k6" happens only in the CI `docker` job; the local
-              full run has no e2e before it, so that part of D44 can only
-              touch the short CI run (the +96 % level shift above mixes it
-              with D43). The commits between a9c4365 and main were not
+              for the 9b close. D40 and D41 were not measured on their own.
+            - **D44 (a9c4365)** gave 4.48 s and 7.63 s: below D43's 8.52 s
+              and 9.80 s, and inside main's four passes (5.66–7.62 s), so
+              with two passes per tree no effect of D44 of its own can be
+              separated. Its "e2e before k6" happens only in the CI `docker`
+              job; the local full run has no e2e before it, so that part of
+              D44 can only touch the short CI run (the +96 % level shift
+              above mixes it with D43, and that CI series stays
+              uninvestigated: the full run does not measure it). The commits between a9c4365 and main were not
               measured one by one.
             - **The machine** changes how far past the limit the queue goes.
               The same code as main (the tree of #88, whose code is
@@ -2327,11 +2329,13 @@ machine):**
               ms (D42), 47 ms (D43) and 49 ms (main); a warm-up and a
               measured pass of one tree differ by up to 20 %, so these
               figures only say the cost grew across 9c, not by how much
-              each step.
-            - The web memory at full load is 0.4–0.9 GiB in the fast passes
-              and 2.2–3.6 GiB in the slow ones, and it falls after a major
-              collection (94e2020's second pass dropped from 3.6 GiB to
-              0.66 GiB 78 s in, with no failed request). Whether that is a
+              each step. (The warm-up and the measured pass differ by up to
+              22 %: e8459db 19.7 % and 16.2 %, 94e2020 21.8 % and 18.0 %.)
+            - The web memory at full load is 0.35–0.9 GiB in the fast
+              passes and 2.1–3.6 GiB in the slow ones, and it falls after a
+              major collection (94e2020's second pass began with the heap
+              its warm-up left, 3.6 GiB, and dropped to 0.66 GiB 78 s in,
+              with no failed request). Whether that is a
               cause (D43 allocating more, and the garbage collector's CPU)
               or an effect (the queue's requests in flight) is not
               measured.
