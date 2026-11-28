@@ -1,0 +1,55 @@
+From 6c4e39024ecc404c876eb66625d2b0146b767471 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 28 Nov 2026 07:09:38 +0000
+Subject: [PATCH] exp (no merge): without ToastProvider in the protected
+ layout, to measure D43
+
+---
+ apps/web/src/app/(protected)/layout.tsx | 3 ---
+ apps/web/src/components/ui/toast.tsx    | 3 +--
+ 2 files changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/apps/web/src/app/(protected)/layout.tsx b/apps/web/src/app/(protected)/layout.tsx
+index bed3b20..79a2d4c 100644
+--- a/apps/web/src/app/(protected)/layout.tsx
++++ b/apps/web/src/app/(protected)/layout.tsx
+@@ -7,7 +7,6 @@ import { NAV_ITEMS, filterNavByFlags } from "@/lib/navigation/nav-config";
+ import { SIDEBAR_COOKIE, isSidebarCollapsed } from "@/lib/navigation/shell";
+ import { DockNav, RailNav, SidebarNav, SignOutButton, type ShellNavItem } from "@/components/navigation/app-navigation";
+ import { getCurrentUser } from "@/lib/auth/current-user";
+-import { ToastProvider } from "@/components/ui/toast";
+ 
+ const SIDEBAR_PERMISSION_KEYS = [
+   ...new Set(
+@@ -49,7 +48,6 @@ export default async function ProtectedLayout({
+   const collapsed = isSidebarCollapsed((await cookies()).get(SIDEBAR_COOKIE)?.value);
+ 
+   return (
+-    <ToastProvider>
+     <div className="min-h-dvh bg-canvas">
+       <a
+         href="#contenido"
+@@ -80,6 +78,5 @@ export default async function ProtectedLayout({
+       </div>
+       <DockNav items={items} />
+     </div>
+-    </ToastProvider>
+   );
+ }
+diff --git a/apps/web/src/components/ui/toast.tsx b/apps/web/src/components/ui/toast.tsx
+index 6fa5c56..9e243cb 100644
+--- a/apps/web/src/components/ui/toast.tsx
++++ b/apps/web/src/components/ui/toast.tsx
+@@ -16,8 +16,7 @@ const ToastContext = createContext<{ success: (message: string) => void } | null
+ 
+ export function useToast() {
+   const context = useContext(ToastContext);
+-  if (!context) throw new Error("useToast must be used inside <ToastProvider>");
+-  return context;
++  return context ?? { success: () => {} };
+ }
+ 
+ export function ToastProvider({ children }: { children: ReactNode }) {
+-- 
+2.43.0
+

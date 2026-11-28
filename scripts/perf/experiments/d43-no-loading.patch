@@ -1,0 +1,27 @@
+From af2ed8ad144de7712aa6a1b9a489f8e49babab5c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 28 Nov 2026 07:09:38 +0000
+Subject: [PATCH] exp (no merge): without (protected)/loading.tsx, to measure
+ D43
+
+---
+ apps/web/src/app/(protected)/loading.tsx | 7 -------
+ 1 file changed, 7 deletions(-)
+ delete mode 100644 apps/web/src/app/(protected)/loading.tsx
+
+diff --git a/apps/web/src/app/(protected)/loading.tsx b/apps/web/src/app/(protected)/loading.tsx
+deleted file mode 100644
+index c3e95a5..0000000
+--- a/apps/web/src/app/(protected)/loading.tsx
++++ /dev/null
+@@ -1,7 +0,0 @@
+-import { SkeletonPage } from "@/components/ui/skeleton";
+-
+-// D43: one loading state for every protected page, inside the shell (the
+-// navigation stays). The skeleton appears only after 400 ms.
+-export default function Loading() {
+-  return <SkeletonPage />;
+-}
+-- 
+2.43.0
+

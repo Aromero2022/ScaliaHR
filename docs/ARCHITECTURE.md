@@ -2221,7 +2221,8 @@ machine):**
         - It is investigated in its own pull request, and Phase 9c does not
           close until then and the user decides (ROADMAP, Fase 9c,
           **Estado**). The first such pull request recorded the result
-          below; the investigation is still open.
+          below; the investigation is still open. (Updated below: the
+          second pull request, on 2026-11-28, identified its main part.)
         - **Result of the investigation (2026-11-28): narrowed to the
           code.** On this
           machine the code separates the trees (the A/B below). One earlier
@@ -2231,7 +2232,8 @@ machine):**
           migrations. The investigation stays open: the
           cause is narrowed to the code but not isolated, and its next step
           is for the user's decision (below). Memory in the tables is in
-          MiB.
+          MiB. (Updated below: on 2026-11-28 the main part was identified,
+          in "Isolating D43's per-page cost".)
           - **Method.** All local, in the container this investigation ran
             in: Intel(R) Xeon(R)
             Processor @ 2.10GHz, 4 vCPU, 15.7 GiB (16,473,316 kB), with the
@@ -2302,7 +2304,10 @@ machine):**
           - **Separated effects:**
             - **D43 (94e2020)** is where the full run jumps, from 0.3–0.5 s
               to 8.5–9.8 s, and no later tree measured comes back to the
-              0.3–0.5 s level (D44 and main stay at 4.5–7.6 s). It tips a margin that was already
+              0.3–0.5 s level (D44 and main stay at 4.5–7.6 s). ("Later tree" means a
+              later commit of main. A variant of 94e2020 that renders each row
+              once, which is not one, does come back in three of its four
+              passes: see "Isolating D43's per-page cost" below.) It tips a margin that was already
               eroded at D42 (e8459db): 298 ms and 523 ms, so one of its two
               passes already exceeded 500 ms, against 137–308 ms for the 9b
               close. D40 and D41 were not measured on their own.
@@ -2323,7 +2328,8 @@ machine):**
               2.10 GHz: one pair of machines, on different days. The 9b
               tree ran only on this machine; at the 9b close D36 measured
               217 ms on a 4 vCPU machine whose CPU model is not recorded.
-          - **Mechanism:** the single web process saturates. From D43 on,
+          - **Mechanism:** the single web process saturates. (Inferred from
+            its CPU and the queue; no event-loop measure was taken.) From D43 on,
             it serves about 30–33.5 requests/s against the 34.8 the workload
             asks for, its CPU stays at 113–125 %, and the queue makes the
             p95 grow to seconds; before D43 it keeps up at 34.8 requests/s
@@ -2347,7 +2353,8 @@ machine):**
               cause (D43 allocating more, and the garbage collector's CPU)
               or an effect (the queue's requests in flight) is not
               measured.
-          - **Which part, not isolated yet.** Candidates from D43's diff:
+          - **Which part, not isolated yet.** (Identified later, below, for
+            its main part.) Candidates from D43's diff:
             `Table` renders every row twice (the table and the cards under
             768 px, one of them hidden), and `/employees` is 6 of the 14
             weights of the page mix; `(protected)/loading.tsx` puts every
@@ -2371,6 +2378,249 @@ machine):**
             2. Or a decision on the full run's setup (one web process,
                1,150 users at 20–40 s), which this investigation does not
                change.
+        - **The user's decision (2026-11-27, the user's date; the options
+          above are dated 2026-11-28 in UTC): option 1.** D43's per-page
+          cost is to be isolated in a pull request of its own, in Phase 9c
+          (the one that wrote what follows). The
+          full run's setup (one web process, 1,150 users at 20–40 s between
+          pages) does not change. Phase 9c keeps its closing criterion
+          pending.
+        - **Isolating D43's per-page cost (2026-11-28).** All local, on the
+          machine of the result above: Intel(R) Xeon(R) Processor @
+          2.10GHz (2,100 MHz), 4 vCPU, 15.7 GiB (16,473,316 kB). The tools
+          are in `scripts/perf/` (its README says how to repeat each step)
+          and every line these tools measured, with the machine, is in
+          `scripts/perf/results/`; the earlier runs of D36 above are
+          recorded here only. CPU is in µs per request; memory in MiB, as
+          the cgroup counts it (page cache included).
+          - **Method** (`scripts/perf/route-cpu.sh`). Each tree on its own
+            images and database, as above, with the full run's seed
+            (`load/seed.mjs`: 1,000 + 3 × 50 employees). Then each route of
+            the page mix alone, at a fixed 15 requests/s (below the 34.8
+            that the full run's load asks for, so without a queue) for 60 s,
+            after a 15 s warm-up, with 40 signed-in users of the big tenant.
+            - The cgroup counts the web container only: the database, the
+              auth service and k6 share the 4 vCPU and are not in these
+              numbers. The ranking of routes and trees is expected to carry
+              to the full run, which tested one such pair (below); the
+              absolute CPU does not carry (40 users without think time, each
+              route alone).
+            - The CPU is `usage_usec` of the web container's cgroup
+              `cpu.stat` (the host's unified hierarchy), read before and
+              after, divided by the requests, minus the idle rate measured
+              for 30 s before the first route (3.4 to 4.3 ms of CPU per
+              second).
+            - Every request answered 200 and none was dropped (about 900
+              per route). "Mix" weighs the routes as `load/pages.js` does:
+              14 in all, 6 of them /employees (3 plain, 1 `?page=2`, 2
+              `?q=Empleado%201`). "/employees (3)" is the mean of those three
+              routes with the same weights.
+          - **By tree:**
+
+            | Tree | /dashboard | /employees | ?page=2 | ?q= | /org-chart | /performance | /skills-hub | /profile | /employees (3) | Mix |
+            |---|---|---|---|---|---|---|---|---|---|---|
+            | ae25e87 (9b close) | 29,504 | 34,669 | 35,352 | 32,356 | 23,181 | 26,391 | 22,997 | 28,505 | 34,012 | 30,003 |
+            | 8f13442 (D40) | 33,824 | 36,686 | 35,497 | 33,071 | 25,065 | 27,218 | 26,559 | 29,222 | 35,283 | 32,032 |
+            | cdb1ec2 (D41) | 31,289 | 35,828 | 34,493 | 33,853 | 24,904 | 27,499 | 26,134 | 28,866 | 34,947 | 31,318 |
+            | e8459db (D42) | 32,024 | 35,294 | 35,522 | 35,885 | 26,869 | 27,729 | 26,473 | 29,942 | 35,529 | 31,999 |
+            | 94e2020 (D43) | 32,684 | 48,831 | 50,240 | 48,008 | 26,683 | 28,602 | 27,010 | 31,051 | 48,792 | 38,054 |
+
+            | Tree | p95 at 15/s, lowest–highest route | p95 /employees | Web memory, lowest reading–highest peak |
+            |---|---|---|---|
+            | ae25e87 | 36.4–60.4 ms | 50.9 ms | 156–235 |
+            | 8f13442 | 38.0–60.5 ms | 58.2 ms | 143–278 |
+            | cdb1ec2 | 39.6–62.3 ms | 52.6 ms | 190–312 |
+            | e8459db | 39.4–63.6 ms | 54.0 ms | 166–248 |
+            | 94e2020 | 38.4–96.7 ms | 68.1 ms | 220–345 |
+
+            - D40 to D42 add 4 to 7 % to the mix over the 9b close; D43
+              adds 19 % over D42 (+6.1 ms), almost all of it on /employees
+              (3) (+37 %, +13.3 ms). The other routes move −1 to +4 %.
+          - **94e2020 without each candidate.** Branches `exp/d43-*` over
+            94e2020, never merged; their patches are in
+            `scripts/perf/experiments/`. The series opens and closes with
+            94e2020 itself, to see the drift of the machine: 0.2 % on
+            /employees (3) (its three routes moved −2.4 to +4.5 %) and 1.1 %
+            on the mix between the two, and up to 7.6 % (2.4 ms, /profile)
+            on a single route.
+
+            | 94e2020 variant | /dashboard | /employees | ?page=2 | ?q= | /org-chart | /performance | /skills-hub | /profile | /employees (3) | Mix | p95 /employees | Web memory |
+            |---|---|---|---|---|---|---|---|---|---|---|---|---|
+            | As is (first) | 33,329 | 48,540 | 46,557 | 44,948 | 26,799 | 31,005 | 28,086 | 32,179 | 47,012 | 37,938 | 66.8 ms | 138–294 |
+            | Each row rendered once by `Table` (no cards) | 33,204 | 39,250 | 40,303 | 36,900 | 27,217 | 29,495 | 27,546 | 33,161 | 38,642 | 34,170 | 54.3 ms | 186–317 |
+            | Without `(protected)/loading.tsx` | 34,138 | 42,915 | 42,957 | 42,862 | 25,175 | 28,022 | 27,490 | 30,558 | 42,904 | 35,651 | 67.5 ms | 144–307 |
+            | Without `ToastProvider` in the layout | 35,315 | 51,090 | 51,323 | 48,215 | 27,954 | 32,667 | 28,182 | 31,494 | 50,171 | 39,995 | 85.7 ms | 151–309 |
+            | The pages and components D43 rewrote, back to D42 | 34,416 | 37,407 | 36,960 | 36,801 | 28,434 | 31,027 | 27,614 | 29,211 | 37,131 | 33,810 | 51.1 ms | 132–200 |
+            | As is (last) | 32,838 | 47,385 | 46,441 | 46,986 | 26,314 | 30,911 | 26,408 | 29,740 | 47,095 | 37,526 | 77.8 ms | 136–295 |
+
+            Against D42 (35,529 on /employees (3), 31,999 on the mix), D43's
+            gap is 11,525 and 5,733 with the mean of the two runs of 94e2020
+            as is above (47,054 and 37,732), or 13,263 and 6,055 with its
+            run in the tree series (48,792 and 38,054); the shares below are
+            against both. One run per variant: between the two runs as is a
+            single route moved up to 2.4 ms, and the `ToastProvider` variant
+            came out about 3 ms higher on /employees (3), so a part under
+            about 2 to 3 ms is not ranked. D42 comes from the tree series,
+            not from this one.
+            - **The double row render of `Table`:** rendering each row once
+              takes 8,412 off /employees (63–73 % of the gap) and 3,562 off
+              the mix (59–62 %). `Table` renders every row twice, as a table
+              row (`md` and up) and as a card (below `md`), and /employees
+              is the only route of the mix that uses it.
+            - **`(protected)/loading.tsx`** (Suspense with streaming):
+              without it, 4,150 off /employees (31–36 %) and 2,081 off the
+              mix (34–36 %): indicative, little above what a single run
+              can vary here. Of those 2,081, about 1,780 come from
+              /employees and
+              the rest from /org-chart and /performance; /dashboard does not
+              drop.
+            - **`ToastProvider`:** not seen to lower the CPU in one run, and
+              not measured again. It comes out above both runs as is
+              (+3,117 on /employees (3), +2,263 on the mix), more than the
+              0.2 % and 1.1 % drift between them; not explained further.
+            - **The rewritten pages and the es-MX dictionary:** the pages
+              and components D43 rewrote (14 files), back to D42, take
+              9,923 off /employees
+              (75–86 %) and 3,922 off the mix (65–68 %). D42's /employees
+              page renders a plain `<table>`, so this variant also removes
+              the double render: beyond it, reverting the rest of the
+              rewrite takes about 1.5 ms more off /employees and 0.4 ms more
+              off the mix, within a single run's spread. The variant keeps
+              `components/ui`, `loading.tsx`, `ToastProvider` and es-MX
+              (the D43 components need its keys), and it is 1.8 ms over D42
+              on the mix, about the size of `loading.tsx` alone: es-MX adds
+              nothing measurable here (it was not removed alone).
+            - The two parts that drop overlap: measured alone, they add up
+              to 95–109 % of the gap on /employees and 93–98 % on the mix.
+              They were not measured together.
+          - **An estimate of how it reaches the full run**, not measured as
+            such, and good for the order of the trees only: if all of the
+            34.8 requests/s that the full run's load asks for were pages of
+            the mix, they would cost about 1.11 CPU-seconds per second at
+            D42's 32.0 ms, 1.19 with each row rendered once (34.2 ms) and
+            1.32 at D43's 38.1 ms. On k6's hold, the web container used 110
+            to 119 % in the A passes below and 88 to 100 % in three of the
+            four B passes (119 % in the fourth). D42 against D43 fits (D42
+            near the edge, its 523 ms pass; D43 over it); B's place against
+            D42 is not resolved by it, the amounts do not fit (B used less
+            than the estimate), and what else the web process spends under
+            load is not measured here.
+          - **Confirmation with the full run** (`scripts/perf/full-ab.sh`,
+            ABBA and then BAAB, the method of the A/B above): A is 94e2020
+            as is, B is 94e2020 with each row rendered once by `Table`
+            (`exp/d43-table-once`, bc1fe11). Web CPU and memory are taken
+            over k6's hold (2 to 6 min of k6's clock, after the seed), by
+            `scripts/perf/pass-stats.mjs`.
+
+            | Pass | Tree | p95 steady | Requests/s | Failed | Checks | k6 exit | Web CPU | Web memory |
+            |---|---|---|---|---|---|---|---|---|
+            | 1 | A | 8.71 s | 31.18 | 0 % | 100 % | 99 | 119 % | 3,589 |
+            | 2 | B | 468 ms | 34.78 | 0 % | 100 % | 0 | 100 % | 1,511 |
+            | 3 | B | 1.32 s | 34.56 | 0 % | 100 % | 99 | 119 % | 1,223 |
+            | 4 | A | 6.64 s | 32.97 | 0 % | 100 % | 99 | 117 % | 3,594 |
+            | 5 | B | 346 ms | 34.80 | 0 % | 100 % | 0 | 95 % | 1,466 |
+            | 6 | A | 1.61 s | 34.64 | 0 % | 100 % | 99 | 110 % | 2,192 |
+            | 7 | A | 1.66 s | 34.55 | 0 % | 100 % | 99 | 110 % | 3,680 |
+            | 8 | B | 218 ms | 34.88 | 0 % | 100 % | 0 | 88 % | 861 |
+
+            - ln(B/A) of each adjacent pair: −2.924 (ABBA, A first), −1.613
+              (ABBA, B first), −1.539 (BAAB, B first), −2.034 (BAAB, A
+              first). Mean **−2.027**: an index of how far apart the trees
+              are near saturation, not a speed-up factor (the pairs give B
+              at 0.05 to 0.21 times A). SD pooled within the two orders of a
+              pair, A first (−2.924, −2.034) and B first (−1.613, −1.539):
+              0.447 (2 degrees of freedom), SE 0.223; 95 % interval with
+              Student's t (df 2, 4.303): **−2.988 to −1.067**, wide with 2
+              degrees of freedom. The interval does not reach 0, B is below
+              A in all four pairs (one-sided sign test, p = 1/16), and all
+              four B passes are below all four A passes.
+            - The pairs with A first and those with B first differ by about
+              0.9 (an effect of the order or of the half, which this design
+              does not separate): the SD pooled within the two orders keeps
+              that out of the SE.
+            - Every page answered 200 and none showed another tenant's
+              employees (isolation 100 % in all 8). k6 exited 0 on three B
+              passes (2, 5 and 8) and 99, the p95 threshold, on the other
+              five. B served the whole load (34.6 to 34.9 requests/s) in
+              its four passes; A, 31.2 to 34.6.
+            - Both trees came out faster in the BAAB half (A 1.61 and
+              1.66 s against 8.71 and 6.64 s; B 346 and 218 ms against 468
+              ms and 1.32 s): a drift of the machine of unknown cause, which
+              the ABBA then BAAB order cancels in the mean only when it is
+              linear. Passes 2 and 3 ran back to back on the same database,
+              seeded again but not reset; pass 7 followed the resume below,
+              with a switch and a database reset.
+            - B's web memory stays lower (0.8 to 1.5 GiB against 2.1 to
+              3.6), as in the fast passes of the A/B above.
+            - This machine's container restarted at 10:53 UTC, after pass 6
+              was written. Pass 7 ran again from its start, after a switch
+              and a warm-up (the resume of `full-ab.sh`). The images were
+              the same: only a label with the tree's commit was added (same
+              layers), so the web image id changed.
+            - All 8 passes ran with the earlier CPU window of `full-ab.sh`,
+              counted from before the seed (about 20 to 30 s early). Their
+              web CPU and memory were recomputed over k6's hold from the
+              saved samples; the k6 fields do not change. The A/B above
+              also counted its window from the pass's start (`docker stats`,
+              2:10 to 6:00 of the pass, seed included); its p95 is k6's own
+              and does not change.
+          - **Cause (2026-11-28): its main part is identified and confirmed
+            on the full run, not all of it.** The double row render of
+            `Table` on /employees is the largest part of D43's per-page
+            cost, and the full run responds to it.
+            - Per route at 15 requests/s, one run per variant: 63–73 % of
+              D43's increase on /employees and 59–62 % of the mix's.
+              `(protected)/loading.tsx` is a second part, indicative (31–36
+              %), measured per route only. Reverting the rest of the page
+              rewrite takes about 0.4 ms more off the mix, within a single
+              run's spread.
+            - Not seen in one run: `ToastProvider` (removing it did not lower
+              the CPU) and the es-MX dictionary (nothing measurable left with
+              the pages back; it was not removed alone).
+            - On the full run, rendering each row once takes the p95 from
+              1.6–8.7 s to 218 ms–1.32 s, lower in all four pairs (ln
+              −2.03, interval −2.99 to −1.07). Three of the four B passes
+              are under the limit of 500 ms. The fourth, at 1.32 s, ran at
+              119 % web CPU like the slow A passes: the web process is still
+              near the load it can serve. The other parts are not separated
+              on the full run: `(protected)/loading.tsx` (indicative, per
+              route only) and D40 to D42's 4 to 7 % on the mix.
+            - Not measured here: the full run of B against D42 or main (it
+              compares 94e2020 with and without the double render), D42 in
+              the same series as the variants, and
+              the CI's short run, where D36 noted the +96 % level shift at
+              94e2020; the link to this cause is plausible there, not
+              measured.
+            - Whether writing this cause closes the investigation under the
+              rule above, or it stays open until the fix's full run, is the
+              user's decision. Phase 9c does not close: its closing
+              criterion (the full run under 500 ms) is still pending, and
+              closing it is the user's decision.
+          - **Proposed pull request, for the user's decision** (not in
+            this one; in Phase 9c, before it closes): "D43: `Table` renders
+            each row once".
+            1. `Table` renders each row once for both layouts, instead of a
+               table row and a card per row. Two ways, for the user to
+               choose: one markup that is a row from `md` up and a card
+               below it, by CSS, with explicit table roles so assistive
+               technology still reads a table; or the table alone at every
+               width, inside its scroll container, without the cards. Either
+               keeps the 9c rules: axe in the e2e (D44) and the captures at
+               360, 768 and 1280 px, approved again.
+            2. Measured like here, with what this pull request lacked:
+               - per-route CPU (`scripts/perf/route-cpu.sh`) at least three
+                 times per tree, in varied order, against D42, 94e2020 and
+                 the variant here (38,642 on /employees (3)), and the fix
+                 together with `loading.tsx` removed;
+               - the size of the HTML and of the RSC payload of /employees
+                 per tree;
+               - the full run as an A/B against main (`scripts/perf/full-ab.sh`,
+                 ABBA then BAAB; 16 passes give 6 degrees of freedom), with
+                 the CPU of the host besides the web container's;
+               - the CI's short run, the one D56 reads, once per tree.
+            3. If a pass of the full run is still above 500 ms, the next
+               part is `(protected)/loading.tsx`, measured the same way, in
+               that pull request or the next.
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.

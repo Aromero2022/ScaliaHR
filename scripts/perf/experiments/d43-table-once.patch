@@ -1,0 +1,71 @@
+From bc1fe11cd2480363e5bedd76536473c09d9aede2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 28 Nov 2026 07:09:37 +0000
+Subject: [PATCH] exp (no merge): Table renders each row once (no cards), to
+ measure D43
+
+---
+ apps/web/src/components/ui/table.tsx | 29 ++--------------------------
+ 1 file changed, 2 insertions(+), 27 deletions(-)
+
+diff --git a/apps/web/src/components/ui/table.tsx b/apps/web/src/components/ui/table.tsx
+index 8e3e1b7..cc7413c 100644
+--- a/apps/web/src/components/ui/table.tsx
++++ b/apps/web/src/components/ui/table.tsx
+@@ -1,4 +1,4 @@
+-import { Fragment, type ReactNode } from "react";
++import type { ReactNode } from "react";
+ 
+ // D43: a table from 768 px; under 768 px the same rows as cards, one <dl> per
+ // row (each label above its value), so a 320 px page never scrolls sideways (WCAG 1.4.10). The variant that
+@@ -26,9 +26,6 @@ export function Table<Row>({
+   rowKey: (row: Row) => string;
+   empty: ReactNode;
+ }) {
+-  const fields = columns.filter((c) => !c.action);
+-  const actions = columns.filter((c) => c.action);
+-
+   if (rows.length === 0) {
+     return <p className="px-6 py-12 text-center text-sm text-fg-subtle">{empty}</p>;
+   }
+@@ -36,7 +33,7 @@ export function Table<Row>({
+   return (
+     <>
+       {/* relative: visually hidden text (absolute) stays inside the scroller instead of widening the page. */}
+-      <div className="relative hidden overflow-x-auto md:block">
++      <div className="relative overflow-x-auto">
+         <table className="w-full text-left text-sm">
+           <caption className="sr-only">{caption}</caption>
+           <thead>
+@@ -61,28 +58,6 @@ export function Table<Row>({
+           </tbody>
+         </table>
+       </div>
+-      <ul className="divide-y divide-line md:hidden" aria-label={caption}>
+-        {rows.map((row) => (
+-          <li key={rowKey(row)} className="relative px-4 py-4">
+-            {/* Each label above its value, full width: at 320 px a side column of labels leaves no room for the values. */}
+-            <dl className="space-y-3 text-sm">
+-              {fields.map((c) => (
+-                <div key={c.key}>
+-                  <dt className="text-xs font-medium uppercase tracking-wider text-fg-subtle">{c.header}</dt>
+-                  <dd className="mt-1 min-w-0 break-words text-fg-muted">{c.cell(row)}</dd>
+-                </div>
+-              ))}
+-            </dl>
+-            {actions.length > 0 && (
+-              <div className="mt-3 flex flex-wrap gap-3">
+-                {actions.map((c) => (
+-                  <Fragment key={c.key}>{c.cell(row)}</Fragment>
+-                ))}
+-              </div>
+-            )}
+-          </li>
+-        ))}
+-      </ul>
+     </>
+   );
+ }
+-- 
+2.43.0
+
