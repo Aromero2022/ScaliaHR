@@ -2376,6 +2376,99 @@ machine):**
           full run's setup (one web process, 1,150 users at 20–40 s between
           pages) does not change. Phase 9c keeps its closing criterion
           pending.
+        - **Isolating D43's per-page cost (2026-11-28).** All local, on the
+          machine of the result above: Intel(R) Xeon(R) Processor @
+          2.10GHz (2,100 MHz), 4 vCPU, 15.7 GiB (16,473,316 kB). The tools
+          are in `scripts/perf/` (its README says how to repeat each step)
+          and every measured line, with the machine, is in
+          `scripts/perf/results/`. CPU is in µs per request; memory in MiB.
+          - **Method** (`scripts/perf/route-cpu.sh`). Each tree on its own
+            images and database, as above, with the full run's seed
+            (`load/seed.mjs`: 1,000 + 3 × 50 employees). Then each route of
+            the page mix alone, at a fixed 15 requests/s (below the 34.8
+            of the full run, so without a queue) for 60 s, after a 15 s
+            warm-up, with 40 signed-in users of the big tenant.
+            - The CPU is `usage_usec` of the web container's cgroup
+              `cpu.stat` (the host's unified hierarchy), read before and
+              after, divided by the requests, minus the idle rate measured
+              for 30 s before the first route (3.4 to 4.3 ms of CPU per
+              second).
+            - Every request answered 200 and none was dropped (about 900
+              per route). "Mix" weighs the routes as `load/pages.js` does:
+              14 in all, 6 of them /employees (3 plain, 1 `?page=2`, 2
+              `?q=Empleado%201`).
+          - **By tree:**
+
+            | Tree | /dashboard | /employees | ?page=2 | ?q= | /org-chart | /performance | /skills-hub | /profile | /employees (3) | Mix |
+            |---|---|---|---|---|---|---|---|---|---|---|
+            | ae25e87 (9b close) | 29,504 | 34,669 | 35,352 | 32,356 | 23,181 | 26,391 | 22,997 | 28,505 | 34,012 | 30,003 |
+            | 8f13442 (D40) | 33,824 | 36,686 | 35,497 | 33,071 | 25,065 | 27,218 | 26,559 | 29,222 | 35,283 | 32,032 |
+            | cdb1ec2 (D41) | 31,289 | 35,828 | 34,493 | 33,853 | 24,904 | 27,499 | 26,134 | 28,866 | 34,947 | 31,318 |
+            | e8459db (D42) | 32,024 | 35,294 | 35,522 | 35,885 | 26,869 | 27,729 | 26,473 | 29,942 | 35,529 | 31,999 |
+            | 94e2020 (D43) | 32,684 | 48,831 | 50,240 | 48,008 | 26,683 | 28,602 | 27,010 | 31,051 | 48,792 | 38,054 |
+
+            | Tree | p95 at 15/s, lowest–highest route | p95 /employees | Web memory, lowest reading–highest peak |
+            |---|---|---|---|
+            | ae25e87 | 36.4–60.4 ms | 50.9 ms | 156–235 |
+            | 8f13442 | 38.0–60.5 ms | 58.2 ms | 143–278 |
+            | cdb1ec2 | 39.6–62.3 ms | 52.6 ms | 190–312 |
+            | e8459db | 39.4–63.6 ms | 54.0 ms | 166–248 |
+            | 94e2020 | 38.4–96.7 ms | 68.1 ms | 220–345 |
+
+            - D40 to D42 add 4 to 7 % to the mix over the 9b close; D43
+              adds 19 % over D42 (+6.1 ms), almost all of it on /employees
+              (+37 %, +13.3 ms). The other routes move −1 to +4 %.
+          - **94e2020 without each candidate.** Branches `exp/d43-*` over
+            94e2020, never merged; their patches are in
+            `scripts/perf/experiments/`. The series opens and closes with
+            94e2020 itself, to see the drift of the machine (0.2 % on
+            /employees and 1.1 % on the mix between the two).
+
+            | 94e2020 variant | /dashboard | /employees | ?page=2 | ?q= | /org-chart | /performance | /skills-hub | /profile | /employees (3) | Mix | p95 /employees | Web memory |
+            |---|---|---|---|---|---|---|---|---|---|---|---|---|
+            | As is (first) | 33,329 | 48,540 | 46,557 | 44,948 | 26,799 | 31,005 | 28,086 | 32,179 | 47,012 | 37,938 | 66.8 ms | 138–294 |
+            | Each row rendered once by `Table` (no cards) | 33,204 | 39,250 | 40,303 | 36,900 | 27,217 | 29,495 | 27,546 | 33,161 | 38,642 | 34,170 | 54.3 ms | 186–317 |
+            | Without `(protected)/loading.tsx` | 34,138 | 42,915 | 42,957 | 42,862 | 25,175 | 28,022 | 27,490 | 30,558 | 42,904 | 35,651 | 67.5 ms | 144–307 |
+            | Without `ToastProvider` in the layout | 35,315 | 51,090 | 51,323 | 48,215 | 27,954 | 32,667 | 28,182 | 31,494 | 50,171 | 39,995 | 85.7 ms | 151–309 |
+            | The pages and components D43 rewrote, back to D42 | 34,416 | 37,407 | 36,960 | 36,801 | 28,434 | 31,027 | 27,614 | 29,211 | 37,131 | 33,810 | 51.1 ms | 132–200 |
+            | As is (last) | 32,838 | 47,385 | 46,441 | 46,986 | 26,314 | 30,911 | 26,408 | 29,740 | 47,095 | 37,526 | 77.8 ms | 136–295 |
+
+            Against the mean of the two runs of 94e2020 as is (/employees
+            47,054, mix 37,732) and D42 (35,529 and 31,999, so a gap of
+            11,525 and 5,733):
+            - **The double row render of `Table`:** rendering each row once
+              takes 8,412 off /employees (73 % of the gap) and 3,562 off
+              the mix (62 %). `Table` renders every row twice, as a table
+              row (`md` and up) and as a card (below `md`), and /employees
+              is the only route of the mix that uses it.
+            - **`(protected)/loading.tsx`** (Suspense with streaming):
+              without it, 4,150 off /employees (36 %) and 2,081 off the mix
+              (36 %). Of those 2,081, about 1,780 come from /employees and
+              the rest from /org-chart and /performance; /dashboard does not
+              drop.
+            - **`ToastProvider`:** ruled out. Without it nothing drops; it
+              comes out above both runs as is (+3,117 on /employees, +2,263
+              on the mix), more than the drift between them, and that is
+              not explained here.
+            - **The rewritten pages and the es-MX dictionary:** the pages
+              and components D43 rewrote (14 files), back to D42, take
+              9,923 off /employees
+              (86 %) and 3,922 off the mix (68 %). D42's /employees page
+              renders a plain `<table>`, so this variant also removes the
+              double render: beyond it, the rest of the rewrite adds about
+              1.5 ms on /employees and 0.4 ms on the mix. The variant keeps
+              `components/ui`, `loading.tsx`, `ToastProvider` and es-MX
+              (the D43 components need its keys), and it is 1.8 ms over D42
+              on the mix, about the size of `loading.tsx` alone: es-MX adds
+              nothing measurable here.
+            - The two parts that drop add up to 5.6 ms of the mix's 5.7 ms
+              gap. Each was measured alone, not both together.
+          - **An estimate of how it reaches the full run**, not measured as
+            such: if all of the full run's 34.8 requests/s were pages of
+            the mix, they would cost about 1.11 CPU-seconds per second at
+            D42's 32.0 ms and 1.32 at D43's 38.1 ms, against the 113–125 % that the web
+            process reached in the slow passes. That fits D42 being at the
+            edge (its 523 ms pass) and D43 over it.
       - "The last ten commits" are counted when the pull request's
         verification table is filled, that is, when the CI of its head
         finishes.
