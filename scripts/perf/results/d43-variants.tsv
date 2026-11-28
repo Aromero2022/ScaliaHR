@@ -12,3 +12,6 @@ d43-variants	d43-table-once	bc1fe11	/employees	15	900	63.6	35539555	39488	39250	
 d43-variants	d43-table-once	bc1fe11	/employees?page=2	15	901	63.5	36526920	40540	40303	3369	40.1	54.4	100.00	0	288	297	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-variants	d43-table-once	bc1fe11	/employees?q=Empleado%201	15	901	63.7	33461545	37138	36900	3369	44.5	61.5	100.00	0	294	302	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-variants	d43-table-once	bc1fe11	/org-chart	15	901	63.4	24736267	27454	27217	3369	26.4	39.7	100.00	0	295	304	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-table-once	bc1fe11	/performance	15	900	63.4	26758795	29732	29495	3369	29.4	41.2	100.00	0	296	304	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-table-once	bc1fe11	/skills-hub	15	900	63.5	25005728	27784	27546	3369	28.2	40.2	100.00	0	297	306	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-table-once	bc1fe11	/profile	15	901	63.6	30092875	33399	33161	3369	34.6	49.3	100.00	0	309	317	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
