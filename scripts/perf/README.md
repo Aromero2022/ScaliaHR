@@ -34,7 +34,11 @@ node scripts/perf/summarize-routes.mjs scripts/perf/results/<label>.tsv
   `us_per_request_idle_corrected` subtracts the idle rate measured for 30 s
   before the routes.
 - The summary gives µs per request per route, `/employees` (its three routes)
-  apart, and the average weighted by the page mix.
+  apart, and the average weighted by the page mix. A route with any answer other
+  than 200 or a dropped iteration is written but shows as NA, and so do the
+  averages of its tree.
+- A failed k6 run, a missing summary or a cgroup counter that goes back stops the
+  script without writing the line.
 
 ## A/B with the full run
 
@@ -46,12 +50,16 @@ node scripts/perf/analyze-ab.mjs scripts/perf/results/<label>.tsv
 - Each pass is `npm run load:test` with the values of `docs/RUNBOOK.md`,
   section 9 (1,150 users, 20–40 s between pages). Each switch of tree has one
   unmeasured warm-up.
+- The web container's CPU and memory are sampled every 10 s and taken over k6's
+  hold (2 to 6 min of k6's clock, after the seed), by `pass-stats.mjs`.
+- A pass that fails stops the run and writes no line.
 - The analysis pairs adjacent passes, takes d = ln(p95 B) − ln(p95 A) per
   pair, and gives the mean with a Student t interval. With ABBA then BAAB
   (`ABBABAAB`, 8 passes), the SD is pooled within the two orders of a pair
   (2 degrees of freedom, t = 4.303).
 - Run it again with the same label to resume: the measured passes already in
-  the TSV are skipped, and the next one starts with a switch and a warm-up.
+  the TSV are skipped (each must be the one the sequence expects, with the same
+  tag), and the next one starts with a switch and a warm-up.
 
 ## Experiments
 
@@ -63,6 +71,9 @@ git worktree add -b exp/d43-table-once ../exp/d43-table-once 94e2020
 git -C ../exp/d43-table-once am "$PWD/scripts/perf/experiments/d43-table-once.patch"
 bash scripts/perf/route-cpu.sh <label> exp/d43-table-once=d43-table-once
 ```
+
+Images are built once per tree and tag; they carry the tree's commit as a label
+and are built again when it does not match.
 
 ## Results
 

@@ -12,11 +12,12 @@ import { SharedArray } from "k6/data";
 const BASE_URL = __ENV.BASE_URL ?? "http://localhost:3000";
 const SUPABASE_URL = __ENV.SUPABASE_URL ?? "http://localhost:54321";
 const ANON_KEY = __ENV.ANON_KEY;
+if (!ANON_KEY) throw new Error("ANON_KEY is not set: pass the local stack's anon key");
 const COOKIE = __ENV.COOKIE_NAME ?? "sb-localhost-auth-token";
 const ROUTE = __ENV.ROUTE ?? "/employees";
-const RATE = Number(__ENV.RATE ?? 15);
+const RATE = Number(__ENV.RATE || 15);
 const DURATION = __ENV.DURATION ?? "60s";
-const SESSIONS = Number(__ENV.SESSIONS ?? 40);
+const SESSIONS = Number(__ENV.SESSIONS || 40);
 const ACCOUNTS_FILE = __ENV.ACCOUNTS ?? "/out/accounts.json";
 const ACCOUNTS = new SharedArray("accounts", () => JSON.parse(open(ACCOUNTS_FILE)).accounts);
 const PASSWORD = new SharedArray("password", () => [JSON.parse(open(ACCOUNTS_FILE)).password])[0];
@@ -47,7 +48,7 @@ export function setup() {
         headers: { apikey: ANON_KEY, "Content-Type": "application/json" },
         tags: { kind: "auth" },
       });
-      if (res.status !== 200) throw new Error(`sign-in failed: ${res.status}`);
+      if (res.status !== 200) throw new Error(`sign-in failed for ${a.email}: ${res.status} ${String(res.body).slice(0, 200)}`);
       return sessionCookies(res.json());
     }),
   };
