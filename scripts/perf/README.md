@@ -18,8 +18,10 @@ so after a series the local database holds the last tree's seed.
 - Optional: `NODE_IMAGE` (base image for the builds) and `BUILD_PROXY` (an HTTPS
   proxy for the builds) when the network needs them.
 - Trees, build, reset and seed logs go to `PERF_WORK` (default
-  `load/.out/perf`, git-ignored). The k6 summaries and the full-run passes stay
-  under `load/.out`, where `scripts/load-test.sh` writes them.
+  `load/.out/perf`, git-ignored). The k6 files stay under `load/.out` whatever
+  `PERF_WORK` is: `route-cpu.sh` writes them to `load/.out/perf`, and the
+  full-run passes go to `load/.out/<label>`, as `scripts/load-test.sh` writes
+  them.
 
 ## Per-route CPU at a fixed rate
 
@@ -59,8 +61,8 @@ node scripts/perf/analyze-ab.mjs scripts/perf/results/<label>.tsv
 - Memory is the cgroup's usage, page cache included: read it as a level, not as the
   process's heap.
 - A pass whose k6 run exits other than 0 or 99, or that has failed pages,
-  failed checks, another tenant's employees or too few cgroup samples, stops the
-  run and writes no line. A p95 over 500 ms (exit 99) is a measured pass and is
+  failed checks, another tenant's employees, cgroup samples that do not cover the
+  hold or a CPU counter that goes back, stops the run and writes no line. A p95 over 500 ms (exit 99) is a measured pass and is
   written.
 - The analysis pairs adjacent passes, takes d = ln(p95 B) − ln(p95 A) per
   pair, and gives the mean with a Student t interval. With ABBA then BAAB

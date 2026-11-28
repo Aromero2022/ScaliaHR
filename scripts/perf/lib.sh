@@ -1,6 +1,6 @@
 # Shared by the scripts in scripts/perf (D36): switching the local stack to
 # another tree and measuring it. Local only: the Supabase CLI's stack, Docker
-# and k6 on this machine; nothing remote. Source it; the caller sets LABEL.
+# and k6 on this machine; nothing remote. Source it.
 #
 #   PERF_WORK   work directory (default: load/.out/perf, git-ignored)
 #   NODE_IMAGE  base image for the builds (default: the Dockerfiles' own)
@@ -96,7 +96,7 @@ perf_switch() {
 # The web container's cgroup counters, read on the host: CPU used in µs
 # (usage_usec of cpu.stat, cgroup v2 or the unified hierarchy of a hybrid
 # host), and memory now and at its peak in bytes. perf_cgroup_reset_peak starts
-# a new peak (on cgroup v1; see it for v2).
+# a new peak on cgroup v1; on v2 the peak stays the one since the container started.
 perf_cgroup_dirs() {
   local id; id="$(docker inspect -f '{{.Id}}' scaliahr-web-1)"
   CG_CPU=""; CG_MEM=""
