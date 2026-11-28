@@ -25,3 +25,9 @@ d43-variants	d43-no-loading	af2ed8a	/skills-hub	15	901	63.5	25012566	27761	27490
 d43-variants	d43-no-loading	af2ed8a	/profile	15	901	63.4	27775953	30828	30558	3838	32.5	43.1	100.00	0	280	289	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-variants	d43-no-toast	6c4e390	/dashboard	15	901	63.7	32089237	35615	35315	4252	32.7	48.9	100.00	0	151	159	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-variants	d43-no-toast	6c4e390	/employees	15	901	63.5	46302050	51390	51090	4252	52.1	85.7	100.00	0	287	292	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-no-toast	6c4e390	/employees?page=2	15	901	63.9	46513502	51624	51323	4252	52.0	89.3	100.00	0	296	304	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-no-toast	6c4e390	/employees?q=Empleado%201	15	900	63.5	43662955	48514	48215	4252	57.4	94.3	100.00	0	297	309	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-no-toast	6c4e390	/org-chart	15	901	63.7	25457665	28255	27954	4252	27.9	41.0	100.00	0	285	306	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-no-toast	6c4e390	/performance	15	901	63.8	29704295	32968	32667	4252	30.4	41.6	100.00	0	286	295	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-no-toast	6c4e390	/skills-hub	15	901	63.6	25662358	28482	28182	4252	28.5	42.5	100.00	0	286	295	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-no-toast	6c4e390	/profile	15	900	63.6	28614964	31794	31494	4252	33.7	46.3	100.00	0	287	296	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
