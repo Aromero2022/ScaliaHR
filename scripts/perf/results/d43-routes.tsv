@@ -21,3 +21,5 @@ d43-routes	cdb1ec2	cdb1ec2	/employees?page=2	15	901	63.6	31349560	34794	34493	42
 d43-routes	cdb1ec2	cdb1ec2	/employees?q=Empleado%201	15	901	63.6	30773195	34154	33853	4270	45.5	62.3	100.00	0	302	308	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-routes	cdb1ec2	cdb1ec2	/org-chart	15	901	63.5	22709329	25205	24904	4270	27.5	39.7	100.00	0	301	310	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-routes	cdb1ec2	cdb1ec2	/performance	15	901	63.4	25047549	27800	27499	4270	29.8	42.6	100.00	0	301	310	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-routes	cdb1ec2	cdb1ec2	/skills-hub	15	901	63.5	23817363	26434	26134	4270	26.7	39.6	100.00	0	301	310	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-routes	cdb1ec2	cdb1ec2	/profile	15	901	63.6	26280114	29168	28866	4270	32.0	46.5	100.00	0	303	312	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
