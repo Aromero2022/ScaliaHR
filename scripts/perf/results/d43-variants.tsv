@@ -15,3 +15,5 @@ d43-variants	d43-table-once	bc1fe11	/org-chart	15	901	63.4	24736267	27454	27217	
 d43-variants	d43-table-once	bc1fe11	/performance	15	900	63.4	26758795	29732	29495	3369	29.4	41.2	100.00	0	296	304	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-variants	d43-table-once	bc1fe11	/skills-hub	15	900	63.5	25005728	27784	27546	3369	28.2	40.2	100.00	0	297	306	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-variants	d43-table-once	bc1fe11	/profile	15	901	63.6	30092875	33399	33161	3369	34.6	49.3	100.00	0	309	317	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-no-loading	af2ed8a	/dashboard	15	901	63.5	31002516	34409	34138	3838	31.8	47.9	100.00	0	144	153	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-variants	d43-no-loading	af2ed8a	/employees	15	900	63.6	38867423	43186	42915	3838	45.7	67.5	100.00	0	283	293	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
