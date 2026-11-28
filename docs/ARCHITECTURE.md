@@ -2222,9 +2222,12 @@ machine):**
           close until then and the user decides (ROADMAP, Fase 9c,
           **Estado**). The first such pull request recorded the result
           below; the investigation is still open.
-        - **Result of the investigation (2026-11-28): the code.** On the
-          same machine the code separates the trees, and the machine only
-          changes how large the gap is. The investigation stays open: the
+        - **Result of the investigation (2026-11-28): the code.** On this
+          machine the code separates the trees (the A/B below). One earlier
+          pair of runs on another machine suggests that the machine changes
+          how large the gap is, but that pair is not an A/B. "The code" is
+          the whole tree: application, Dockerfiles, compose file and
+          migrations. The investigation stays open: the
           cause is narrowed to the code but not isolated, and its next step
           is for the user's decision (below). Memory in the tables is in
           MiB.
@@ -2296,8 +2299,8 @@ machine):**
             e8459db's first pass and 99 on the rest (p95 over 500 ms).
           - **Separated effects:**
             - **D43 (94e2020)** is where the full run jumps, from 0.3–0.5 s
-              to 8.5–9.8 s, and no later tree measured comes back down (D44
-              and main stay at 4.5–7.6 s). It tips a margin that was already
+              to 8.5–9.8 s, and no later tree measured comes back to the
+              0.3–0.5 s level (D44 and main stay at 4.5–7.6 s). It tips a margin that was already
               eroded at D42 (e8459db): 298 ms and 523 ms, and its second
               pass already failed the 500 ms threshold, against 137–308 ms
               for the 9b close. D40 and D41 were not measured on their own.
@@ -2327,15 +2330,16 @@ machine):**
               every tree (46–54 ms). The web CPU per request at low load
               (mean CPU over requests per second) is about 34 ms (9b), 42
               ms (D42), 47 ms (D43) and 49 ms (main); a warm-up and a
-              measured pass of one tree differ by up to 20 %, so these
+              measured pass of one tree differ by up to 22 % (e8459db
+              19.7 % and 16.2 %, 94e2020 21.8 % and 18.0 %), so these
               figures only say the cost grew across 9c, not by how much
-              each step. (The warm-up and the measured pass differ by up to
-              22 %: e8459db 19.7 % and 16.2 %, 94e2020 21.8 % and 18.0 %.)
+              each step.
             - The web memory at full load is 0.35–0.9 GiB in the fast
               passes and 2.1–3.6 GiB in the slow ones, and it falls after a
-              major collection (94e2020's second pass began with the heap
-              its warm-up left, 3.6 GiB, and dropped to 0.66 GiB 78 s in,
-              with no failed request). Whether that is a
+              major collection, as far as the samples show (94e2020's
+              second pass began with the heap its warm-up left, 3.6 GiB, and
+              dropped to 0.66 GiB within one 11 s sample, 78 s in, with no
+              failed request; the collection itself was not measured). Whether that is a
               cause (D43 allocating more, and the garbage collector's CPU)
               or an effect (the queue's requests in flight) is not
               measured.
