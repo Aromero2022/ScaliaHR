@@ -1,3 +1,6 @@
 label	tag	rev	route	rate	requests	seconds	cpu_us	us_per_request	us_per_request_idle_corrected	idle_us_per_s	p50_ms	p95_ms	status_200_pct	dropped	mem_current_mib	mem_peak_mib	machine
 d43-routes	9b	ae25e87	/dashboard	15	901	63.4	26809957	29756	29504	3582	29.0	43.1	100.00	0	156	163	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
 d43-routes	9b	ae25e87	/employees	15	901	63.7	31464984	34922	34669	3582	35.7	50.9	100.00	0	186	195	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-routes	9b	ae25e87	/employees?page=2	15	901	63.6	32079762	35605	35352	3582	37.2	51.9	100.00	0	188	197	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-routes	9b	ae25e87	/employees?q=Empleado%201	15	901	63.4	29379729	32608	32356	3582	43.7	60.4	100.00	0	223	226	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
+d43-routes	9b	ae25e87	/org-chart	15	901	63.8	21114515	23435	23181	3582	25.7	39.1	100.00	0	224	232	Intel(R) Xeon(R) Processor @ 2.10GHz|2100MHz|4vCPU|16473316kB
