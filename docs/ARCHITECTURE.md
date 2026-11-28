@@ -5740,6 +5740,144 @@ through.
 
 ---
 
+## D58 — Customer Environments (DEV, TEST and PRD): the Sandbox Tenants of Phase 12 and Their Production Tenant
+
+**Decision:** a customer's environments (DEV, TEST and PRD) are the sandbox
+tenants that Phase 12 already planned ("Tenants sandbox ligados al tenant de
+producción") together with the production tenant they link to: TEST and DEV
+are the sandbox tenants, and PRD is the customer's production tenant. They
+are linked tenants on the production platform, not separate deployments.
+
+- **Columns:** `tenants.environment` (`prd`, `test` or `dev`) and
+  `tenants.parent_tenant_id`, which points to the PRD tenant and is empty on
+  PRD. Suspending the PRD tenant suspends its environments.
+- **Slugs:** PRD is `<slug>`, TEST `<slug>-test` and DEV `<slug>-dev`, one
+  level under D57's wildcard `*.hr.<domain>`, whose certificate is decided in
+  Phase 23 (D57 lists the options). The suffixes `-test` and `-dev` are
+  reserved: no one registers a slug that ends in them, except the environments
+  of its own PRD. The reservation is checked in the database and in lower
+  case, and a PRD slug has at most 45 characters, so the suffix fits in
+  `TenantSlug`'s 50. D15 and D21 still use `<customer>.scaliahr.com` as their
+  example; the host scheme is D57's, and they are reconciled when the domain
+  is bought (Phase 23).
+- **Isolation:** RLS isolates each environment like any other tenant (D2,
+  D3, D21, D35). No environment reads another's rows, PRD's included.
+- **Not the platform's environments:** D15's staging and production, and the
+  local DEV of Phase 9a, are where the code runs. A customer's three
+  environments all live in production. The ROADMAP's Phase 23 also calls the
+  platform's environments DEV, TEST and PRD; they are not these.
+- **Plans:** the plan catalog of Phase 12 defines which environments each
+  plan includes, and the platform sets each environment's module flags from
+  the plan, as D12 licenses modules.
+- **Refresh** (PRD → TEST, PRD → DEV or TEST → DEV): the worker runs it on the
+  per-tenant export (D23), in two steps (see "Refresh" below). It anonymizes
+  personal data (LFPDPPP), never copies passwords, sessions, MFA factors, API
+  keys, integration credentials, webhook secrets, invitation or reset tokens
+  or support access, and never writes to PRD.
+- **Configuration transport** (DEV → TEST → PRD): it moves configuration,
+  never employees, accounts or secrets, and only between environments of the
+  same customer: the same `coalesce(parent_tenant_id, id)`, since PRD's own
+  `parent_tenant_id` is empty (see "Same customer" below).
+- **Releases:** the preview window is given with flags in DEV and TEST
+  (D15's release channels, D12).
+
+**Compatible with D13, whose text does not change:** the sandbox tenants were
+already separate tenants of the same customer, so D13's model and its
+identity rules hold.
+- Each environment is one tenant, and an account belongs to exactly one of
+  them (D13, rule 1). A person who uses PRD and TEST has two accounts. A
+  refresh never copies accounts: the copied employees arrive without
+  `auth_uid`, and the target keeps the accounts of its own authorized list,
+  which survive the refresh.
+- `parent_tenant_id` links the tenants of one customer. It is not a
+  membership and gives no access from one to another: `user_tenant_memberships`
+  stays reserved for the provider's support access (D13, rule 4).
+- How D13 and D58 read together: D13's "one tenant = one customer" stays the
+  rule for production data, so a customer has one PRD tenant, and a group
+  with several legal entities still has one. The sandbox tenants that the
+  ROADMAP planned for Phase 12 before D58 are the only other tenants a
+  customer has, and they never hold a second production. D13's text does not
+  change by the user's decision (2026-11-28); this paragraph is how the two
+  decisions are read together.
+
+**What Phase 12 must hold:** the ROADMAP's closing criteria test most of
+these points against the local database, and Phase 12 adds the tests for the
+rest when it implements them.
+- **Same customer** means `coalesce(parent_tenant_id, id)` is equal on both
+  sides, checked in the database: two PRD tenants, both with an empty
+  `parent_tenant_id`, never match.
+- **The link is not an access path:** only the platform console writes
+  `environment` and `parent_tenant_id`; they stay outside the owner's UPDATE
+  grant, as `suspended_at` does, and constraints hold `environment = 'prd'`
+  exactly when `parent_tenant_id` is empty, a PRD parent and no chains. No
+  RLS policy or JWT hook authorizes rows through `parent_tenant_id`. Its only
+  readers are the refresh and transport functions, the suspension cascade,
+  the slug reservation and the constraint that checks the parent; they use it
+  to confirm the same customer or to find a PRD's environments, and nothing
+  else. Support access (D13,
+  rule 3) is granted per environment, never inherited.
+- **Transport** is two steps: an administrator of the source, with an
+  account of that tenant, the permission and AAL2, exports the package, and
+  one of the target, with an account of that tenant, the
+  "Transportar configuración" permission and AAL2, sees the comparison and
+  applies it. The target is the session's tenant. The package is validated
+  with zod when it is simulated and when it is applied, and its content,
+  without secrets, and its hash go to the audit logs of both tenants.
+  Module flags (`is_*_active`, D12) never travel.
+- **Refresh** is requested by the customer from the target's Admin Center
+  and scheduled by the provider, who only picks the window and writes no
+  data. It is two steps, like the transport: an administrator of the
+  source, with an account of that tenant, the "Refrescar ambiente"
+  permission and AAL2, authorizes the export, and an administrator of the
+  target, with an account of that tenant, the same permission and AAL2,
+  applies it. The worker reads the source and writes the target only through
+  the refresh functions. It reuses D23's export, not its restore: every row gets a new id
+  and the target's `tenant_id`. It replaces the target's data rows and keeps
+  the target's tenant row, the users of its authorized list (with their
+  `auth_uid`) and its audit log; the copied employees arrive as users without
+  `auth_uid`. It runs in one transaction with D23's foreign-key and count
+  checks (the counts leave out the users the target keeps), through SECURITY DEFINER functions only the worker executes, which
+  refuse a PRD target or another customer.
+- **Anonymization** is an allow-list that fails closed: every column of
+  every copied table is classified (copied, anonymized or excluded), and an
+  unclassified column fails the refresh and a catalog test like D23's. It
+  covers D10's personal columns, free text and JSON; the source's
+  `audit_logs`, `arco_requests` and authorized list do not travel, documents are not copied,
+  and tokens are random, with no re-identification map (as in D10).
+- **A failed refresh** leaves the target blocked and marked as failed (the
+  marker is written outside the refresh's transaction, so it survives its
+  rollback), with
+  a safe error code and the request id in both audit logs, never the raw
+  database message, which can carry a real value, and a notice to the
+  provider and the customer; only a successful retry
+  or a restore reopens it.
+- **Accounts:** the three environments share one Supabase Auth, where an
+  email is unique in the instance (D57), so a person's TEST or DEV account
+  uses another address. Each environment has a list of authorized people:
+  the people with an account in that environment and the address each one
+  uses there. The list lives in that environment's own tenant, under its own
+  RLS, and its own administrators keep it in its Admin Center, with an RBP
+  permission and AAL2. The platform console creates each environment's first
+  administrator as provisioning the customer requests (its authorization, as
+  in D13's rule 3), audited, and keeps no access afterwards. Each entry of
+  the list points to the user it keeps. No PRD administrator writes into
+  TEST or DEV through the link. Those accounts survive a refresh, the worker
+  reads the same list to limit the environment's email, and the refresh
+  replaces every other user.
+
+**Not now:** the columns, the reserved suffixes and the suspension of the
+environments arrive with Phase 12, in a migration of their own. This decision
+fixes only the model.
+
+**Roadmap:** Phase 12, sections "Ambientes del cliente (DEV, TEST y PRD)",
+"Refresh entre ambientes", "Transporte de configuración" and "Releases a
+clientes"; Phase 23, CI/CD (the platform's environments); and two rows of
+the compliance table, the refresh without real personal data from the source
+and the transport only between environments of the same customer (the same
+`coalesce(parent_tenant_id, id)`).
+
+---
+
 ## Known Risk — `insert_effective_record` Authorizes by `app_role`, Not RBP
 
 **Status:** Accepted (temporary). Registered 2026-11-02.
